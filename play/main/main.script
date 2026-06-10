@@ -1,0 +1,75 @@
+local bridge = require "main.game_bridge"
+
+local function get_payload(message)
+	return message.payload or message
+end
+
+local function handle_bridge_message(self, message)
+	local message_type = message.type
+	local payload = get_payload(message)
+
+	if message_type == "START_MATCH" then
+		self.match = payload
+		self.state = "match_ready"
+
+		bridge.emit("MATCH_READY", {
+			matchId = payload.matchId,
+			mode = payload.mode
+		})
+	elseif message_type == "SET_COSMETICS" then
+		self.cosmetics = payload.cosmetics or payload
+
+		bridge.emit("COSMETICS_APPLIED", {
+			cosmetics = self.cosmetics
+		})
+	elseif message_type == "PING" then
+		bridge.emit("PONG")
+	else
+		bridge.emit("UNKNOWN_MESSAGE", {
+			type = message_type
+		})
+	end
+end
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+
+	self.state = "booting"
+	self.match = nil
+	self.cosmetics = {}
+
+	bridge.install()
+	self.state = "idle"
+
+	bridge.emit("DEFOLD_READY", {
+		state = self.state
+	})
+end
+
+function update(self, dt)
+	while true do
+		local message = bridge.poll()
+		if not message then
+			break
+		end
+
+		handle_bridge_message(self, message)
+	end
+end
+
+function on_input(self, action_id, action)
+	if (action_id == hash("pointer") or action_id == hash("touch")) and action.pressed then
+		local input_source = action_id == hash("touch") and "touch" or "pointer"
+
+		bridge.emit("INPUT_POINTER", {
+			source = input_source,
+			x = action.x,
+			y = action.y,
+			state = self.state
+		})
+	elseif action_id == hash("shake") and action.pressed then
+		bridge.emit("INPUT_SHAKE", {
+			state = self.state
+		})
+	end
+end

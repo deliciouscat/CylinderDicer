@@ -1,0 +1,12 @@
+{
+  "turn.mine": "自分のターン",
+  "turn.opponent": "相手のターン",
+  "turn.duel": "決闘",
+  "turn.shake": "シェイク",
+  "action.pass": "パス",
+  "action.challenge": "決闘を申し込む",
+  "bid.count_face": "{count}個 · {face}",
+  "hud.hint.bidding": "レールをドラッグして個数を選び、サイコロの目を選んでから「パス」または「決闘を申し込む」を選んでください。",
+  "hud.hint.control.pc": "PC操作: ドラッグ / ←→ / スクロール",
+  "hud.hint.control.mobile": "モバイル操作: タッチドラッグ"
+}

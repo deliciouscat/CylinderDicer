@@ -1,0 +1,12 @@
+key_trigger {
+  input: KEY_SPACE
+  action: "shake"
+}
+mouse_trigger {
+  input: MOUSE_BUTTON_LEFT
+  action: "pointer"
+}
+touch_trigger {
+  input: TOUCH
+  action: "touch"
+}

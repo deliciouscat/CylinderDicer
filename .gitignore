@@ -1,0 +1,16 @@
+.editor_settings
+/.internal
+/build
+/play/.internal
+/play/build
+/web/node_modules
+/web/dist
+/web/.vite
+.externalToolBuilders
+.DS_Store
+Thumbs.db
+.lock-wscript
+*.pyc
+.project
+.cproject
+builtins

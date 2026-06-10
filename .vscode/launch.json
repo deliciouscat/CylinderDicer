@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Defold Kit",
+            "type": "lua-local",
+            "request": "launch",
+            "stopOnEntry": false,
+            "verbose": false,
+            "internalConsoleOptions": "openOnSessionStart",
+            "program": {
+                "command": "play/build/defoldkit/dmengine"
+            },
+            "args": [
+                "play/build/defoldkit/game.projectc"
+            ],
+            "windows": {
+                "program": {
+                    "command": "play\\build\\defoldkit\\dmengine.exe"
+                },
+                "args": [
+                    "play\\build\\defoldkit\\game.projectc"
+                ]
+            },
+            "preLaunchTask": "Defold Kit: Build to Launch"
+        }
+    ]
+}

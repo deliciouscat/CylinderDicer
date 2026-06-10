@@ -1,0 +1,12 @@
+{
+  "turn.mine": "내 턴",
+  "turn.opponent": "상대 턴",
+  "turn.duel": "결투",
+  "turn.shake": "흔들기",
+  "action.pass": "넘기기",
+  "action.challenge": "결투신청",
+  "bid.count_face": "{count}개 · {face}",
+  "hud.hint.bidding": "레일을 드래그하여 개수를 선택하고, 주사위 면을 선택한 후 '넘기기' 또는 '결투신청'을 선택하세요.",
+  "hud.hint.control.pc": "PC 조작: 드래그 · ←→ · 스크롤",
+  "hud.hint.control.mobile": "모바일 조작: 터치 드래그"
+}
