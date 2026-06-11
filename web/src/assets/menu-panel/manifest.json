@@ -1,0 +1,14 @@
+{
+  "id": "menu-panel",
+  "file": "image.webp",
+  "width": 901,
+  "height": 243,
+  "slice": {
+    "left": 92,
+    "right": 92,
+    "top": 58,
+    "bottom": 58
+  },
+  "hoverScale": 1.035,
+  "pressedScale": 0.985
+}

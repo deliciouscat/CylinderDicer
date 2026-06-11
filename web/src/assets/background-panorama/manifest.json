@@ -1,0 +1,14 @@
+{
+  "id": "background-panorama",
+  "file": "image.webp",
+  "width": 7664,
+  "height": 3284,
+  "focus": {
+    "x": "50%",
+    "y": "50%"
+  },
+  "pan": {
+    "durationSeconds": 42,
+    "distancePercent": 4
+  }
+}
