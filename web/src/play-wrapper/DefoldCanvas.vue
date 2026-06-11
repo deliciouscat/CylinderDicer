@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import type { GameBridgeMessage, StartMatchPayload } from '@shared/protocol/game-bridge'
+import { t } from '../i18n'
 import { listenFromDefold, sendToDefold } from './gameBridge'
 
 const props = defineProps<{
@@ -45,7 +46,7 @@ onUnmounted(() => {
     ref="frame"
     class="defold-canvas"
     :src="buildUrl ?? '/play/index.html'"
-    title="CylinderDicer play canvas"
+    :title="t('playWrapper.canvasTitle')"
     allow="fullscreen; gamepad"
   />
 </template>

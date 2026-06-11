@@ -1,37 +1,20 @@
 {
-  "locale": "en",
   "menu": {
     "ladder": {
       "url": "/play/ladder",
-      "locale": {
-        "en": "Ladder",
-        "ko": "래더",
-        "ja": "ラダー"
-      }
+      "labelKey": "lobby.menu.ladder"
     },
     "custom-game": {
       "url": "/play/custom-game",
-      "locale": {
-        "en": "Custom Game",
-        "ko": "커스텀 게임",
-        "ja": "カスタムゲーム"
-      }
+      "labelKey": "lobby.menu.customGame"
     },
     "item-shop": {
       "url": "/shop",
-      "locale": {
-        "en": "Item Shop",
-        "ko": "아이템 상점",
-        "ja": "アイテムショップ"
-      }
+      "labelKey": "lobby.menu.itemShop"
     },
     "settings": {
       "url": "/settings",
-      "locale": {
-        "en": "Settings",
-        "ko": "설정",
-        "ja": "設定"
-      }
+      "labelKey": "lobby.menu.settings"
     }
   }
 }

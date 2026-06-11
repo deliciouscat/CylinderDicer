@@ -7,3 +7,4 @@ Backend-facing Vue services live here.
 - `shopService`: paid cosmetic items and receipt flow
 - `rankingService`: leaderboard and season rewards
 - `inventoryService`: cosmetics ownership and equipment
+- `mock/`: local fake server data and async service shims for UI development

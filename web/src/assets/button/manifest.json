@@ -1,0 +1,14 @@
+{
+  "id": "button",
+  "file": "image.webp",
+  "width": 1329,
+  "height": 459,
+  "slice": {
+    "left": 126,
+    "right": 126,
+    "top": 88,
+    "bottom": 88
+  },
+  "hoverScale": 1.025,
+  "pressedScale": 0.985
+}

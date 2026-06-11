@@ -1,0 +1,38 @@
+{
+  "customGame": {
+    "back": "Back",
+    "create": "Create",
+    "join": "Join",
+    "invite": "Invite",
+    "kick": "Kick",
+    "start": "Start",
+    "ready": "Ready",
+    "unready": "Unready",
+    "host": "Host",
+    "players": "Players",
+    "inviteCode": "Invite code:",
+    "roomCodePlaceholder": "Enter room code...",
+    "namePlaceholder": "Enter name...",
+    "screenLabel": "Custom Game",
+    "titleAlt": "CylinderDicer",
+    "roomCodeAria": "Room code",
+    "inviteNameAria": "Invite name",
+    "inviteQueued": "Invite queued: {name}",
+    "inviteCodeStatus": "Invite code: {code}",
+    "startQueued": "Start queued"
+  },
+  "lobby": {
+    "screenLabel": "CylinderDicer lobby",
+    "titleAlt": "CylinderDicer",
+    "mainMenuLabel": "Main menu",
+    "menu": {
+      "ladder": "Ladder",
+      "customGame": "Custom Game",
+      "itemShop": "Item Shop",
+      "settings": "Settings"
+    }
+  },
+  "playWrapper": {
+    "canvasTitle": "CylinderDicer play canvas"
+  }
+}

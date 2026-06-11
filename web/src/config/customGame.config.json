@@ -1,0 +1,20 @@
+{
+  "buttonGroups": {
+    "roomListToolbar": [
+      { "id": "back", "action": "back", "labelKey": "customGame.back", "variant": "wood" },
+      { "id": "create", "action": "create", "labelKey": "customGame.create", "variant": "wood" },
+      { "id": "join", "action": "joinByCode", "labelKey": "customGame.join", "variant": "wood" }
+    ],
+    "roomToolbar": [
+      { "id": "back", "action": "leaveRoom", "labelKey": "customGame.back", "variant": "wood" },
+      { "id": "invite", "action": "invite", "labelKey": "customGame.invite", "variant": "wood" }
+    ],
+    "hostRoomActions": [
+      { "id": "kick", "action": "kickSelected", "labelKey": "customGame.kick", "variant": "wood" },
+      { "id": "start", "action": "startGame", "labelKey": "customGame.start", "variant": "red" }
+    ],
+    "playerRoomActions": [
+      { "id": "ready", "action": "toggleReady", "labelKey": "customGame.ready", "alternateLabelKey": "customGame.unready", "variant": "red" }
+    ]
+  }
+}

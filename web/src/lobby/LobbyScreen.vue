@@ -1,53 +1,54 @@
 <script setup lang="ts">
 import lobbyConfig from '../config/lobby.config.json'
-import backgroundManifest from '../assets/background-panorama/manifest.json'
-import backgroundUrl from '../assets/background-panorama/image.webp'
-import menuPanelManifest from '../assets/menu-panel/manifest.json'
-import menuPanelUrl from '../assets/menu-panel/image.webp'
-import titleManifest from '../assets/Title/manifest.json'
-import titleUrl from '../assets/Title/image.webp'
+import { assetLoader } from '../assets/assetLoader'
+import { t } from '../i18n'
 
-type LocaleCode = keyof (typeof lobbyConfig)['menu']['ladder']['locale']
 type MenuEntry = {
   id: string
   url: string
   label: string
 }
 
-const activeLocale = lobbyConfig.locale as LocaleCode
+const emit = defineEmits<{
+  navigate: [url: string]
+}>()
 
 const menuItems: MenuEntry[] = Object.entries(lobbyConfig.menu).map(([id, entry]) => ({
   id,
   url: entry.url,
-  label: entry.locale[activeLocale] ?? entry.locale.en,
+  label: t(entry.labelKey),
 }))
 
+const backgroundAsset = assetLoader('background-lobby')
+const menuPanelAsset = assetLoader('menu-panel')
+const titleAsset = assetLoader('title')
+
 const lobbyStyles = {
-  '--lobby-bg': `url(${backgroundUrl})`,
-  '--lobby-bg-focus-x': backgroundManifest.focus.x,
-  '--lobby-bg-focus-y': backgroundManifest.focus.y,
-  '--lobby-bg-pan': `${backgroundManifest.pan.distancePercent}%`,
-  '--lobby-bg-pan-duration': `${backgroundManifest.pan.durationSeconds}s`,
-  '--title-safe-width': `${titleManifest.safeWidthPercent}vw`,
-  '--title-shadow': titleManifest.dropShadow,
-  '--menu-panel': `url(${menuPanelUrl})`,
-  '--menu-panel-ratio': `${menuPanelManifest.width} / ${menuPanelManifest.height}`,
-  '--menu-hover-scale': String(menuPanelManifest.hoverScale),
-  '--menu-pressed-scale': String(menuPanelManifest.pressedScale),
+  '--lobby-bg': `url(${backgroundAsset.url})`,
+  '--lobby-bg-focus-x': backgroundAsset.manifest.focus.x,
+  '--lobby-bg-focus-y': backgroundAsset.manifest.focus.y,
+  '--lobby-bg-pan': `${backgroundAsset.manifest.pan.distancePercent}%`,
+  '--lobby-bg-pan-duration': `${backgroundAsset.manifest.pan.durationSeconds}s`,
+  '--title-safe-width': `${titleAsset.manifest.safeWidthPercent}vw`,
+  '--title-shadow': titleAsset.manifest.dropShadow,
+  '--menu-panel': `url(${menuPanelAsset.url})`,
+  '--menu-panel-ratio': `${menuPanelAsset.manifest.width} / ${menuPanelAsset.manifest.height}`,
+  '--menu-hover-scale': String(menuPanelAsset.manifest.hoverScale),
+  '--menu-pressed-scale': String(menuPanelAsset.manifest.pressedScale),
 }
 
 function openMenuItem(item: MenuEntry) {
-  window.location.assign(item.url)
+  emit('navigate', item.url)
 }
 </script>
 
 <template>
-  <main class="lobby-screen" :style="lobbyStyles" aria-label="CylinderDicer lobby">
+  <main class="lobby-screen" :style="lobbyStyles" :aria-label="t('lobby.screenLabel')">
     <div class="lobby-background" aria-hidden="true" />
     <section class="lobby-stage">
-      <img class="lobby-title" :src="titleUrl" alt="CylinderDicer" />
+      <img class="lobby-title" :src="titleAsset.url" :alt="t('lobby.titleAlt')" />
 
-      <nav class="lobby-menu" aria-label="Main menu">
+      <nav class="lobby-menu" :aria-label="t('lobby.mainMenuLabel')">
         <button
           v-for="item in menuItems"
           :key="item.id"

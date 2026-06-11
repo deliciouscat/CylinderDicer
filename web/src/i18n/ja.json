@@ -1,0 +1,38 @@
+{
+  "customGame": {
+    "back": "戻る",
+    "create": "作成",
+    "join": "参加",
+    "invite": "招待",
+    "kick": "キック",
+    "start": "開始",
+    "ready": "準備",
+    "unready": "準備解除",
+    "host": "ホスト",
+    "players": "人数",
+    "inviteCode": "招待コード:",
+    "roomCodePlaceholder": "ルームコード入力...",
+    "namePlaceholder": "名前入力...",
+    "screenLabel": "カスタムゲーム",
+    "titleAlt": "CylinderDicer",
+    "roomCodeAria": "ルームコード",
+    "inviteNameAria": "招待する名前",
+    "inviteQueued": "招待待ち: {name}",
+    "inviteCodeStatus": "招待コード: {code}",
+    "startQueued": "開始待ち"
+  },
+  "lobby": {
+    "screenLabel": "CylinderDicer ロビー",
+    "titleAlt": "CylinderDicer",
+    "mainMenuLabel": "メインメニュー",
+    "menu": {
+      "ladder": "ラダー",
+      "customGame": "カスタムゲーム",
+      "itemShop": "アイテムショップ",
+      "settings": "設定"
+    }
+  },
+  "playWrapper": {
+    "canvasTitle": "CylinderDicer プレイキャンバス"
+  }
+}

@@ -1,0 +1,8 @@
+:root {
+  --color-border: #B47A3F;
+  --color-text: #FFFBF6;
+  --color-text-muted: #B2A7A1;
+  --color-text-status-host: #E57386;
+  --color-text-status-ready: #ACE573;
+  --color-textbox-bg: #140C06;  /* alpha 60%, inner shadow */
+}

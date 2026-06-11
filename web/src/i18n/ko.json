@@ -1,0 +1,38 @@
+{
+  "customGame": {
+    "back": "뒤로",
+    "create": "생성",
+    "join": "입장",
+    "invite": "초대",
+    "kick": "추방",
+    "start": "시작",
+    "ready": "준비",
+    "unready": "준비 해제",
+    "host": "방장",
+    "players": "인원",
+    "inviteCode": "초대 코드:",
+    "roomCodePlaceholder": "방 코드 입력...",
+    "namePlaceholder": "이름 입력...",
+    "screenLabel": "커스텀 게임",
+    "titleAlt": "CylinderDicer",
+    "roomCodeAria": "방 코드",
+    "inviteNameAria": "초대할 이름",
+    "inviteQueued": "초대 대기: {name}",
+    "inviteCodeStatus": "초대 코드: {code}",
+    "startQueued": "시작 대기"
+  },
+  "lobby": {
+    "screenLabel": "CylinderDicer 로비",
+    "titleAlt": "CylinderDicer",
+    "mainMenuLabel": "주 메뉴",
+    "menu": {
+      "ladder": "래더",
+      "customGame": "커스텀 게임",
+      "itemShop": "아이템 상점",
+      "settings": "설정"
+    }
+  },
+  "playWrapper": {
+    "canvasTitle": "CylinderDicer 플레이 캔버스"
+  }
+}

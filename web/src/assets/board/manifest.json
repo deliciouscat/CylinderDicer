@@ -1,0 +1,16 @@
+{
+  "id": "background-board",
+  "file": "image.webp",
+  "width": 1560,
+  "height": 909,
+  "slice": {
+    "left": 72,
+    "right": 72,
+    "top": 72,
+    "bottom": 72
+  },
+  "contentInset": {
+    "x": 72,
+    "y": 86
+  }
+}

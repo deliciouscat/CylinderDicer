@@ -1,0 +1,18 @@
+{
+  "id": "background-custom-game",
+  "file": "image.webp",
+  "width": 2172,
+  "height": 724,
+  "focus": {
+    "x": "50%",
+    "y": "50%"
+  },
+  "pan": {
+    "durationSeconds": 38,
+    "distancePercent": 3
+  },
+  "overlay": {
+    "scrim": "rgb(8 5 3 / 26%)",
+    "warmth": "rgb(160 84 30 / 14%)"
+  }
+}

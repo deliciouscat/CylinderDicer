@@ -1,0 +1,14 @@
+{
+  "id": "menu-pannel-red",
+  "file": "image.webp",
+  "width": 905,
+  "height": 245,
+  "slice": {
+    "left": 92,
+    "right": 92,
+    "top": 58,
+    "bottom": 58
+  },
+  "hoverScale": 1.035,
+  "pressedScale": 0.985
+}
