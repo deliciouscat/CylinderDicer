@@ -92,7 +92,7 @@ flowchart TD
 - `ui/*` gui_script: 구독한 토픽으로 자기 노드만 갱신, 입력을 액션으로 디스패치. ↔ `store`, `event_bus`, `selectors`, `i18n`, `cosmetics`, `gestures`.
 
 ## 6. 대표 데이터 흐름 (문서에 시퀀스로 수록)
-- 베팅 상승: rail 드래그 → `dispatch(bid.raise)` → `rules/bidding` 검증 → store 갱신 → `bid`/`rail` 토픽 → BidControls·rail·carousel 갱신.
+- 베팅 상승: rail 드래그(또는 화살표 클릭, 키보드 arrow 입력 등) → `dispatch(bid.raise)` → `rules/bidding` 검증 → store 갱신 → `bid`/`rail` 토픽 → BidControls·rail·carousel 갱신.
 - 흔들기+장전: shake 입력 → `dispatch(shake.roll)` → `rules/dice` 배정 + `pendingLoad` 설정 → director가 cylinder 앵커를 `focal`로 → 슬롯 탭 `dispatch(bullet.load,i)` → 완료 시 `hud` 앵커 복귀.
 - 결투: `dispatch(bid.challenge)` → turn_machine `dualing` → director가 결투 시퀀스 실행(reveal→pan→judge→execute) → `rules/duel` 결과 + 연출/사운드 → 종료 후 `shaking` 복귀, 매치 종료 시 결과 emit.
 
