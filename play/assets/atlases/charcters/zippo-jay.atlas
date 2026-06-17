@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/zippo-jay/front.png"
+}
+images {
+  image: "/assets/images/characters/zippo-jay/side.png"
+}
+images {
+  image: "/assets/images/characters/zippo-jay/damage.png"
+}
+images {
+  image: "/assets/images/characters/zippo-jay/dying.png"
+}
+images {
+  image: "/assets/images/characters/zippo-jay/victory.png"
+}
+extrude_borders: 2

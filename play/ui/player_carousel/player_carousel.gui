@@ -1,0 +1,25 @@
+script: "/ui/player_carousel/player_carousel.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 570.0 z: 0.0 }
+  size { x: 1120.0 y: 92.0 z: 0.0 }
+  color { x: 0.04 y: 0.05 z: 0.06 w: 0.62 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "players"
+  parent: "root"
+  position { x: 0.0 y: 0.0 z: 0.1 }
+  size { x: 1060.0 y: 58.0 z: 0.0 }
+  text: "players"
+  font: "system_font"
+  color { x: 0.92 y: 0.94 z: 1.0 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

@@ -1,0 +1,58 @@
+local store_mod = require "game.model.store"
+local selectors = require "game.model.selectors"
+local gui_util = require "ui.common.gui_util"
+
+local function player_summary(state)
+	local parts = {}
+	for _, player_id in ipairs(state.players.order or {}) do
+		local player = state.players.by_id[player_id]
+		if player then
+			local mark = player_id == state.turn.active_player_id and "*" or "-"
+			parts[#parts + 1] = ("%s %s HP:%s B:%s"):format(
+				mark,
+				player.name or player.id,
+				tostring(player.hp or 0),
+				tostring(selectors.player_bullets(player))
+			)
+		end
+	end
+	return table.concat(parts, "  ")
+end
+
+local function render(self, state)
+	gui_util.set_text("players", player_summary(state))
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.subs = {}
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		render(self, state)
+	end)
+
+	render(self, self.store:get_state())
+end
+
+function on_message(self, message_id)
+	if message_id == hash("activate") then
+		gui_util.set_enabled("root", true)
+	elseif message_id == hash("deactivate") then
+		gui_util.set_enabled("root", false)
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

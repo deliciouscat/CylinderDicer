@@ -1,12 +1,24 @@
 key_trigger {
+  input: KEY_RIGHT
+  action: "key_right"
+}
+key_trigger {
+  input: KEY_LEFT
+  action: "key_left"
+}
+key_trigger {
   input: KEY_SPACE
   action: "shake"
 }
 mouse_trigger {
-  input: MOUSE_BUTTON_LEFT
+  input: MOUSE_BUTTON_1
   action: "pointer"
 }
-touch_trigger {
-  input: TOUCH
-  action: "touch"
+mouse_trigger {
+  input: MOUSE_WHEEL_UP
+  action: "scroll"
+}
+mouse_trigger {
+  input: MOUSE_WHEEL_DOWN
+  action: "scroll"
 }

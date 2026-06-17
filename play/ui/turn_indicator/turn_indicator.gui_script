@@ -1,0 +1,55 @@
+local store_mod = require "game.model.store"
+local selectors = require "game.model.selectors"
+local i18n = require "game.core.i18n"
+local gui_util = require "ui.common.gui_util"
+
+local function label_key(state)
+	if state.turn.kind == "bidding" then
+		return selectors.is_my_turn(state) and "turn.mine" or "turn.opponent"
+	end
+	if state.turn.kind == "dualing" then
+		return "turn.duel"
+	end
+	if state.turn.kind == "shaking" or state.turn.kind == "setup" then
+		return "turn.shake"
+	end
+	return "hud.hint.complete"
+end
+
+local function render(self, state)
+	gui_util.set_text("label", i18n.t(label_key(state)))
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.subs = {}
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
+		render(self, state)
+	end)
+
+	render(self, self.store:get_state())
+end
+
+function on_message(self, message_id)
+	if message_id == hash("activate") then
+		gui_util.set_enabled("root", true)
+	elseif message_id == hash("deactivate") then
+		gui_util.set_enabled("root", false)
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

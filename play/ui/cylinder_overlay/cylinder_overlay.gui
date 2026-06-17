@@ -1,0 +1,24 @@
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 360.0 z: 0.0 }
+  size { x: 170.0 y: 170.0 z: 0.0 }
+  color { x: 0.16 y: 0.14 z: 0.12 w: 0.78 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "label"
+  parent: "root"
+  position { x: 0.0 y: 0.0 z: 0.1 }
+  size { x: 140.0 y: 36.0 z: 0.0 }
+  text: "CYLINDER"
+  font: "system_font"
+  color { x: 1.0 y: 0.9 z: 0.7 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

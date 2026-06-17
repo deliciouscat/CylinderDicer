@@ -1,0 +1,90 @@
+local store_mod = require "game.model.store"
+local actions = require "game.model.actions"
+local i18n = require "game.core.i18n"
+local audio = require "game.core.audio"
+local gui_util = require "ui.common.gui_util"
+local duel_sequence = require "ui.duel.duel_sequence"
+
+local function apply_step(self, step)
+	gui_util.set_text("step", step.name)
+
+	if step.name == "reveal_dice" then
+		local names = {}
+		for _, player in ipairs(step.payload.players or {}) do
+			names[#names + 1] = (player.name or player.id) .. ":" .. table.concat(player.dice or {}, " ")
+		end
+		gui_util.set_text("dice_spread", table.concat(names, " | "))
+	elseif step.name == "judge" then
+		local verdict = step.payload and step.payload.verdict or "UNKNOWN"
+		gui_util.set_text("verdict", i18n.t("duel.verdict." .. verdict))
+	elseif step.name == "shot" then
+		local hit = step.payload and step.payload.hit
+		gui_util.set_text("fx", hit and "HIT" or "MISS")
+	elseif step.name == "complete" then
+		gui_util.set_text("fx", "COMPLETE")
+	end
+
+	if step.sound then
+		audio.play_sfx(step.sound)
+	end
+end
+
+local function advance(self)
+	self.index = (self.index or 0) + 1
+	local step = self.steps and self.steps[self.index]
+
+	if not step or step.name == "complete" then
+		if self.store then
+			self.store:dispatch(actions.round_advance())
+		end
+		return
+	end
+
+	apply_step(self, step)
+
+	if timer and timer.delay then
+		timer.delay(step.duration or 0.1, false, function()
+			advance(self)
+		end)
+	end
+end
+
+local function start_sequence(self, state)
+	if not state.duel or state.duel.phase ~= "ready" then
+		return
+	end
+
+	self.steps = duel_sequence.build(state.duel, state.duel.judge, state.duel.resolution)
+	self.index = 0
+	advance(self)
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.subs = {}
+	gui_util.acquire_input_focus()
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("duel", function(state)
+		start_sequence(self, state)
+	end)
+end
+
+function on_message(self, message_id)
+	if message_id == hash("activate") then
+		gui_util.set_enabled("root", true)
+	elseif message_id == hash("deactivate") then
+		gui_util.set_enabled("root", false)
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

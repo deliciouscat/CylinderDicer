@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/rosemund/front.png"
+}
+images {
+  image: "/assets/images/characters/rosemund/side.png"
+}
+images {
+  image: "/assets/images/characters/rosemund/damage.png"
+}
+images {
+  image: "/assets/images/characters/rosemund/dying.png"
+}
+images {
+  image: "/assets/images/characters/rosemund/victory.png"
+}
+extrude_borders: 2

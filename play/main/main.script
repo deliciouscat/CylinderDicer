@@ -1,42 +1,27 @@
 local bridge = require "main.game_bridge"
-
-local function get_payload(message)
-	return message.payload or message
-end
-
-local function handle_bridge_message(self, message)
-	local message_type = message.type
-	local payload = get_payload(message)
-
-	if message_type == "START_MATCH" then
-		self.match = payload
-		self.state = "match_ready"
-
-		bridge.emit("MATCH_READY", {
-			matchId = payload.matchId,
-			mode = payload.mode
-		})
-	elseif message_type == "SET_COSMETICS" then
-		self.cosmetics = payload.cosmetics or payload
-
-		bridge.emit("COSMETICS_APPLIED", {
-			cosmetics = self.cosmetics
-		})
-	elseif message_type == "PING" then
-		bridge.emit("PONG")
-	else
-		bridge.emit("UNKNOWN_MESSAGE", {
-			type = message_type
-		})
-	end
-end
+local event_bus = require "game.core.event_bus"
+local cosmetics = require "game.core.cosmetics"
+local actions = require "game.model.actions"
+local reducers = require "game.model.reducers"
+local store_mod = require "game.model.store"
+local match_adapter = require "game.net.match_adapter"
 
 function init(self)
 	msg.post(".", "acquire_input_focus")
 
 	self.state = "booting"
-	self.match = nil
-	self.cosmetics = {}
+	self.bus = event_bus.new()
+	self.store = store_mod.create(reducers.initial_state(), reducers.reduce, self.bus)
+	self.adapter = match_adapter.new(bridge, self.store, cosmetics)
+
+	self.result_sub = self.store:subscribe("match", function(state)
+		self.state = state.match.status
+
+		if state.match.status == "complete" and not self.result_submitted then
+			self.result_submitted = true
+			self.adapter:submit_result()
+		end
+	end)
 
 	bridge.install()
 	self.state = "idle"
@@ -53,7 +38,13 @@ function update(self, dt)
 			break
 		end
 
-		handle_bridge_message(self, message)
+		self.adapter:on_bridge_message(message)
+	end
+end
+
+function on_message(self, message_id)
+	if message_id == hash("submit_result") and self.adapter then
+		self.adapter:submit_result()
 	end
 end
 
@@ -68,8 +59,19 @@ function on_input(self, action_id, action)
 			state = self.state
 		})
 	elseif action_id == hash("shake") and action.pressed then
+		local state = self.store:get_state()
+		if state.match.status ~= "idle" and state.turn.kind == "shaking" then
+			self.store:dispatch(actions.shake_roll(state.match.local_player_id))
+		end
+
 		bridge.emit("INPUT_SHAKE", {
 			state = self.state
 		})
+	end
+end
+
+function final(self)
+	if self.store and self.result_sub then
+		self.store:unsubscribe(self.result_sub)
 	end
 end

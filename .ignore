@@ -1,0 +1,3 @@
+# Ripgrep: include Defold dependency context even though Git ignores it.
+!play/.deps
+!play/.deps/**

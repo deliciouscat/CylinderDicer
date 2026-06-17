@@ -1,0 +1,63 @@
+script: "/ui/rail/rail.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 390.0 z: 0.0 }
+  size { x: 1040.0 y: 126.0 z: 0.0 }
+  color { x: 0.05 y: 0.055 z: 0.06 w: 0.76 }
+}
+nodes {
+  type: TYPE_BOX
+  id: "track"
+  parent: "root"
+  position { x: 0.0 y: -18.0 z: 0.1 }
+  size { x: 920.0 y: 42.0 z: 0.0 }
+  color { x: 0.28 y: 0.22 z: 0.16 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "range"
+  parent: "root"
+  position { x: -410.0 y: 38.0 z: 0.1 }
+  size { x: 160.0 y: 26.0 z: 0.0 }
+  text: "1 - 10"
+  font: "system_font"
+  color { x: 0.8 y: 0.84 z: 0.92 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "selected_count"
+  parent: "root"
+  position { x: -55.0 y: 38.0 z: 0.1 }
+  size { x: 80.0 y: 34.0 z: 0.0 }
+  text: "1"
+  font: "system_font"
+  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "selected_face"
+  parent: "root"
+  position { x: 55.0 y: 38.0 z: 0.1 }
+  size { x: 80.0 y: 34.0 z: 0.0 }
+  text: "2"
+  font: "system_font"
+  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "current_bid"
+  parent: "root"
+  position { x: 320.0 y: 38.0 z: 0.1 }
+  size { x: 320.0 y: 28.0 z: 0.0 }
+  text: "-"
+  font: "system_font"
+  color { x: 0.9 y: 0.92 z: 1.0 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 128

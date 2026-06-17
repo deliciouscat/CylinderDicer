@@ -1,0 +1,103 @@
+local store_mod = require "game.model.store"
+local selectors = require "game.model.selectors"
+
+local BLOCKS = {
+	setup = "/ui#shake",
+	shaking = "/ui#shake",
+	bidding = "/ui#bidding",
+	dualing = "/ui#duel",
+	complete = "/ui#duel",
+}
+
+local BG_LOCATION = {
+	setup = "shaking",
+	shaking = "shaking",
+	bidding = "bidding",
+	dualing = "dualing",
+	complete = "dualing",
+}
+
+local function post_safe(url, message_id, payload)
+	local ok = pcall(msg.post, url, message_id, payload or {})
+	return ok
+end
+
+local function set_block(self, kind)
+	if self.active_kind == kind then
+		return
+	end
+
+	if self.active_block then
+		post_safe(self.active_block, "deactivate")
+	end
+
+	self.active_kind = kind
+	self.active_block = BLOCKS[kind]
+
+	if self.active_block then
+		post_safe(self.active_block, "activate")
+	end
+end
+
+local function sync_turn(self, state)
+	local kind = state.turn.kind
+	set_block(self, kind)
+
+	post_safe("/background#background", "pan_to", {
+		location = BG_LOCATION[kind] or "shaking",
+	})
+
+	post_safe("/cylinder#cylinder", "set_target", {
+		anchor = selectors.cylinder_anchor(state),
+	})
+end
+
+local function sync_match(self, state)
+	if state.match.status == "complete" and not self.result_requested then
+		self.result_requested = true
+		post_safe("/go#main", "submit_result")
+	end
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.subs = {}
+	self.active_kind = nil
+	self.active_block = nil
+	self.result_requested = false
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		sync_turn(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("match", function(state)
+		sync_match(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
+		sync_turn(self, state)
+	end)
+
+	sync_turn(self, self.store:get_state())
+end
+
+function on_message(self, message_id, message)
+	if message_id == hash("boot") and self.store then
+		sync_turn(self, self.store:get_state())
+	elseif message_id == hash("background_pan_complete") then
+		self.last_background_location = message.location
+	elseif message_id == hash("duel_sequence_complete") and self.store then
+		local actions = require "game.model.actions"
+		self.store:dispatch(actions.round_advance())
+	end
+end
+
+function final(self)
+	if self.store and self.subs then
+		for _, token in ipairs(self.subs) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

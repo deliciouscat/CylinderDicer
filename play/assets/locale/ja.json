@@ -6,7 +6,16 @@
   "action.pass": "パス",
   "action.challenge": "決闘を申し込む",
   "bid.count_face": "{count}個 · {face}",
+  "duel.verdict.SHORT": "不足",
+  "duel.verdict.OVER": "超過",
+  "duel.verdict.EXACT": "的中",
+  "duel.verdict.UNKNOWN": "不明",
+  "hud.hint.waiting": "マッチを待っています。",
+  "hud.hint.load": "空のシリンダースロットを選んで装填してください。",
+  "hud.hint.shaking": "振ってサイコロを振ってください。",
   "hud.hint.bidding": "レールをドラッグして個数を選び、サイコロの目を選んでから「パス」または「決闘を申し込む」を選んでください。",
+  "hud.hint.duel": "決闘中です。",
+  "hud.hint.complete": "マッチ完了。",
   "hud.hint.control.pc": "PC操作: ドラッグ / ←→ / スクロール",
   "hud.hint.control.mobile": "モバイル操作: タッチドラッグ"
 }

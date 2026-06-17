@@ -1,0 +1,48 @@
+script: "/ui/shake/shake.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+textures {
+  name: "cup_default"
+  texture: "/assets/images/cup/default/cup.png"
+}
+nodes {
+  position {
+    x: 640.0
+    y: 360.0
+  }
+  size {
+    x: 620.0
+    y: 360.0
+  }
+  color {
+    x: 0.07
+    y: 0.08
+    z: 0.09
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.72
+}
+nodes {
+  position {
+    x: -1.0
+    z: 0.1
+  }
+  rotation {
+    z: 180.0
+  }
+  size {
+    x: 220.0
+    y: 180.0
+  }
+  type: TYPE_BOX
+  texture: "cup_default"
+  id: "cup"
+  parent: "root"
+  inherit_alpha: true
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

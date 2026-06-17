@@ -20,7 +20,7 @@ play/
 └─ assets/
    ├─ images/
    │  ├─ characters/<charId>/   # 캐릭터별 일러스트 상태
-   │  │   ├─ front/  side/  damage/  dying/  victory/
+   │  │   └─ {front,side,damage,dying,victory}.png
    │  │   (_template/ 은 새 캐릭터 추가용 빈 틀)
    │  ├─ revolver/<skinId>/     # 리볼버 스킨 (유료). default 필수.
    │  │   └─ {revolver.png, cylinder.png, bullet.png}  # 총기 전체 / 약실 뷰 / 총알
@@ -48,7 +48,7 @@ play/
 
 ## 네이밍 규칙
 - 소문자 + 언더스코어, 공백 금지. 상태는 접미사로: `pass_btn_normal.png`, `pass_btn_disabled.png`.
-- 캐릭터: `characters/<charId>/<state>/<charId>_<state>.png` (state: front|side|damage|dying|victory)
+- 캐릭터: `characters/<charId>/<state>.png` (state: front|side|damage|dying|victory)
 - 주사위(36장/스킨): `dice/<skinId>/f<face>_a<angle>.png`
   - face: 1~6 (face 1 = 해골 아트), angle: 0=정면(top-down), 1~5=굴림 각도
   - 예) `dice/default/f1_a0.png`(해골 정면), `dice/default/f6_a3.png`

@@ -1,0 +1,91 @@
+script: "/ui/bid_controls/bid_controls.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 250.0 z: 0.0 }
+  size { x: 620.0 y: 132.0 z: 0.0 }
+  color { x: 0.06 y: 0.07 z: 0.08 w: 0.75 }
+}
+nodes {
+  type: TYPE_BOX
+  id: "pass_button"
+  parent: "root"
+  position { x: -185.0 y: 12.0 z: 0.1 }
+  size { x: 180.0 y: 70.0 z: 0.0 }
+  color { x: 0.15 y: 0.25 z: 0.18 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "pass_label"
+  parent: "pass_button"
+  position { x: 0.0 y: 10.0 z: 0.2 }
+  size { x: 160.0 y: 30.0 z: 0.0 }
+  text: "Pass"
+  font: "system_font"
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "pass_enabled"
+  parent: "pass_button"
+  position { x: 0.0 y: -20.0 z: 0.2 }
+  size { x: 150.0 y: 22.0 z: 0.0 }
+  text: "disabled"
+  font: "system_font"
+  color { x: 0.78 y: 0.85 z: 0.78 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "bid_value"
+  parent: "root"
+  position { x: 0.0 y: 18.0 z: 0.1 }
+  size { x: 160.0 y: 38.0 z: 0.0 }
+  text: "1 x 2"
+  font: "system_font"
+  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "face_hint"
+  parent: "root"
+  position { x: 0.0 y: -28.0 z: 0.1 }
+  size { x: 220.0 y: 24.0 z: 0.0 }
+  text: "face_up / face_down"
+  font: "system_font"
+  color { x: 0.75 y: 0.78 z: 0.84 w: 1.0 }
+}
+nodes {
+  type: TYPE_BOX
+  id: "challenge_button"
+  parent: "root"
+  position { x: 205.0 y: 12.0 z: 0.1 }
+  size { x: 190.0 y: 70.0 z: 0.0 }
+  color { x: 0.32 y: 0.12 z: 0.12 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "challenge_label"
+  parent: "challenge_button"
+  position { x: 0.0 y: 10.0 z: 0.2 }
+  size { x: 170.0 y: 30.0 z: 0.0 }
+  text: "Challenge"
+  font: "system_font"
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "challenge_enabled"
+  parent: "challenge_button"
+  position { x: 0.0 y: -20.0 z: 0.2 }
+  size { x: 150.0 y: 22.0 z: 0.0 }
+  text: "disabled"
+  font: "system_font"
+  color { x: 0.9 y: 0.72 z: 0.72 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 128

@@ -1,0 +1,34 @@
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  size { x: 86.0 y: 34.0 z: 0.0 }
+  color { x: 0.10 y: 0.11 z: 0.12 w: 0.92 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "icon"
+  parent: "root"
+  position { x: -25.0 y: 0.0 z: 0.1 }
+  size { x: 28.0 y: 24.0 z: 0.0 }
+  text: "*"
+  font: "system_font"
+  color { x: 0.9 y: 0.78 z: 0.45 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "value"
+  parent: "root"
+  position { x: 18.0 y: 0.0 z: 0.1 }
+  size { x: 44.0 y: 24.0 z: 0.0 }
+  text: "0"
+  font: "system_font"
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 32

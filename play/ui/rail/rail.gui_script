@@ -1,0 +1,98 @@
+local store_mod = require "game.model.store"
+local selectors = require "game.model.selectors"
+local actions = require "game.model.actions"
+local gestures = require "game.core.gestures"
+local gui_util = require "ui.common.gui_util"
+
+local PIXELS_PER_COUNT = 32
+
+local function render(self, state)
+	local lo, hi = selectors.visible_rail_range(state)
+	local bid = state.bidding.my_bid
+	local current = state.bidding.current_bid
+
+	gui_util.set_enabled("root", state.turn.kind == "bidding")
+	gui_util.set_text("range", tostring(lo) .. " - " .. tostring(hi))
+	gui_util.set_text("selected_count", bid.count)
+	gui_util.set_text("selected_face", bid.face)
+
+	if current then
+		gui_util.set_text("current_bid", ("%s: %d x %d"):format(
+			current.player_id,
+			current.count,
+			current.face
+		))
+	else
+		gui_util.set_text("current_bid", "-")
+	end
+end
+
+local function select_delta(self, delta)
+	local state = self.store:get_state()
+	local next_count = state.bidding.my_bid.count + delta
+	self.store:dispatch(actions.bid_select_count(next_count))
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.gesture = gestures.new(nil)
+	self.subs = {}
+	gui_util.acquire_input_focus()
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("bidding", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		render(self, state)
+	end)
+
+	render(self, self.store:get_state())
+end
+
+function on_message(self, message_id, message)
+	if message_id == hash("activate") then
+		gui_util.set_enabled("root", true)
+	elseif message_id == hash("deactivate") then
+		gui_util.set_enabled("root", false)
+	elseif message_id == hash("select_count") and message.count then
+		self.store:dispatch(actions.bid_select_count(message.count))
+	end
+end
+
+function on_input(self, action_id, action)
+	if not self.store then
+		return
+	end
+
+	local state = self.store:get_state()
+	if state.turn.kind ~= "bidding" then
+		return
+	end
+
+	local event = self.gesture:feed(action_id, action)
+	if not event then
+		return
+	end
+
+	if event.kind == "drag" then
+		select_delta(self, math.floor((event.dx or 0) / PIXELS_PER_COUNT))
+	elseif event.kind == "scroll" then
+		select_delta(self, event.amount > 0 and 1 or -1)
+	elseif event.kind == "key_left" then
+		select_delta(self, -1)
+	elseif event.kind == "key_right" then
+		select_delta(self, 1)
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

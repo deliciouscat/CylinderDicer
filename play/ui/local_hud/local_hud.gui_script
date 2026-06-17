@@ -1,0 +1,59 @@
+local store_mod = require "game.model.store"
+local selectors = require "game.model.selectors"
+local i18n = require "game.core.i18n"
+local anchors = require "game.core.anchors"
+local gui_util = require "ui.common.gui_util"
+
+local function register_anchor()
+	local position = gui_util.world_position("cylinder_anchor")
+	if position then
+		anchors.register("hud", position, "gui")
+	end
+end
+
+local function render(self, state)
+	local player = selectors.local_player(state)
+	if not player then
+		return
+	end
+
+	gui_util.set_text("name", player.name or player.id)
+	gui_util.set_text("hp", player.hp or 0)
+	gui_util.set_text("bullets", selectors.player_bullets(player))
+	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
+	gui_util.set_text("dice_values", table.concat(player.dice or {}, " "))
+	register_anchor()
+end
+
+function init(self)
+	self.store = store_mod.get()
+	self.subs = {}
+
+	if not self.store then
+		return
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
+		render(self, state)
+	end)
+
+	render(self, self.store:get_state())
+end
+
+function update(self, dt)
+	register_anchor()
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

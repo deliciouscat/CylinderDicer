@@ -1,0 +1,24 @@
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  size { x: 54.0 y: 54.0 z: 0.0 }
+  color { x: 0.92 y: 0.88 z: 0.78 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "face"
+  parent: "root"
+  position { x: 0.0 y: 0.0 z: 0.1 }
+  size { x: 44.0 y: 38.0 z: 0.0 }
+  text: "1"
+  font: "system_font"
+  color { x: 0.08 y: 0.08 z: 0.08 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 32

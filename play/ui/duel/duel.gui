@@ -1,0 +1,55 @@
+script: "/ui/duel/duel.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 360.0 z: 0.0 }
+  size { x: 980.0 y: 430.0 z: 0.0 }
+  color { x: 0.04 y: 0.04 z: 0.045 w: 0.82 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "step"
+  parent: "root"
+  position { x: -360.0 y: 170.0 z: 0.1 }
+  size { x: 240.0 y: 28.0 z: 0.0 }
+  text: "step"
+  font: "system_font"
+  color { x: 0.75 y: 0.8 z: 0.9 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "verdict"
+  parent: "root"
+  position { x: 0.0 y: 128.0 z: 0.1 }
+  size { x: 420.0 y: 52.0 z: 0.0 }
+  text: "VERDICT"
+  font: "system_font"
+  color { x: 1.0 y: 0.82 z: 0.45 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "dice_spread"
+  parent: "root"
+  position { x: 0.0 y: 28.0 z: 0.1 }
+  size { x: 860.0 y: 90.0 z: 0.0 }
+  text: "dice spread"
+  font: "system_font"
+  color { x: 0.95 y: 0.96 z: 1.0 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "fx"
+  parent: "root"
+  position { x: 0.0 y: -120.0 z: 0.1 }
+  size { x: 420.0 y: 58.0 z: 0.0 }
+  text: "FX"
+  font: "system_font"
+  color { x: 1.0 y: 0.35 z: 0.25 w: 1.0 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 128

@@ -3,6 +3,7 @@
 /build
 /play/.internal
 /play/build
+/play/.deps/**
 /web/node_modules
 /web/dist
 /web/.vite

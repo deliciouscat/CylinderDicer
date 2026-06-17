@@ -1,0 +1,29 @@
+local tween = require "game.core.tween"
+
+local LOCATION_Y = {
+	bidding = 120,
+	shaking = 360,
+	dualing = 560,
+}
+
+local PAN_TIME = 0.6
+
+function init(self)
+	self.location = "shaking"
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id ~= hash("pan_to") then
+		return
+	end
+
+	local location = message.location or "shaking"
+	local y = LOCATION_Y[location] or LOCATION_Y.shaking
+	self.location = location
+
+	tween.to(".", "position.y", y, PAN_TIME, go.EASING_INOUTQUAD, function()
+		msg.post(sender, "background_pan_complete", {
+			location = location,
+		})
+	end)
+end

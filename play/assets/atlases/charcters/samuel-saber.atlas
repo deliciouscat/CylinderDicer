@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/samuel-saber/front.png"
+}
+images {
+  image: "/assets/images/characters/samuel-saber/side.png"
+}
+images {
+  image: "/assets/images/characters/samuel-saber/damage.png"
+}
+images {
+  image: "/assets/images/characters/samuel-saber/dying.png"
+}
+images {
+  image: "/assets/images/characters/samuel-saber/victory.png"
+}
+extrude_borders: 2

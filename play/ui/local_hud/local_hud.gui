@@ -1,0 +1,81 @@
+script: "/ui/local_hud/local_hud.gui_script"
+fonts {
+  name: "system_font"
+  font: "/builtins/fonts/system_font.font"
+}
+nodes {
+  type: TYPE_BOX
+  id: "root"
+  position { x: 640.0 y: 96.0 z: 0.0 }
+  size { x: 1040.0 y: 150.0 z: 0.0 }
+  color { x: 0.04 y: 0.05 z: 0.06 w: 0.78 }
+}
+nodes {
+  type: TYPE_BOX
+  id: "portrait_placeholder"
+  parent: "root"
+  position { x: -445.0 y: 0.0 z: 0.1 }
+  size { x: 120.0 y: 120.0 z: 0.0 }
+  color { x: 0.24 y: 0.20 z: 0.17 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "name"
+  parent: "root"
+  position { x: -295.0 y: 38.0 z: 0.1 }
+  size { x: 230.0 y: 32.0 z: 0.0 }
+  text: "Player"
+  font: "system_font"
+  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "hp"
+  parent: "root"
+  position { x: -310.0 y: 0.0 z: 0.1 }
+  size { x: 120.0 y: 28.0 z: 0.0 }
+  text: "HP"
+  font: "system_font"
+  color { x: 1.0 y: 0.5 z: 0.5 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "bullets"
+  parent: "root"
+  position { x: -190.0 y: 0.0 z: 0.1 }
+  size { x: 120.0 y: 28.0 z: 0.0 }
+  text: "B"
+  font: "system_font"
+  color { x: 0.95 y: 0.8 z: 0.45 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "hint"
+  parent: "root"
+  position { x: 120.0 y: 35.0 z: 0.1 }
+  size { x: 520.0 y: 44.0 z: 0.0 }
+  text: "Hint"
+  font: "system_font"
+  color { x: 0.9 y: 0.92 z: 1.0 w: 1.0 }
+}
+nodes {
+  type: TYPE_TEXT
+  id: "dice_values"
+  parent: "root"
+  position { x: 80.0 y: -30.0 z: 0.1 }
+  size { x: 360.0 y: 42.0 z: 0.0 }
+  text: "- - - - -"
+  font: "system_font"
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+}
+nodes {
+  type: TYPE_BOX
+  id: "cylinder_anchor"
+  parent: "root"
+  position { x: 470.0 y: 0.0 z: 0.1 }
+  size { x: 44.0 y: 44.0 z: 0.0 }
+  color { x: 0.8 y: 0.65 z: 0.32 w: 0.5 }
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 128

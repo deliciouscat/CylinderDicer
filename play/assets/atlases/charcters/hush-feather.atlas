@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/hush-feather/front.png"
+}
+images {
+  image: "/assets/images/characters/hush-feather/side.png"
+}
+images {
+  image: "/assets/images/characters/hush-feather/damage.png"
+}
+images {
+  image: "/assets/images/characters/hush-feather/dying.png"
+}
+images {
+  image: "/assets/images/characters/hush-feather/victory.png"
+}
+extrude_borders: 2
