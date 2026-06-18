@@ -23,8 +23,8 @@ Vue bridge payload와 Defold store action 사이 adapter. 외부 message shape�
 ```lua
 -- Pattern: Adapter / Anti-Corruption Layer.
 -- 외부(Vue) message shape가 내부 store shape로 새지 않도록 번역만 담당한다.
-local actions   = require "game.model.actions"
-local selectors = require "game.model.selectors"
+local actions   = require("game.model.actions")
+local selectors = require("game.model.selectors")
 
 local M = {}
 M.__index = M

@@ -19,9 +19,9 @@ players/turn topic을 구독해 캐러셀 노드를 갱신한다.
 # 의사코드
 ```lua
 -- Pattern: View = Observer + Node pool(슬롯 재사용). display only.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local cosmetics = require "game.core.cosmetics"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local cosmetics = require("game.core.cosmetics")
 
 function init(self)
     self.store = store_mod.get()

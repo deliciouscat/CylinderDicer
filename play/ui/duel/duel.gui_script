@@ -1,9 +1,9 @@
-local store_mod = require "game.model.store"
-local actions = require "game.model.actions"
-local i18n = require "game.core.i18n"
-local audio = require "game.core.audio"
-local gui_util = require "ui.common.gui_util"
-local duel_sequence = require "ui.duel.duel_sequence"
+local store_mod = require("game.model.store")
+local actions = require("game.model.actions")
+local i18n = require("game.core.i18n")
+local audio = require("game.core.audio")
+local gui_util = require("ui.common.gui_util")
+local duel_sequence = require("ui.duel.duel_sequence")
 
 local function apply_step(self, step)
 	gui_util.set_text("step", step.name)

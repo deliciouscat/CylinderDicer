@@ -29,15 +29,22 @@
 ```lua
 -- Pattern: Controller + State(블럭 교체). store를 '구독'만 하고 규칙은 계산하지 않는다.
 -- 화면 오케스트레이션(블럭 전환/배경 패닝/cylinder anchor/결과 emit)만 담당.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
 
-local BLOCKS = {                       -- turn.kind -> 화면 블럭 주소 (State 매핑)
-    shaking = "/blocks#shake",
-    bidding = "/blocks#bidding",
-    dualing = "/blocks#duel",
+local BLOCKS = {                       -- turn.kind -> 활성 GUI component 주소들
+    setup = { "/ui#shake", "/ui#local_hud" },
+    shaking = { "/ui#shake", "/ui#local_hud" },
+    bidding = {
+        "/ui#player_carousel",
+        "/ui#rail",
+        "/ui#local_hud",
+        "/ui#bid_controls",
+    },
+    dualing = { "/ui#duel" },
+    complete = { "/ui#duel" },
 }
-local BG_LOCATION = { bidding = "bidding", shaking = "shaking", dualing = "dualing" }
+local BG_LOCATION = { setup = "setup", bidding = "bidding", shaking = "shaking", dualing = "dualing" }
 
 function on_message(self, message_id, message, sender)
     if message_id == hash("boot") then
@@ -49,7 +56,7 @@ function on_message(self, message_id, message, sender)
             self.store:subscribe("match", function(s) self:on_match(s) end),
         }
     elseif message_id == hash("submit_result") then
-        msg.post("/main#main", "submit_result")     -- adapter가 payload shape를 책임
+        msg.post("/go#main", "submit_result")     -- adapter가 payload shape를 책임
     end
 end
 
@@ -75,4 +82,3 @@ end
 -- 순수 정책은 selector에 위임 (director는 분기 결과만 사용)
 function cylinder_target(state) return selectors.cylinder_anchor(state) end  -- hud | focal | offscreen
 ```
-

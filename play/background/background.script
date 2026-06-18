@@ -1,15 +1,16 @@
-local tween = require "game.core.tween"
+local tween = require("game.core.tween")
 
 local LOCATION_Y = {
-	bidding = 120,
-	shaking = 360,
-	dualing = 560,
+	bidding = -410,
+	setup = -410,
+	shaking = 720,
+	dualing = 720,
 }
 
 local PAN_TIME = 0.6
 
 function init(self)
-	self.location = "shaking"
+	self.location = "bidding"
 end
 
 function on_message(self, message_id, message, sender)

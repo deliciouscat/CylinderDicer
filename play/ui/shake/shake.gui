@@ -1,47 +1,92 @@
 script: "/ui/shake/shake.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
-}
-textures {
-  name: "cup_default"
-  texture: "/assets/images/cup/default/cup.png"
+  font: "/builtins/fonts/default.font"
 }
 nodes {
   position {
     x: 640.0
     y: 360.0
+    z: 0.0
+  }
+  scale {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    w: 1.0
   }
   size {
     x: 620.0
     y: 360.0
+    z: 0.0
   }
   color {
     x: 0.07
     y: 0.08
     z: 0.09
+    w: 0.72
   }
   type: TYPE_BOX
   id: "root"
-  alpha: 0.72
 }
 nodes {
   position {
-    x: -1.0
-    z: 0.1
+    x: 0.0
+    y: -90.0
+    z: 0.2
   }
-  rotation {
-    z: 180.0
+  scale {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    w: 1.0
   }
   size {
-    x: 220.0
-    y: 180.0
+    x: 520.0
+    y: 48.0
+    z: 0.0
   }
-  type: TYPE_BOX
-  texture: "cup_default"
-  id: "cup"
+  color {
+    x: 0.9
+    y: 0.92
+    z: 1.0
+    w: 1.0
+  }
+  type: TYPE_TEXT
+  text: "Hint"
+  font: "system_font"
+  id: "hint"
   parent: "root"
-  inherit_alpha: true
+  line_break: true
+}
+nodes {
+  position {
+    x: 0.0
+    y: -145.0
+    z: 0.2
+  }
+  scale {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    w: 1.0
+  }
+  size {
+    x: 420.0
+    y: 38.0
+    z: 0.0
+  }
+  color {
+    x: 1.0
+    y: 0.95
+    z: 0.82
+    w: 1.0
+  }
+  type: TYPE_TEXT
+  text: "- - - - -"
+  font: "system_font"
+  id: "dice_values"
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

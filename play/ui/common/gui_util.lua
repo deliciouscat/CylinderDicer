@@ -33,6 +33,13 @@ function M.set_color(id, color)
 	end
 end
 
+function M.play_flipbook(id, animation)
+	local node = M.node(id)
+	if node and gui.play_flipbook then
+		pcall(gui.play_flipbook, node, animation)
+	end
+end
+
 function M.set_position(id, position)
 	local node = M.node(id)
 	if node and gui.set_position then

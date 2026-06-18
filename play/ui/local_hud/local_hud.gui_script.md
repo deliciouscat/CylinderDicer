@@ -20,11 +20,11 @@
 # 의사코드
 ```lua
 -- Pattern: View = Observer + anchor 등록자(위치 indicator). cylinder를 소유하지 않는다.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local i18n      = require "game.core.i18n"
-local cosmetics = require "game.core.cosmetics"
-local anchors   = require "game.core.anchors"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local i18n      = require("game.core.i18n")
+local cosmetics = require("game.core.cosmetics")
+local anchors   = require("game.core.anchors")
 
 function init(self)
     self.store = store_mod.get()

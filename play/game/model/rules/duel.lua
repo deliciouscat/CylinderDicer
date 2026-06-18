@@ -1,5 +1,5 @@
-local dice = require "game.model.rules.dice"
-local cylinder = require "game.model.rules.cylinder"
+local dice = require("game.model.rules.dice")
+local cylinder = require("game.model.rules.cylinder")
 
 local M = {}
 

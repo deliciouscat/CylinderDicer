@@ -1,63 +1,214 @@
 script: "/ui/rail/rail.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
+}
+textures {
+  name: "rail_default"
+  texture: "/assets/atlases/rail_default.atlas"
 }
 nodes {
+  position { x: 640.0 y: 360.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1280.0 y: 720.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
   type: TYPE_BOX
   id: "root"
-  position { x: 640.0 y: 390.0 z: 0.0 }
-  size { x: 1040.0 y: 126.0 z: 0.0 }
-  color { x: 0.05 y: 0.055 z: 0.06 w: 0.76 }
 }
 nodes {
+  position { x: 0.0 y: -52.0 z: 0.1 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1060.0 y: 170.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.95 }
   type: TYPE_BOX
+  texture: "rail_default/rail"
   id: "track"
   parent: "root"
-  position { x: 0.0 y: -18.0 z: 0.1 }
-  size { x: 920.0 y: 42.0 z: 0.0 }
-  color { x: 0.28 y: 0.22 z: 0.16 w: 1.0 }
 }
 nodes {
-  type: TYPE_TEXT
-  id: "range"
+  position { x: 0.0 y: -8.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1060.0 y: 8.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "rail_top"
   parent: "root"
-  position { x: -410.0 y: 38.0 z: 0.1 }
-  size { x: 160.0 y: 26.0 z: 0.0 }
-  text: "1 - 10"
+}
+nodes {
+  position { x: 0.0 y: -96.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1060.0 y: 8.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "rail_bottom"
+  parent: "root"
+}
+nodes {
+  position { x: -474.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_1"
+  parent: "root"
+}
+nodes {
+  position { x: -368.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_2"
+  parent: "root"
+}
+nodes {
+  position { x: -262.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_3"
+  parent: "root"
+}
+nodes {
+  position { x: -156.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_4"
+  parent: "root"
+}
+nodes {
+  position { x: -50.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_5"
+  parent: "root"
+}
+nodes {
+  position { x: 56.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_6"
+  parent: "root"
+}
+nodes {
+  position { x: 162.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_7"
+  parent: "root"
+}
+nodes {
+  position { x: 268.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_8"
+  parent: "root"
+}
+nodes {
+  position { x: 374.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_9"
+  parent: "root"
+}
+nodes {
+  position { x: 480.0 y: -52.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 5.0 y: 86.0 z: 0.0 }
+  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  type: TYPE_BOX
+  id: "divider_10"
+  parent: "root"
+}
+nodes { position { x: -477.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "1" font: "system_font" id: "cell_1" parent: "root" }
+nodes { position { x: -371.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "2" font: "system_font" id: "cell_2" parent: "root" }
+nodes { position { x: -265.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "3" font: "system_font" id: "cell_3" parent: "root" }
+nodes { position { x: -159.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "4" font: "system_font" id: "cell_4" parent: "root" }
+nodes { position { x: -53.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "5" font: "system_font" id: "cell_5" parent: "root" }
+nodes { position { x: 53.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "6" font: "system_font" id: "cell_6" parent: "root" }
+nodes { position { x: 159.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "7" font: "system_font" id: "cell_7" parent: "root" }
+nodes { position { x: 265.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "8" font: "system_font" id: "cell_8" parent: "root" }
+nodes { position { x: 371.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "9" font: "system_font" id: "cell_9" parent: "root" }
+nodes { position { x: 477.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "10" font: "system_font" id: "cell_10" parent: "root" }
+nodes {
+  position { x: 0.0 y: 4.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 42.0 y: 28.0 z: 0.0 }
+  color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 }
+  type: TYPE_TEXT
+  text: "v"
   font: "system_font"
-  color { x: 0.8 y: 0.84 z: 0.92 w: 1.0 }
+  id: "pointer_top"
+  parent: "root"
 }
 nodes {
+  position { x: 0.0 y: -112.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 42.0 y: 28.0 z: 0.0 }
+  color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 }
   type: TYPE_TEXT
-  id: "selected_count"
+  text: "^"
+  font: "system_font"
+  id: "pointer_bottom"
   parent: "root"
-  position { x: -55.0 y: 38.0 z: 0.1 }
-  size { x: 80.0 y: 34.0 z: 0.0 }
+}
+nodes {
+  position { x: 0.0 y: -54.0 z: 0.4 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 74.0 y: 42.0 z: 0.0 }
+  color { x: 0.35 y: 0.35 z: 0.35 w: 0.0 }
+  type: TYPE_TEXT
   text: "1"
   font: "system_font"
-  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+  id: "selected_count"
+  parent: "root"
 }
 nodes {
+  position { x: 0.0 y: -144.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 150.0 y: 24.0 z: 0.0 }
+  color { x: 0.52 y: 0.52 z: 0.52 w: 0.0 }
   type: TYPE_TEXT
-  id: "selected_face"
-  parent: "root"
-  position { x: 55.0 y: 38.0 z: 0.1 }
-  size { x: 80.0 y: 34.0 z: 0.0 }
   text: "2"
   font: "system_font"
-  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+  id: "selected_face"
+  parent: "root"
 }
 nodes {
+  position { x: -490.0 y: 4.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 120.0 y: 24.0 z: 0.0 }
+  color { x: 0.52 y: 0.52 z: 0.52 w: 0.0 }
   type: TYPE_TEXT
-  id: "current_bid"
+  text: "1 - 10"
+  font: "system_font"
+  id: "range"
   parent: "root"
-  position { x: 320.0 y: 38.0 z: 0.1 }
-  size { x: 320.0 y: 28.0 z: 0.0 }
+}
+nodes {
+  position { x: 245.0 y: 0.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 340.0 y: 28.0 z: 0.0 }
+  color { x: 0.45 y: 0.45 z: 0.45 w: 1.0 }
+  type: TYPE_TEXT
   text: "-"
   font: "system_font"
-  color { x: 0.9 y: 0.92 z: 1.0 w: 1.0 }
+  id: "current_bid"
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT
-max_nodes: 128
+max_nodes: 160

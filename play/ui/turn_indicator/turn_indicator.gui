@@ -1,24 +1,26 @@
 script: "/ui/turn_indicator/turn_indicator.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
 }
 nodes {
+  position { x: 640.0 y: 685.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 180.0 y: 68.0 z: 0.0 }
+  color { x: 0.82 y: 0.82 z: 0.82 w: 1.0 }
   type: TYPE_BOX
   id: "root"
-  position { x: 640.0 y: 670.0 z: 0.0 }
-  size { x: 420.0 y: 54.0 z: 0.0 }
-  color { x: 0.05 y: 0.06 z: 0.07 w: 0.82 }
 }
 nodes {
-  type: TYPE_TEXT
-  id: "label"
-  parent: "root"
   position { x: 0.0 y: 0.0 z: 0.1 }
-  size { x: 390.0 y: 40.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 160.0 y: 44.0 z: 0.0 }
+  color { x: 0.05 y: 0.05 z: 0.05 w: 1.0 }
+  type: TYPE_TEXT
   text: "TURN"
   font: "system_font"
-  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+  id: "label"
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

@@ -24,12 +24,12 @@ cylinder 상태 표시와 slot 장전 입력 처리. target anchor가 바뀌면 
 ```lua
 -- Pattern: Singleton overlay. 생성/삭제/reparent 없이 단일 인스턴스로 영구 존재.
 -- 데이터(state)와 위치(anchor)를 분리: anchor 사이를 tween 이동만 한다.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions   = require "game.model.actions"
-local anchors   = require "game.core.anchors"
-local tween     = require "game.core.tween"
-local audio     = require "game.core.audio"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions   = require("game.model.actions")
+local anchors   = require("game.core.anchors")
+local tween     = require("game.core.tween")
+local audio     = require("game.core.audio")
 
 function init(self)
     self.store  = store_mod.get()

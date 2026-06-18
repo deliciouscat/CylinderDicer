@@ -35,7 +35,7 @@ Lier’s Dice와 Russian Roulette를 조합한 게임.
 - **결투신청 시에는 장전하지 않는다.**
 
 ### 장전 화면 연출
-- bidding 과정의 장전: 우하단에 늘 떠 있는 cylinder의 빈 슬롯에 그대로 장전한다. (별도 등장 연출 없음)
+- bidding 과정의 장전: cylinder asset이 준비되면 우하단 inline 위치의 빈 슬롯에 그대로 장전한다. asset이 없을 때는 가짜 cylinder visual을 만들지 않고 입력/상태만 유지한다.
 - 최초 장전 및 shaking 이후 장전: cylinder가 **화면 밖에서 안으로 등장**하고, 장전이 끝나면 **다시 원위치(화면 밖)로** 돌아간다.
 
 ### 라운드 흐름

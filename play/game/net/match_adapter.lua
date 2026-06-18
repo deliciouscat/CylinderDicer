@@ -1,5 +1,5 @@
-local actions = require "game.model.actions"
-local selectors = require "game.model.selectors"
+local actions = require("game.model.actions")
+local selectors = require("game.model.selectors")
 
 local M = {}
 M.__index = M
@@ -16,6 +16,7 @@ local function mock_players(local_player_id)
 			hp = 3,
 			dice_count = 5,
 			skin = "rosemund",
+			initial_loaded_slots = { 1, 3, 5 },
 		},
 		{
 			id = "opponent-1",
@@ -35,10 +36,10 @@ local function mock_players(local_player_id)
 		},
 		{
 			id = "opponent-3",
-			name = "Calamity Kate",
+			name = "Zippo Jay",
 			hp = 3,
 			dice_count = 5,
-			skin = "calamity-kate",
+			skin = "zippo-jay",
 			initial_loaded_slots = { 1, 3, 5 },
 		},
 	}
@@ -79,6 +80,7 @@ local function to_internal(payload, cosmetics)
 		players = normalize_players(payload, local_player_id),
 		first_player_id = payload.firstPlayerId or payload.first_player_id or local_player_id,
 		requires_setup_load = payload.requiresSetupLoad ~= false and payload.requires_setup_load ~= false,
+		preview = payload.preview,
 	}
 end
 

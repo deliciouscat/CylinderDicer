@@ -1,8 +1,8 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local i18n = require "game.core.i18n"
-local anchors = require "game.core.anchors"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local i18n = require("game.core.i18n")
+local anchors = require("game.core.anchors")
+local gui_util = require("ui.common.gui_util")
 
 local function register_anchor()
 	local position = gui_util.world_position("cylinder_anchor")
@@ -22,6 +22,15 @@ local function render(self, state)
 	gui_util.set_text("bullets", selectors.player_bullets(player))
 	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
 	gui_util.set_text("dice_values", table.concat(player.dice or {}, " "))
+
+	for index = 1, 5 do
+		local face = player.dice[index]
+		gui_util.set_text("dice_" .. tostring(index), face or "-")
+		if face then
+			gui_util.play_flipbook("dice_" .. tostring(index) .. "_box", "f" .. tostring(face) .. "_a0")
+		end
+	end
+
 	register_anchor()
 end
 

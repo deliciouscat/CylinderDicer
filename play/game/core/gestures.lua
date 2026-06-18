@@ -55,6 +55,10 @@ end
 function Gesture:feed(action_id, action)
 	action = action or {}
 
+	if action.touch and action.touch[1] then
+		action = action.touch[1]
+	end
+
 	if id_matches(action_id, "touch") or id_matches(action_id, "pointer") then
 		if action.pressed then
 			self.dragging = true

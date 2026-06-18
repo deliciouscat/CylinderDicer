@@ -1,9 +1,9 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions = require "game.model.actions"
-local anchors = require "game.core.anchors"
-local tween = require "game.core.tween"
-local audio = require "game.core.audio"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions = require("game.model.actions")
+local anchors = require("game.core.anchors")
+local tween = require("game.core.tween")
+local audio = require("game.core.audio")
 
 local SLOT_COUNT = 6
 
@@ -25,6 +25,10 @@ local function post_state(self, state)
 end
 
 local function hit_slot(action)
+	if action.touch and action.touch[1] then
+		action = action.touch[1]
+	end
+
 	if action.slot_index then
 		return action.slot_index
 	end

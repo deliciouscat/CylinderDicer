@@ -1,0 +1,4 @@
+images {
+  image: "/assets/images/ui/rail/rail.png"
+}
+extrude_borders: 2

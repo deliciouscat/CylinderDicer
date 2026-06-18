@@ -4,11 +4,12 @@
 > 화면에 노출되는 모든 문자열은 하드코딩하지 않고 `t(key, **params)`로 인용한다.
 > `t`는 현재 로케일에 맞춰 `assets/locale/<locale>.json`에서 문자열을 찾는 헬퍼다.
 > (예: `t("action.pass")`, `t("bid.count_face", count=5, face=4)`)
+> 게임 화면의 구체 visual은 실제 PNG/atlas asset만 사용한다. asset 파일이 아직 없으면 벡터/도형으로 대체 구현하지 말고, 해당 visual은 숨기거나 텍스트 상태값만 노출한다.
 
 
 ## 게임 플레이 화면
 ```
-BACKGROUND = *"assets에 보관된 화면 호출"   # 세로방향 파노라마 형태. 위쪽은 풍경화면, 아래쪽은 테이블
+BACKGROUND = "assets/images/backgrounds/default/background.png"  # 세로방향 파노라마. 위쪽은 인물/공간, 아래쪽은 테이블
 
 bgLogation = {
     "bidding": *"풍경 보이는 상단 위치",
@@ -39,14 +40,30 @@ app = Stack(
             ],
         ),
 
-        # 2. 블럭 교체와 무관하게 항상 살아있는 overlay 레이어.
-        #    cylinder는 여기에 '단일 인스턴스'로 영구 존재한다.
-        #    (bidding ↔ shaking 전환에도 끊기지 않고 위치만 tween)
+        # 2. 블럭 교체와 무관한 overlay 레이어.
+        #    cylinder asset이 준비되면 단일 인스턴스로 운용한다.
+        #    asset이 없을 때는 가짜 도형 cylinder를 만들지 않고 offscreen/hidden 상태로 둔다.
         cylinderOverlay,
     ],
     background = BACKGROUND,
     backgroundLocation = bgAnimate(bgLocation(data.currentTurn))
 )
+```
+
+#### 배경 / 컵 world prop
+
+```
+# 배경은 단일 세로 파노라마 sprite다. 1280x720 viewport 너비에 맞게 scale하고,
+# background GO의 y 위치를 tween해서 위/아래 시점을 전환한다.
+backgroundPanorama = Sprite("/assets/images/backgrounds/default/background.png")
+
+# 컵은 GUI node가 아니라 테이블 위 world prop이다.
+# bidding/setup의 상단 시점에서는 화면 아래에 대기하고,
+# shaking/dualing의 테이블 시점으로 background가 이동하면서 같이 등장한다.
+# shake.gui는 cup visual을 소유하지 않고, shake 입력/힌트/결과 텍스트만 소유한다.
+tableProps = {
+    cup = Sprite("/assets/atlases/props_default.atlas#cup"),
+}
 ```
 
 #### 위치 앵커 — cylinder가 오갈 좌표만 제공 (그리기 X)
@@ -103,7 +120,7 @@ playerCarousel = HorizontalGrid(
 def PlayerSlot(player):
     return Stack(
         [
-            # 캐릭터 초상(턴 비활성 플레이어는 실루엣/디밍 처리)
+            # 캐릭터 초상(턴 비활성 플레이어는 PNG/atlas 초상을 디밍 처리)
             Portrait(
                 image  = player.portrait,
                 dimmed = not player.isActiveTurn,
@@ -354,6 +371,7 @@ def DuelResolution(duel, judge):
 
 ```
 # 배경은 shaking = "테이블 있는 하단 위치".
+# 컵은 배경/테이블 prop으로 함께 등장한다. shake.gui에는 컵 노드를 만들지 않는다.
 # 흔들기로 주사위를 굴려 랜덤 배정(DiceTray에 결과 표시) 후,
 # 최초 쉐이킹이 아니면 cylinder가 focal로 등장해 1발 장전(pendingLoad).
 ShakeTurnBlock

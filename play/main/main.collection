@@ -6,19 +6,21 @@ embedded_instances {
   "  id: \"main\"\n"
   "  component: \"/main/main.script\"\n"
   "}\n"
-  "embedded_components {\n"
-  "  id: \"logo\"\n"
-  "  type: \"sprite\"\n"
-  "  data: \"default_animation: \\\"logo\\\"\\n"
-  "material: \\\"/builtins/materials/sprite.material\\\"\\n"
-  "textures {\\n"
-  "  sampler: \\\"texture_sampler\\\"\\n"
-  "  texture: \\\"/main/main.atlas\\\"\\n"
-  "}\\n"
-  "\"\n"
+  "components {\n"
+  "  id: \"director\"\n"
+  "  component: \"/game/director.script\"\n"
+  "}\n"
+  ""
+}
+embedded_instances {
+  id: "background"
+  children: "cup"
+  data: "components {\n"
+  "  id: \"background\"\n"
+  "  component: \"/background/background.script\"\n"
   "}\n"
   "embedded_components {\n"
-  "  id: \"background\"\n"
+  "  id: \"backdrop\"\n"
   "  type: \"sprite\"\n"
   "  data: \"default_animation: \\\"background\\\"\\n"
   "material: \\\"/builtins/materials/sprite.material\\\"\\n"
@@ -27,14 +29,86 @@ embedded_instances {
   "  texture: \\\"/main/main.atlas\\\"\\n"
   "}\\n"
   "\"\n"
-  "  position {\n"
-  "    z: -0.5\n"
-  "  }\n"
   "}\n"
   ""
   position {
     x: 640.0
-    y: 360.0
+    y: -410.0
+  }
+  scale3 {
+    x: 1.36
+    y: 1.36
+  }
+}
+embedded_instances {
+  id: "cup"
+  data: "embedded_components {\n"
+  "  id: \"cup\"\n"
+  "  type: \"sprite\"\n"
+  "  data: \"default_animation: \\\"cup\\\"\\n"
+  "material: \\\"/builtins/materials/sprite.material\\\"\\n"
+  "textures {\\n"
+  "  sampler: \\\"texture_sampler\\\"\\n"
+  "  texture: \\\"/assets/atlases/props_default.atlas\\\"\\n"
+  "}\\n"
+  "\"\n"
+  "}\n"
+  ""
+  position {
+    y: -430.0
+    z: 0.2
+  }
+  scale3 {
+    x: 0.38
+    y: 0.38
+  }
+}
+embedded_instances {
+  id: "ui"
+  data: "components {\n"
+  "  id: \"turn_indicator\"\n"
+  "  component: \"/ui/turn_indicator/turn_indicator.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"shake\"\n"
+  "  component: \"/ui/shake/shake.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"local_hud\"\n"
+  "  component: \"/ui/local_hud/local_hud.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"player_carousel\"\n"
+  "  component: \"/ui/player_carousel/player_carousel.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"bid_controls\"\n"
+  "  component: \"/ui/bid_controls/bid_controls.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"rail\"\n"
+  "  component: \"/ui/rail/rail.gui\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"duel\"\n"
+  "  component: \"/ui/duel/duel.gui\"\n"
+  "}\n"
+  ""
+}
+embedded_instances {
+  id: "cylinder"
+  data: "components {\n"
+  "  id: \"cylinder\"\n"
+  "  component: \"/ui/cylinder_overlay/cylinder_overlay.script\"\n"
+  "}\n"
+  "components {\n"
+  "  id: \"cylinder_gui\"\n"
+  "  component: \"/ui/cylinder_overlay/cylinder_overlay.gui\"\n"
+  "}\n"
+  ""
+  position {
+    x: 1450.0
+    y: -240.0
   }
 }
 embedded_instances {

@@ -1,23 +1,33 @@
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
 }
 nodes {
+  position { x: 1140.0 y: 115.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 170.0 y: 170.0 z: 0.0 }
+  color { x: 0.40 y: 0.40 z: 0.40 w: 0.95 }
   type: TYPE_BOX
   id: "root"
-  position { x: 640.0 y: 360.0 z: 0.0 }
-  size { x: 170.0 y: 170.0 z: 0.0 }
-  color { x: 0.16 y: 0.14 z: 0.12 w: 0.78 }
 }
+nodes { position { x: 0.0 y: 0.0 z: 0.1 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 136.0 y: 136.0 z: 0.0 } color { x: 0.30 y: 0.30 z: 0.30 w: 1.0 } type: TYPE_BOX id: "ring" parent: "root" }
+nodes { position { x: 0.0 y: 0.0 z: 0.2 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 } type: TYPE_BOX id: "hub" parent: "root" }
+nodes { position { x: 0.0 y: 52.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_1" parent: "root" }
+nodes { position { x: 45.0 y: 26.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_2" parent: "root" }
+nodes { position { x: 45.0 y: -26.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_3" parent: "root" }
+nodes { position { x: 0.0 y: -52.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_4" parent: "root" }
+nodes { position { x: -45.0 y: -26.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_5" parent: "root" }
+nodes { position { x: -45.0 y: 26.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 42.0 y: 42.0 z: 0.0 } color { x: 0.70 y: 0.70 z: 0.70 w: 1.0 } type: TYPE_BOX id: "slot_6" parent: "root" }
 nodes {
+  position { x: 0.0 y: -82.0 z: 0.4 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 140.0 y: 24.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
   type: TYPE_TEXT
-  id: "label"
-  parent: "root"
-  position { x: 0.0 y: 0.0 z: 0.1 }
-  size { x: 140.0 y: 36.0 z: 0.0 }
   text: "CYLINDER"
   font: "system_font"
-  color { x: 1.0 y: 0.9 z: 0.7 w: 1.0 }
+  id: "label"
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

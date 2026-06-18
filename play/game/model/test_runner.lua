@@ -7,7 +7,7 @@ package.path = table.concat({
 }, ";")
 
 local tests = {
-	require "game.model.tests.model_flow_test",
+	require("game.model.tests.model_flow_test"),
 }
 
 local total = 0

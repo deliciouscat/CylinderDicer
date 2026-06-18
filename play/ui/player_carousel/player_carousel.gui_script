@@ -1,6 +1,20 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local gui_util = require("ui.common.gui_util")
+
+local MAX_SLOTS = 6
+
+local function color(r, g, b, a)
+	if vmath and vmath.vector4 then
+		return vmath.vector4(r, g, b, a)
+	end
+	return {
+		x = r,
+		y = g,
+		z = b,
+		w = a,
+	}
+end
 
 local function player_summary(state)
 	local parts = {}
@@ -19,8 +33,40 @@ local function player_summary(state)
 	return table.concat(parts, "  ")
 end
 
+local function set_slot(index, player, is_active)
+	local prefix = "slot" .. tostring(index)
+	local visible = player ~= nil
+
+	gui_util.set_enabled(prefix .. "_body", visible)
+	gui_util.set_enabled(prefix .. "_head", false)
+	gui_util.set_enabled(prefix .. "_bullet_badge", visible)
+	gui_util.set_enabled(prefix .. "_bullets", visible)
+	gui_util.set_enabled(prefix .. "_hp_badge", visible)
+	gui_util.set_enabled(prefix .. "_hp", visible)
+	gui_util.set_enabled(prefix .. "_name", visible)
+	gui_util.set_enabled(prefix .. "_marker", visible)
+
+	if not player then
+		return
+	end
+
+	gui_util.set_text(prefix .. "_bullets", selectors.player_bullets(player))
+	gui_util.set_text(prefix .. "_hp", player.hp or 0)
+	gui_util.set_text(prefix .. "_name", player.name or player.id)
+	gui_util.set_text(prefix .. "_marker", is_active and "내 턴" or "")
+
+	gui_util.set_color(prefix .. "_body", color(1.0, 1.0, 1.0, is_active and 1.0 or 0.62))
+	gui_util.play_flipbook(prefix .. "_body", player.portrait_state or "front")
+end
+
 local function render(self, state)
 	gui_util.set_text("players", player_summary(state))
+
+	for index = 1, MAX_SLOTS do
+		local player_id = state.players.order[index]
+		local player = player_id and state.players.by_id[player_id] or nil
+		set_slot(index, player, player_id == state.turn.active_player_id)
+	end
 end
 
 function init(self)

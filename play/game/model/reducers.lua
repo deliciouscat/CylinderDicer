@@ -1,9 +1,9 @@
-local actions = require "game.model.actions"
-local turn_machine = require "game.model.turn_machine"
-local bidding = require "game.model.rules.bidding"
-local cylinder = require "game.model.rules.cylinder"
-local dice = require "game.model.rules.dice"
-local duel = require "game.model.rules.duel"
+local actions = require("game.model.actions")
+local turn_machine = require("game.model.turn_machine")
+local bidding = require("game.model.rules.bidding")
+local cylinder = require("game.model.rules.cylinder")
+local dice = require("game.model.rules.dice")
+local duel = require("game.model.rules.duel")
 
 local M = {}
 
@@ -249,6 +249,30 @@ local function complete_shake_load_if_ready(next)
 	return nil
 end
 
+local function apply_bidding_preview(next)
+	local local_player_id = next.match.local_player_id or next.players.order[1]
+	next.pending_load = nil
+	next.turn.kind = "bidding"
+	next.turn.active_player_id = local_player_id
+	next.turn.previous_player_id = local_player_id
+	next.turn.is_first_shake = false
+	next.bidding.my_bid = {
+		count = 5,
+		face = 2,
+	}
+	next.bidding.rail.selected_count = 5
+	next.bidding.rail.window_start = 1
+
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		if player and #player.dice == 0 then
+			player.dice = dice.roll(player.dice_count or 5)
+		end
+	end
+
+	set_hint(next)
+end
+
 local handlers = {}
 
 handlers[actions.types.MATCH_INIT] = function(state, action)
@@ -287,6 +311,10 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 			source = "setup",
 			count = 3,
 		}
+	end
+
+	if payload.preview == "bidding" then
+		apply_bidding_preview(next)
 	end
 
 	set_hint(next)

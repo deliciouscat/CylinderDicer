@@ -1,10 +1,10 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions = require "game.model.actions"
-local gestures = require "game.core.gestures"
-local audio = require "game.core.audio"
-local i18n = require "game.core.i18n"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions = require("game.model.actions")
+local gestures = require("game.core.gestures")
+local audio = require("game.core.audio")
+local i18n = require("game.core.i18n")
+local gui_util = require("ui.common.gui_util")
 
 local function render(self, state)
 	local active = state.turn.kind == "shaking" or state.turn.kind == "setup"

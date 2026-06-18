@@ -1,6 +1,6 @@
 # GUI Node Contracts
 
-이 문서는 Defold 편집기에서 `.gui`를 만들 때 필요한 node id 계약이다. 실제 배치/스타일은 편집기에서 조정하고, script는 아래 id가 있으면 값을 주입한다. 없는 node는 무시한다.
+이 문서는 Defold 편집기에서 `.gui`를 만들 때 필요한 node id 계약이다. 실제 배치/스타일은 편집기에서 조정하고, script는 아래 id가 있으면 값을 주입한다. 없는 node는 무시한다. 게임 화면의 구체 visual은 실제 PNG/atlas asset만 사용한다. asset이 없는 heart/target/cylinder 같은 요소는 벡터/도형으로 그리지 않고 숨기거나 텍스트 상태값만 표시한다.
 
 ## 공통 메시지
 
@@ -18,6 +18,8 @@
 - `hint`: 상태 안내.
 - `dice_values`: 로컬 플레이어 주사위 값을 임시 텍스트로 표시.
 
+컵은 `shake.gui` node 계약에 포함하지 않는다. 컵 visual은 background/table world prop으로 렌더링하고, shake/duel 시점 이동에 맞춰 등장한다.
+
 ## local_hud.gui
 
 - `name`: 로컬 플레이어 이름.
@@ -31,6 +33,8 @@
 
 - `root`: 전체 컨테이너.
 - `players`: 플레이어 목록 임시 텍스트. 이후 slot template으로 교체 가능.
+- `slot{n}_body`: 캐릭터 atlas 초상 box. 현재 실제 atlas가 있는 캐릭터만 표시한다.
+- `slot{n}_bullets`, `slot{n}_hp`, `slot{n}_name`, `slot{n}_marker`: 상태 텍스트.
 
 ## bid_controls.gui
 
@@ -74,5 +78,4 @@ msg.post("#rail", "select_count", { count = 7 })
 
 ## cylinder_overlay.collection
 
-GO script `cylinder_overlay.script`는 아직 sprite node를 요구하지 않는다. placeholder를 편집기에서 자유 배치해도 된다. 입력은 현 단계에서 screen center 기준 6등분 임시 hit-test를 쓴다. 실제 slot hit area가 생기면 script의 `hit_slot()`만 교체한다.
-
+GO script `cylinder_overlay.script`는 아직 sprite node를 요구하지 않는다. 실제 `revolver/default/cylinder.png`와 `bullet.png` asset이 생기기 전까지는 구체 cylinder visual을 만들지 않는다. 입력은 현 단계에서 screen center 기준 6등분 임시 hit-test를 쓴다. 실제 slot hit area가 생기면 script의 `hit_slot()`만 교체한다.

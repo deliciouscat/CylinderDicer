@@ -1,90 +1,141 @@
 script: "/ui/bid_controls/bid_controls.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
 }
 nodes {
+  position { x: 640.0 y: 360.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1280.0 y: 720.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
   type: TYPE_BOX
   id: "root"
-  position { x: 640.0 y: 250.0 z: 0.0 }
-  size { x: 620.0 y: 132.0 z: 0.0 }
-  color { x: 0.06 y: 0.07 z: 0.08 w: 0.75 }
 }
 nodes {
+  position { x: -155.0 y: 90.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 196.0 y: 74.0 z: 0.0 }
+  color { x: 0.34 y: 0.34 z: 0.34 w: 0.95 }
   type: TYPE_BOX
   id: "pass_button"
   parent: "root"
-  position { x: -185.0 y: 12.0 z: 0.1 }
-  size { x: 180.0 y: 70.0 z: 0.0 }
-  color { x: 0.15 y: 0.25 z: 0.18 w: 1.0 }
 }
 nodes {
-  type: TYPE_TEXT
-  id: "pass_label"
+  position { x: -50.0 y: 7.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 52.0 y: 52.0 z: 0.0 }
+  color { x: 0.82 y: 0.82 z: 0.82 w: 1.0 }
+  type: TYPE_BOX
+  id: "pass_die"
   parent: "pass_button"
-  position { x: 0.0 y: 10.0 z: 0.2 }
-  size { x: 160.0 y: 30.0 z: 0.0 }
+}
+nodes {
+  position { x: -50.0 y: 7.0 z: 0.4 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 44.0 y: 34.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_TEXT
+  text: "2"
+  font: "system_font"
+  id: "bid_value"
+  parent: "pass_button"
+}
+nodes {
+  position { x: 42.0 y: 8.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 96.0 y: 34.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_TEXT
   text: "Pass"
   font: "system_font"
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  id: "pass_label"
+  parent: "pass_button"
 }
 nodes {
+  position { x: 42.0 y: -22.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 116.0 y: 20.0 z: 0.0 }
+  color { x: 0.82 y: 0.88 z: 0.82 w: 1.0 }
   type: TYPE_TEXT
-  id: "pass_enabled"
-  parent: "pass_button"
-  position { x: 0.0 y: -20.0 z: 0.2 }
-  size { x: 150.0 y: 22.0 z: 0.0 }
   text: "disabled"
   font: "system_font"
-  color { x: 0.78 y: 0.85 z: 0.78 w: 1.0 }
+  id: "pass_enabled"
+  parent: "pass_button"
 }
 nodes {
+  position { x: -16.0 y: 142.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 34.0 y: 24.0 z: 0.0 }
+  color { x: 0.62 y: 0.62 z: 0.62 w: 1.0 }
   type: TYPE_TEXT
-  id: "bid_value"
-  parent: "root"
-  position { x: 0.0 y: 18.0 z: 0.1 }
-  size { x: 160.0 y: 38.0 z: 0.0 }
-  text: "1 x 2"
+  text: "^"
   font: "system_font"
-  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+  id: "face_up"
+  parent: "root"
 }
 nodes {
+  position { x: -16.0 y: 66.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 34.0 y: 24.0 z: 0.0 }
+  color { x: 0.62 y: 0.62 z: 0.62 w: 1.0 }
   type: TYPE_TEXT
-  id: "face_hint"
-  parent: "root"
-  position { x: 0.0 y: -28.0 z: 0.1 }
-  size { x: 220.0 y: 24.0 z: 0.0 }
-  text: "face_up / face_down"
+  text: "v"
   font: "system_font"
-  color { x: 0.75 y: 0.78 z: 0.84 w: 1.0 }
+  id: "face_down"
+  parent: "root"
 }
 nodes {
+  position { x: 170.0 y: 90.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 176.0 y: 74.0 z: 0.0 }
+  color { x: 0.34 y: 0.34 z: 0.34 w: 0.95 }
   type: TYPE_BOX
   id: "challenge_button"
   parent: "root"
-  position { x: 205.0 y: 12.0 z: 0.1 }
-  size { x: 190.0 y: 70.0 z: 0.0 }
-  color { x: 0.32 y: 0.12 z: 0.12 w: 1.0 }
 }
 nodes {
+  position { x: -52.0 y: 7.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 34.0 y: 34.0 z: 0.0 }
+  color { x: 1.0 y: 0.05 z: 0.05 w: 1.0 }
   type: TYPE_TEXT
-  id: "challenge_label"
+  text: "@"
+  font: "system_font"
+  id: "challenge_icon"
   parent: "challenge_button"
-  position { x: 0.0 y: 10.0 z: 0.2 }
-  size { x: 170.0 y: 30.0 z: 0.0 }
+}
+nodes {
+  position { x: 34.0 y: 8.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 112.0 y: 34.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_TEXT
   text: "Challenge"
   font: "system_font"
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  id: "challenge_label"
+  parent: "challenge_button"
 }
 nodes {
+  position { x: 34.0 y: -22.0 z: 0.3 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 116.0 y: 20.0 z: 0.0 }
+  color { x: 0.92 y: 0.76 z: 0.76 w: 1.0 }
   type: TYPE_TEXT
-  id: "challenge_enabled"
-  parent: "challenge_button"
-  position { x: 0.0 y: -20.0 z: 0.2 }
-  size { x: 150.0 y: 22.0 z: 0.0 }
   text: "disabled"
   font: "system_font"
-  color { x: 0.9 y: 0.72 z: 0.72 w: 1.0 }
+  id: "challenge_enabled"
+  parent: "challenge_button"
+}
+nodes {
+  position { x: 0.0 y: 28.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 260.0 y: 24.0 z: 0.0 }
+  color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 }
+  type: TYPE_TEXT
+  text: "face_up / face_down"
+  font: "system_font"
+  id: "face_hint"
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

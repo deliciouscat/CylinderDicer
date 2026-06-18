@@ -21,11 +21,11 @@ shake 입력을 `shake.roll` action으로 변환하고, 굴림 결과를 화면�
 # 의사코드
 ```lua
 -- Pattern: View = Observer + gesture Adapter. drag/space -> shake.roll (1회).
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions   = require "game.model.actions"
-local gestures  = require "game.core.gestures"
-local audio     = require "game.core.audio"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions   = require("game.model.actions")
+local gestures  = require("game.core.gestures")
+local audio     = require("game.core.audio")
 
 function init(self)
     self.store = store_mod.get()

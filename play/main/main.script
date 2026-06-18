@@ -1,10 +1,30 @@
-local bridge = require "main.game_bridge"
-local event_bus = require "game.core.event_bus"
-local cosmetics = require "game.core.cosmetics"
-local actions = require "game.model.actions"
-local reducers = require "game.model.reducers"
-local store_mod = require "game.model.store"
-local match_adapter = require "game.net.match_adapter"
+local bridge = require("main.game_bridge")
+local event_bus = require("game.core.event_bus")
+local cosmetics = require("game.core.cosmetics")
+local actions = require("game.model.actions")
+local reducers = require("game.model.reducers")
+local store_mod = require("game.model.store")
+local match_adapter = require("game.net.match_adapter")
+local i18n = require("game.core.i18n")
+
+local function start_dev_match(self)
+	if bridge.is_web() then
+		return
+	end
+
+	self.adapter:on_bridge_message({
+		type = "START_MATCH",
+		payload = {
+			sessionId = "dev-session",
+			matchId = "dev-match",
+			playerId = "local-player",
+			mode = "dev",
+			locale = "ko",
+			requiresSetupLoad = false,
+			preview = "bidding",
+		},
+	})
+end
 
 function init(self)
 	msg.post(".", "acquire_input_focus")
@@ -13,6 +33,7 @@ function init(self)
 	self.bus = event_bus.new()
 	self.store = store_mod.create(reducers.initial_state(), reducers.reduce, self.bus)
 	self.adapter = match_adapter.new(bridge, self.store, cosmetics)
+	i18n.set_locale("ko")
 
 	self.result_sub = self.store:subscribe("match", function(state)
 		self.state = state.match.status
@@ -29,6 +50,9 @@ function init(self)
 	bridge.emit("DEFOLD_READY", {
 		state = self.state
 	})
+
+	msg.post("#director", "boot")
+	start_dev_match(self)
 end
 
 function update(self, dt)

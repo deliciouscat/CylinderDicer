@@ -1,9 +1,9 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions = require "game.model.actions"
-local audio = require "game.core.audio"
-local i18n = require "game.core.i18n"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions = require("game.model.actions")
+local audio = require("game.core.audio")
+local i18n = require("game.core.i18n")
+local gui_util = require("ui.common.gui_util")
 
 local function render(self, state)
 	local bid = state.bidding.my_bid
@@ -14,7 +14,8 @@ local function render(self, state)
 	gui_util.set_enabled("root", is_my_turn)
 	gui_util.set_text("pass_label", i18n.t("action.pass"))
 	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
-	gui_util.set_text("bid_value", i18n.t("bid.count_face", {
+	gui_util.set_text("bid_value", bid.face)
+	gui_util.set_text("face_hint", i18n.t("bid.count_face", {
 		count = bid.count,
 		face = bid.face,
 	}))

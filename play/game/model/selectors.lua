@@ -1,7 +1,7 @@
-local bidding = require "game.model.rules.bidding"
-local dice = require "game.model.rules.dice"
-local cylinder = require "game.model.rules.cylinder"
-local turn_machine = require "game.model.turn_machine"
+local bidding = require("game.model.rules.bidding")
+local dice = require("game.model.rules.dice")
+local cylinder = require("game.model.rules.cylinder")
+local turn_machine = require("game.model.turn_machine")
 
 local M = {}
 

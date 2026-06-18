@@ -1,8 +1,8 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions = require "game.model.actions"
-local gestures = require "game.core.gestures"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions = require("game.model.actions")
+local gestures = require("game.core.gestures")
+local gui_util = require("ui.common.gui_util")
 
 local PIXELS_PER_COUNT = 32
 
@@ -15,6 +15,10 @@ local function render(self, state)
 	gui_util.set_text("range", tostring(lo) .. " - " .. tostring(hi))
 	gui_util.set_text("selected_count", bid.count)
 	gui_util.set_text("selected_face", bid.face)
+
+	for index = 1, 10 do
+		gui_util.set_text("cell_" .. tostring(index), lo + index - 1)
+	end
 
 	if current then
 		gui_util.set_text("current_bid", ("%s: %d x %d"):format(

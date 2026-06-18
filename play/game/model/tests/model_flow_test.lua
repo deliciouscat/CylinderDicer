@@ -1,10 +1,10 @@
-local actions = require "game.model.actions"
-local event_bus = require "game.core.event_bus"
-local cosmetics = require "game.core.cosmetics"
-local match_adapter = require "game.net.match_adapter"
-local reducers = require "game.model.reducers"
-local selectors = require "game.model.selectors"
-local store_mod = require "game.model.store"
+local actions = require("game.model.actions")
+local event_bus = require("game.core.event_bus")
+local cosmetics = require("game.core.cosmetics")
+local match_adapter = require("game.net.match_adapter")
+local reducers = require("game.model.reducers")
+local selectors = require("game.model.selectors")
+local store_mod = require("game.model.store")
 
 local M = {}
 

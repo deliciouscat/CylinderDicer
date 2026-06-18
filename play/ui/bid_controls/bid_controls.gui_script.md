@@ -21,10 +21,10 @@
 # 의사코드
 ```lua
 -- Pattern: View = Observer(렌더) + Command(dispatch). 규칙 판정은 selector에 위임.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions   = require "game.model.actions"
-local audio     = require "game.core.audio"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions   = require("game.model.actions")
+local audio     = require("game.core.audio")
 
 function init(self)
     self.store = store_mod.get()

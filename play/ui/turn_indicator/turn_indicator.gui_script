@@ -1,7 +1,7 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local i18n = require "game.core.i18n"
-local gui_util = require "ui.common.gui_util"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local i18n = require("game.core.i18n")
+local gui_util = require("ui.common.gui_util")
 
 local function label_key(state)
 	if state.turn.kind == "bidding" then

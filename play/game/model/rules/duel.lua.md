@@ -24,8 +24,8 @@
 ```lua
 -- Pattern: 판정(순수) + Table-driven policy.
 -- README의 A/B 데미지 매트릭스를 if 사슬 대신 표로 고정한다.
-local dice     = require "game.model.rules.dice"
-local cylinder = require "game.model.rules.cylinder"
+local dice     = require("game.model.rules.dice")
+local cylinder = require("game.model.rules.cylinder")
 
 local M = {}
 M.VERDICT = { SHORT = "SHORT", OVER = "OVER", EXACT = "EXACT" }

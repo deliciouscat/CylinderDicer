@@ -21,12 +21,12 @@ action과 현재 state를 받아 다음 state를 만드는 순수 reducer 모듈
 ```lua
 -- Pattern: Pure Reducer + action.type 별 Strategy table.
 -- 규칙 계산은 rules/*, 턴 전이는 turn_machine에 위임한다. 여기서 직접 mutate 금지.
-local actions      = require "game.model.actions"
-local turn_machine = require "game.model.turn_machine"
-local bidding      = require "game.model.rules.bidding"
-local cylinder     = require "game.model.rules.cylinder"
-local dice         = require "game.model.rules.dice"
-local duel         = require "game.model.rules.duel"
+local actions      = require("game.model.actions")
+local turn_machine = require("game.model.turn_machine")
+local bidding      = require("game.model.rules.bidding")
+local cylinder     = require("game.model.rules.cylinder")
+local dice         = require("game.model.rules.dice")
+local duel         = require("game.model.rules.duel")
 
 local M = {}
 

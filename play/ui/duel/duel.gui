@@ -1,7 +1,7 @@
 script: "/ui/duel/duel.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
 }
 nodes {
   type: TYPE_BOX

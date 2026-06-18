@@ -9,6 +9,7 @@ Defold 프로젝트 루트는 `play/`. 이 문서는 **턴 진행(bidding/shakin
   - 투명도 불필요한 대형 배경 등에 한해 JPEG도 허용.
   - 마스터 원본(psd/ai 등 작업 파일)은 `play/art-source/`(빌드 제외)에 두고, PNG로 export하여 `assets/images/`에 넣는다.
 - 작은 이미지는 `assets/atlases/*.atlas`로 묶어 배칭(드로우콜 절감).
+- 플레이 화면에서 구체 visual은 실제 PNG/atlas asset만 사용한다. asset이 아직 없으면 도형/벡터로 대체 구현하지 않고, 숨김 또는 텍스트 상태 표시로 둔다.
 - 번들 용량은 `game.project`의 texture_profiles(BasisU/ASTC)로 압축.
 - 유료 치장 아이템은 카테고리/`<id>/` 단위로 분리 → **Live Update** 온디맨드 배포에 적합.
 - 로컬라이즈 텍스트는 `assets/locale/*.json`, 한/일은 CJK 폰트 리소스 필요.
@@ -62,7 +63,7 @@ play/
 | DISPLAY 요소 | 사용 에셋 |
 |---|---|
 | ternIndicator | ui/turn_indicator/*, locale(turn.*) |
-| PlayerSlot.Portrait | characters/<id>/* (+실루엣 플레이스홀더) |
+| PlayerSlot.Portrait | characters/<id>/* (+atlas 등록된 캐릭터만 화면 표시) |
 | StatusBadge | icons/cylinder_badge, icons/heart, 숫자 폰트 |
 | BidControls | ui/buttons/*(pass,challenge), ui/arrows/*, icons/target,die_small |
 | rail (셀 프레임 포함) | rail/<mapId>/* (테마 종속), ui/rail/*(caret) |

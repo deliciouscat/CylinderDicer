@@ -23,9 +23,9 @@
 # 의사코드
 ```lua
 -- Pattern: scripted action sequence를 reducer에 흘려보내며 불변식 검증 (no view, no Defold).
-local actions  = require "game.model.actions"
-local reducers = require "game.model.reducers"
-local selectors= require "game.model.selectors"
+local actions  = require("game.model.actions")
+local reducers = require("game.model.reducers")
+local selectors= require("game.model.selectors")
 
 local M = {}
 

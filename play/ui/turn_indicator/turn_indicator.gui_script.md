@@ -18,9 +18,9 @@ turn topic을 구독하고 indicator GUI를 갱신한다.
 # 의사코드
 ```lua
 -- Pattern: View = Observer (display only, dispatch 없음).
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local i18n      = require "game.core.i18n"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local i18n      = require("game.core.i18n")
 
 function init(self)
     self.store = store_mod.get()

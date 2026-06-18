@@ -1,12 +1,5 @@
 local M = {}
 
-local registry = {}
-local viewport = {
-	w = 1280,
-	h = 720,
-	scale = 1,
-}
-
 local function vector3(x, y, z)
 	if vmath and vmath.vector3 then
 		return vmath.vector3(x, y, z)
@@ -17,6 +10,30 @@ local function vector3(x, y, z)
 		z = z,
 	}
 end
+
+local function default_registry()
+	return {
+		hud = {
+			pos = vector3(1110, 96, 0),
+			space = "gui",
+		},
+		focal = {
+			pos = vector3(640, 360, 0),
+			space = "gui",
+		},
+		offscreen = {
+			pos = vector3(1450, -240, 0),
+			space = "gui",
+		},
+	}
+end
+
+local registry = default_registry()
+local viewport = {
+	w = 1280,
+	h = 720,
+	scale = 1,
+}
 
 local FALLBACK = vector3(-9999, -9999, 0)
 
@@ -45,7 +62,7 @@ function M.resolve(name)
 end
 
 function M.clear()
-	registry = {}
+	registry = default_registry()
 end
 
 function M.viewport()

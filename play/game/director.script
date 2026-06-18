@@ -1,16 +1,40 @@
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+
+local ALL_BLOCKS = {
+	"/ui#shake",
+	"/ui#player_carousel",
+	"/ui#rail",
+	"/ui#local_hud",
+	"/ui#bid_controls",
+	"/ui#duel",
+}
 
 local BLOCKS = {
-	setup = "/ui#shake",
-	shaking = "/ui#shake",
-	bidding = "/ui#bidding",
-	dualing = "/ui#duel",
-	complete = "/ui#duel",
+	setup = {
+		"/ui#shake",
+		"/ui#local_hud",
+	},
+	shaking = {
+		"/ui#shake",
+		"/ui#local_hud",
+	},
+	bidding = {
+		"/ui#player_carousel",
+		"/ui#rail",
+		"/ui#local_hud",
+		"/ui#bid_controls",
+	},
+	dualing = {
+		"/ui#duel",
+	},
+	complete = {
+		"/ui#duel",
+	},
 }
 
 local BG_LOCATION = {
-	setup = "shaking",
+	setup = "setup",
 	shaking = "shaking",
 	bidding = "bidding",
 	dualing = "dualing",
@@ -27,16 +51,17 @@ local function set_block(self, kind)
 		return
 	end
 
-	if self.active_block then
-		post_safe(self.active_block, "deactivate")
+	for _, url in ipairs(ALL_BLOCKS) do
+		post_safe(url, "deactivate")
 	end
 
 	self.active_kind = kind
-	self.active_block = BLOCKS[kind]
 
-	if self.active_block then
-		post_safe(self.active_block, "activate")
+	for _, url in ipairs(BLOCKS[kind] or {}) do
+		post_safe(url, "activate")
 	end
+
+	post_safe("/ui#turn_indicator", "activate")
 end
 
 local function sync_turn(self, state)
@@ -48,7 +73,7 @@ local function sync_turn(self, state)
 	})
 
 	post_safe("/cylinder#cylinder", "set_target", {
-		anchor = selectors.cylinder_anchor(state),
+		anchor = state.pending_load and selectors.cylinder_anchor(state) or "offscreen",
 	})
 end
 
@@ -59,15 +84,12 @@ local function sync_match(self, state)
 	end
 end
 
-function init(self)
+local function bind_store(self)
 	self.store = store_mod.get()
 	self.subs = {}
-	self.active_kind = nil
-	self.active_block = nil
-	self.result_requested = false
 
 	if not self.store then
-		return
+		return false
 	end
 
 	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
@@ -81,15 +103,27 @@ function init(self)
 	end)
 
 	sync_turn(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
+	self.subs = {}
+	self.active_kind = nil
+	self.result_requested = false
+
+	bind_store(self)
 end
 
 function on_message(self, message_id, message)
-	if message_id == hash("boot") and self.store then
+	if message_id == hash("boot") and not self.store then
+		bind_store(self)
+	elseif message_id == hash("boot") and self.store then
 		sync_turn(self, self.store:get_state())
 	elseif message_id == hash("background_pan_complete") then
 		self.last_background_location = message.location
 	elseif message_id == hash("duel_sequence_complete") and self.store then
-		local actions = require "game.model.actions"
+		local actions = require("game.model.actions")
 		self.store:dispatch(actions.round_advance())
 	end
 end

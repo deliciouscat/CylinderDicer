@@ -1,1 +1,19 @@
+images {
+  image: "/assets/images/dice/default/f1_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f3_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f5_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a0.png"
+}
 extrude_borders: 2

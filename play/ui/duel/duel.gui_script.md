@@ -23,11 +23,11 @@ duel topic을 구독하고 `duel_sequence.lua`를 실행해 결투 화면을 단
 # 의사코드
 ```lua
 -- Pattern: View = Observer + Sequencer(step 순차 실행). step 목록은 duel_sequence가 빌드.
-local store_mod      = require "game.model.store"
-local actions        = require "game.model.actions"
-local i18n           = require "game.core.i18n"
-local audio          = require "game.core.audio"
-local duel_sequence  = require "ui.duel.duel_sequence"
+local store_mod      = require("game.model.store")
+local actions        = require("game.model.actions")
+local i18n           = require("game.core.i18n")
+local audio          = require("game.core.audio")
+local duel_sequence  = require("ui.duel.duel_sequence")
 
 function init(self)
     self.store = store_mod.get()

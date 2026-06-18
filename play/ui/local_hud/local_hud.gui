@@ -1,80 +1,180 @@
 script: "/ui/local_hud/local_hud.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/system_font.font"
+  font: "/builtins/fonts/default.font"
+}
+textures {
+  name: "rosemund"
+  texture: "/assets/atlases/charcters/rosemund.atlas"
+}
+textures {
+  name: "dice_default"
+  texture: "/assets/atlases/dices/dice_default.atlas"
 }
 nodes {
+  position { x: 640.0 y: 360.0 z: 0.0 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 1280.0 y: 720.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
   type: TYPE_BOX
   id: "root"
-  position { x: 640.0 y: 96.0 z: 0.0 }
-  size { x: 1040.0 y: 150.0 z: 0.0 }
-  color { x: 0.04 y: 0.05 z: 0.06 w: 0.78 }
 }
 nodes {
+  position { x: -520.0 y: -275.0 z: 0.1 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 160.0 y: 220.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.92 }
   type: TYPE_BOX
+  texture: "rosemund/front"
   id: "portrait_placeholder"
   parent: "root"
-  position { x: -445.0 y: 0.0 z: 0.1 }
-  size { x: 120.0 y: 120.0 z: 0.0 }
-  color { x: 0.24 y: 0.20 z: 0.17 w: 1.0 }
 }
 nodes {
-  type: TYPE_TEXT
-  id: "name"
+  position { x: -520.0 y: -145.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 68.0 y: 68.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
+  type: TYPE_BOX
+  id: "portrait_head"
   parent: "root"
-  position { x: -295.0 y: 38.0 z: 0.1 }
-  size { x: 230.0 y: 32.0 z: 0.0 }
+}
+nodes {
+  position { x: -392.0 y: -238.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 160.0 y: 26.0 z: 0.0 }
+  color { x: 0.22 y: 0.22 z: 0.22 w: 1.0 }
+  type: TYPE_TEXT
   text: "Player"
   font: "system_font"
-  color { x: 1.0 y: 0.95 z: 0.82 w: 1.0 }
+  id: "name"
+  parent: "root"
 }
 nodes {
+  position { x: -420.0 y: -276.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 88.0 y: 26.0 z: 0.0 }
+  color { x: 0.95 y: 0.45 z: 0.55 w: 1.0 }
   type: TYPE_TEXT
-  id: "hp"
-  parent: "root"
-  position { x: -310.0 y: 0.0 z: 0.1 }
-  size { x: 120.0 y: 28.0 z: 0.0 }
   text: "HP"
   font: "system_font"
-  color { x: 1.0 y: 0.5 z: 0.5 w: 1.0 }
+  id: "hp"
+  parent: "root"
 }
 nodes {
+  position { x: -320.0 y: -276.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 88.0 y: 26.0 z: 0.0 }
+  color { x: 0.35 y: 0.35 z: 0.35 w: 1.0 }
   type: TYPE_TEXT
-  id: "bullets"
-  parent: "root"
-  position { x: -190.0 y: 0.0 z: 0.1 }
-  size { x: 120.0 y: 28.0 z: 0.0 }
   text: "B"
   font: "system_font"
-  color { x: 0.95 y: 0.8 z: 0.45 w: 1.0 }
+  id: "bullets"
+  parent: "root"
 }
 nodes {
-  type: TYPE_TEXT
-  id: "hint"
+  position { x: 0.0 y: -186.0 z: 0.1 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 700.0 y: 64.0 z: 0.0 }
+  color { x: 0.86 y: 0.86 z: 0.86 w: 0.72 }
+  type: TYPE_BOX
+  id: "hint_panel"
   parent: "root"
-  position { x: 120.0 y: 35.0 z: 0.1 }
-  size { x: 520.0 y: 44.0 z: 0.0 }
+}
+nodes {
+  position { x: 0.0 y: -186.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 660.0 y: 42.0 z: 0.0 }
+  color { x: 0.05 y: 0.05 z: 0.05 w: 1.0 }
+  type: TYPE_TEXT
   text: "Hint"
   font: "system_font"
-  color { x: 0.9 y: 0.92 z: 1.0 w: 1.0 }
+  id: "hint"
+  parent: "root"
+  line_break: true
 }
 nodes {
-  type: TYPE_TEXT
-  id: "dice_values"
+  position { x: 0.0 y: -300.0 z: 0.1 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 540.0 y: 88.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
+  type: TYPE_BOX
+  id: "dice_tray"
   parent: "root"
-  position { x: 80.0 y: -30.0 z: 0.1 }
-  size { x: 360.0 y: 42.0 z: 0.0 }
+}
+nodes {
+  position { x: -210.0 y: -300.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 76.0 y: 76.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_BOX
+  texture: "dice_default/f1_a0"
+  id: "dice_1_box"
+  parent: "root"
+}
+nodes { position { x: -210.0 y: -300.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 66.0 y: 48.0 z: 0.0 } color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 } type: TYPE_TEXT text: "-" font: "system_font" id: "dice_1" parent: "root" }
+nodes {
+  position { x: -105.0 y: -300.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 76.0 y: 76.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "dice_2_box"
+  parent: "root"
+}
+nodes { position { x: -105.0 y: -300.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 66.0 y: 48.0 z: 0.0 } color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 } type: TYPE_TEXT text: "-" font: "system_font" id: "dice_2" parent: "root" }
+nodes {
+  position { x: 0.0 y: -300.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 76.0 y: 76.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_BOX
+  texture: "dice_default/f3_a0"
+  id: "dice_3_box"
+  parent: "root"
+}
+nodes { position { x: 0.0 y: -300.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 66.0 y: 48.0 z: 0.0 } color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 } type: TYPE_TEXT text: "-" font: "system_font" id: "dice_3" parent: "root" }
+nodes {
+  position { x: 105.0 y: -300.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 76.0 y: 76.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_BOX
+  texture: "dice_default/f4_a0"
+  id: "dice_4_box"
+  parent: "root"
+}
+nodes { position { x: 105.0 y: -300.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 66.0 y: 48.0 z: 0.0 } color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 } type: TYPE_TEXT text: "-" font: "system_font" id: "dice_4" parent: "root" }
+nodes {
+  position { x: 210.0 y: -300.0 z: 0.2 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 76.0 y: 76.0 z: 0.0 }
+  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  type: TYPE_BOX
+  texture: "dice_default/f5_a0"
+  id: "dice_5_box"
+  parent: "root"
+}
+nodes { position { x: 210.0 y: -300.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 66.0 y: 48.0 z: 0.0 } color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 } type: TYPE_TEXT text: "-" font: "system_font" id: "dice_5" parent: "root" }
+nodes {
+  position { x: 0.0 y: -300.0 z: 0.4 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 420.0 y: 22.0 z: 0.0 }
+  color { x: 0.40 y: 0.40 z: 0.40 w: 0.0 }
+  type: TYPE_TEXT
   text: "- - - - -"
   font: "system_font"
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  id: "dice_values"
+  parent: "root"
 }
 nodes {
+  position { x: 500.0 y: -278.0 z: 0.1 }
+  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  size { x: 48.0 y: 48.0 z: 0.0 }
+  color { x: 0.8 y: 0.65 z: 0.32 w: 0.0 }
   type: TYPE_BOX
   id: "cylinder_anchor"
   parent: "root"
-  position { x: 470.0 y: 0.0 z: 0.1 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 0.8 y: 0.65 z: 0.32 w: 0.5 }
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

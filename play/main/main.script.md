@@ -7,7 +7,7 @@
 - `game/model/store.lua`, `game/model/reducers.lua`: 상태 저장소 생성.
 - `game/core/event_bus.lua`: 변경 알림 버스 생성.
 - `game/core/i18n.lua`, `game/core/cosmetics.lua`: 로케일/스킨 초기화.
-- `game/director.script`: Controller 부팅 신호 수신자.
+- `game/director.script`: 같은 `/go` game object의 `#director` component.
 
 # I/O
 - 입력:
@@ -22,13 +22,13 @@
 ```lua
 -- Pattern: Composition Root. 의존성은 여기서 단 한 번 생성하고 주입한다.
 -- game.project 의 shared_state=1 이라 module-level singleton이 모든 스크립트에서 공유된다.
-local bridge        = require "main.game_bridge"
-local event_bus     = require "game.core.event_bus"
-local store_mod     = require "game.model.store"
-local reducers      = require "game.model.reducers"
-local i18n          = require "game.core.i18n"
-local cosmetics     = require "game.core.cosmetics"
-local match_adapter = require "game.net.match_adapter"
+local bridge        = require("main.game_bridge")
+local event_bus     = require("game.core.event_bus")
+local store_mod     = require("game.model.store")
+local reducers      = require("game.model.reducers")
+local i18n          = require("game.core.i18n")
+local cosmetics     = require("game.core.cosmetics")
+local match_adapter = require("game.net.match_adapter")
 
 function init(self)
     msg.post(".", "acquire_input_focus")
@@ -43,9 +43,23 @@ function init(self)
     self.adapter = match_adapter.new(bridge, store, cosmetics)
 
     -- 3) Controller 기동. store/bus는 singleton이라 director가 require로 같은 인스턴스를 참조.
-    msg.post("/director#director", "boot")
+    msg.post("#director", "boot")
 
     bridge.emit("DEFOLD_READY", { state = "idle" })
+
+    -- Native/editor dev path: start a mock match when no HTML5 bridge exists.
+    if not bridge.is_web() then
+        self.adapter:on_bridge_message({
+            type = "START_MATCH",
+            payload = {
+                sessionId = "dev-session",
+                matchId = "dev-match",
+                playerId = "local-player",
+                mode = "dev",
+                locale = "ko",
+            },
+        })
+    end
 end
 
 function update(self, dt)

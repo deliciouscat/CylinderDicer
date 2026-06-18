@@ -24,8 +24,8 @@ state 파생 조회 모듈. View가 raw state 구조에 강하게 묶이지 않�
 ```lua
 -- Pattern: Derived-read 계층 (selector). View/adapter가 raw state shape에 묶이지 않게 한다.
 -- 읽기 전용. state를 변형하지 않는다.
-local bidding = require "game.model.rules.bidding"
-local dice    = require "game.model.rules.dice"
+local bidding = require("game.model.rules.bidding")
+local dice    = require("game.model.rules.dice")
 
 local M = {}
 

@@ -1,5 +1,5 @@
 images {
-  image: "/assets/images/background.png"
+  image: "/assets/images/backgrounds/default/background.png"
 }
 images {
   image: "/assets/images/logo.png"

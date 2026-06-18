@@ -22,10 +22,10 @@
 # 의사코드
 ```lua
 -- Pattern: View = Observer + gesture Adapter. drag/scroll/key -> bid.select_count.
-local store_mod = require "game.model.store"
-local selectors = require "game.model.selectors"
-local actions   = require "game.model.actions"
-local gestures  = require "game.core.gestures"
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local actions   = require("game.model.actions")
+local gestures  = require("game.core.gestures")
 
 function init(self)
     self.store = store_mod.get()

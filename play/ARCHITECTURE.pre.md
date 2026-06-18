@@ -70,11 +70,11 @@ flowchart TD
   - `turn_indicator/`, `player_carousel/`, `bid_controls/`, `rail/`, `local_hud/`, `cylinder_overlay/`, `duel/`, `shake/`, `common/`(DiceFace·Badge·Button·ArrowButton 템플릿)
 - `background/` — 세로 파노라마 GO + 패닝 스크립트.
 
-렌더링 방식: **하이브리드 권장** — 레이아웃/텍스트/버튼/배지는 GUI, 대형 일러스트·배경 파노라마·실린더·주사위 굴림 연출은 GO+sprite(카메라). 두 표현 모두 동일한 store/event_bus를 구독한다. (문서에 명시)
+렌더링 방식: **하이브리드 권장** — 레이아웃/텍스트/버튼/배지는 GUI, 대형 일러스트·배경 파노라마·컵·실린더·주사위 굴림 연출은 GO+sprite(카메라). 두 표현 모두 동일한 store/event_bus를 구독한다. 컵은 `shake.gui` node가 아니라 배경/테이블 시점에 묶인 world prop이다.
 
 ## 5. 모듈별 책임과 상호작용 (문서의 핵심 표)
 - `main/main.script`(리팩터): 부트스트랩/composition root. 브릿지 install, store 생성, director 마운트, 입력 포커스 초기화. ↔ `game_bridge`, `store`, `director`.
-- `game/director.script`: 턴 FSM 구동, 활성 블럭 교체(`BlockController`), `bgAnimate` 동기화, `cylinderTarget()` 앵커 결정, 결투 종료 시 결과 emit. ↔ `turn_machine`, `event_bus`, `anchors`, `tween`, 모든 `ui/*`, `background`, `bridge`.
+- `game/director.script`: 턴 FSM 구동, 활성 블럭 교체(`BlockController`), `bgAnimate` 동기화, `cylinderTarget()` 앵커 결정, 결투 종료 시 결과 emit. setup/bidding은 파노라마 상단, shaking/dualing은 테이블 하단으로 배경을 이동시킨다. ↔ `turn_machine`, `event_bus`, `anchors`, `tween`, 모든 `ui/*`, `background`, `bridge`.
 - `model/store.lua`: 단일 상태 + `dispatch(action)` + `subscribe()`. ↔ `reducers`, `event_bus`.
 - `model/reducers.lua`: 액션→다음 상태(순수). ↔ `rules/*`, `actions`.
 - `model/actions.lua`: 액션 타입 상수/생성자. ↔ 모든 View, `reducers`.
@@ -83,7 +83,7 @@ flowchart TD
 - `rules/bidding.lua`: 콜 유효성/상승 규칙. `rules/cylinder.lua`: 슬롯 장전/`pendingLoad`/장전 타이밍. `rules/dice.lua`: 흔들기 랜덤 배정, 면 의미(1=해골). `rules/duel.lua`: 판정(SHORT/OVER/EXACT) + `DuelResolution`/`PerfectDuel`(README 정책). ↔ `reducers`, `selectors`.
 - `core/event_bus.lua`: 토픽 pub/sub. ↔ `store`, 모든 View, `director`.
 - `core/i18n.lua`: `t(key, params)`, 로케일 로드. ↔ View, `cosmetics`.
-- `core/cosmetics.lua`: skinId→atlas/이미지 해석(dice/cup/revolver/bg/rail), Live Update 대비. ↔ View, `match_adapter`.
+- `core/cosmetics.lua`: skinId→atlas/이미지 해석(dice/cup/revolver/bg/rail), Live Update 대비. 컵 스킨은 배경/테이블 world prop에 적용한다. ↔ View, `match_adapter`.
 - `core/anchors.lua`: 명명 앵커→화면 좌표(`hud/focal/offscreen`). ↔ `director`, `cylinder_overlay`, `local_hud`.
 - `core/audio.lua`: sfx/bgm/voice 재생. ↔ `director`, `duel`, `shake`.
 - `core/tween.lua`: easing 헬퍼(`bgAnimate`, AnchorMover). ↔ `director`, `background`, `cylinder_overlay`.
