@@ -11,7 +11,7 @@ local function render(self, state)
 	local bid = state.bidding.my_bid
 	local current = state.bidding.current_bid
 
-	gui_util.set_enabled("root", state.turn.kind == "bidding")
+	gui_util.set_enabled("root", selectors.is_hud(state, "bidding"))
 	gui_util.set_text("range", tostring(lo) .. " - " .. tostring(hi))
 	gui_util.set_text("selected_count", bid.count)
 	gui_util.set_text("selected_face", bid.face)
@@ -53,6 +53,9 @@ function init(self)
 	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
 		render(self, state)
 	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
+		render(self, state)
+	end)
 
 	render(self, self.store:get_state())
 end
@@ -73,7 +76,7 @@ function on_input(self, action_id, action)
 	end
 
 	local state = self.store:get_state()
-	if state.turn.kind ~= "bidding" then
+	if not selectors.is_hud(state, "bidding") then
 		return
 	end
 

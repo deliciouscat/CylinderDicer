@@ -1,3 +1,34 @@
+## 게임 진행 흐름
+
+```mermaid
+flowchart TD
+    Start([게임 시작]) --> Setup["revolver reload<br/>각자 3발 장전 (제한 20초)"]
+    Setup -->|모두 장전 완료| Shake["cup shake<br/>흔들기 → 본인 주사위 확인"]
+
+    Shake --> Gap["마지막 확인 후 3초"]
+    Gap --> Bidding["bidding"]
+
+    Bidding --> Action{현재 플레이어 행동}
+    Action -->|넘기기| Pass["콜 기록 · 넘긴 사람 1발 장전"]
+    Pass --> Bidding
+
+    Action -->|결투신청| Duel["결투집행 (duel)<br/>주사위 공개 · 판정"]
+    Duel --> Judge{콜 판정}
+
+    Judge -->|부족 SHORT| Short["도전자가 총을 맞음<br/>|실제−콜|만큼 russian roulette"]
+    Short --> Shake
+
+    Judge -->|초과 OVER| Over["직전 콜러가 총을 맞음<br/>|실제−콜|만큼 russian roulette"]
+    Over --> Shake
+
+    Judge -->|EXACT| Perfect["맞춘 사람(A) → 나머지 순서대로<br/>방아쇠/회피 · 응사/걍맞기<br/>(PerfectDuel · 6회)"]
+    Perfect --> Reload3["정확히 맞춘 사람만<br/>revolver reload · 3발"]
+    Reload3 --> Shake
+
+    Shake -.->|최초 shaking| NoteFirst["추가 장전 없음"]
+    Shake -.->|이후 shaking 완료| NoteLater["본인 1발 장전<br/>(EXACT 결투 직후 3발은 위 분기)"]
+```
+
 게임 시작:
     `revolver reload` 부터 시작. 3개의 탄을 원하는 실린더에 장전한다.
     제한시간 20초, 넘어가면 임의로 실린더 위치에 총알 채워넣음.
@@ -31,8 +62,11 @@
 
 def `결투집행`상세:
     `duel` HUD/배경(테이블 시점)으로. 주사위 전원 공개
-    콜 판정(부족/초과/정확) 후 `duel` HUD 띄워서 데미지 집행. 
+    콜 판정(부족/초과/정확) 후 `duel` HUD 띄워서 데미지 집행.
     장전 없음.
+    - **부족(SHORT)**: 실제 개수가 콜보다 적음 → **도전자**가 |실제 − 콜|만큼 russian roulette(총을 맞음). 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
+    - **초과(OVER)**: 실제 개수가 콜보다 많음 → **직전 콜러**가 |실제 − 콜|만큼 russian roulette(총을 맞음). 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
+    - **정확(EXACT)**: 맞춘 당사자(A=직전 콜러)가 나머지 플레이어(B)를 순서대로 지목. A는 방아쇠/회피, B는 응사/걍맞기 선택 → README 데미지 정책표대로 처리.
 
 
 # HUD 종류
@@ -103,10 +137,14 @@ Z-Stack:
 Sequence[
     "배경 shading 및 vignetting이 ease-inout 되며 나타남",
     "총을 쏘는 플레이어의 일러스트가 왼쪽, 맞는 플레이어가 오른쪽에 나타날거임. 남은 HP/총알 표시와 함께. with ease-out from left/right",
-    if "bidding이 정확히 맞아서 모든 플레이어에게 총을 쏘는 상황":
-        for 6번: "도전자부터 그 이후 플레이어 순서로 돌아가면서 russian roulette 진행. 예를 들어 [p1, p2, p3, p4] 중 p4가 도전해서 p3가 정확히 맞춘 상황이면, [p4, p1, p2, p4, p1, p2] 순서로 russian roulette 진행하는거임"
+    if "bidding이 부족(SHORT)인 상황":
+        for |실제−콜|번: "도전자가 russian roulette · 총을 맞음. 리볼버 장전 위치에 따라 hit/miss",
+    if "bidding이 초과(OVER)인 상황":
+        for |실제−콜|번: "직전 콜러가 russian roulette · 총을 맞음. 리볼버 장전 위치에 따라 hit/miss",
+    if "bidding이 정확히 맞아서(EXACT) 모든 플레이어에게 총을 쏘는 상황":
+        for 6번: "도전자부터 그 이후 플레이어 순서로 돌아가면서 russian roulette 진행. 예를 들어 [p1, p2, p3, p4] 중 p4가 도전해서 p3가 정확히 맞춘 상황이면, [p4, p1, p2, p4, p1, p2] 순서로 russian roulette 진행하는거임. A(맞춘 사람): 방아쇠/회피, B(지목 대상): 응사/걍맞기",
     "배경 shading 및 vignetting이 ease-inout 되며 사라짐",
-    "`cup shake` 차례로 돌아감. (정확히 맞춘 턴이면, 정확히 맞춘 사람만 3발 충전하고 shaking 시작)"
+    "`cup shake` 차례로 돌아감. (EXACT이면 정확히 맞춘 사람만 3발 충전 후 shaking, SHORT/OVER면 바로 shaking)",
 ]
 
 

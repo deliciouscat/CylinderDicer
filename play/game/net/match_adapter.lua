@@ -16,7 +16,6 @@ local function mock_players(local_player_id)
 			hp = 3,
 			dice_count = 5,
 			skin = "rosemund",
-			initial_loaded_slots = { 1, 3, 5 },
 		},
 		{
 			id = "opponent-1",

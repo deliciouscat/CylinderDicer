@@ -1,20 +1,50 @@
 local M = {}
 
-local TRANSITIONS = {
-	setup = {
-		setup_complete = "shaking",
+local PHASE_TRANSITIONS = {
+	waiting = {
+		start_reload = "revolver_reload",
+		start_shake = "cup_shake",
+		preview_bidding = "bidding",
 	},
-	shaking = {
-		shake_complete = "bidding",
-		load_complete = "bidding",
+	revolver_reload = {
+		reload_complete_setup = "cup_shake",
+		reload_complete_shake = "dice_check",
+		reload_complete_bid = "bidding",
+		reload_complete_exact_duel = "cup_shake",
+	},
+	cup_shake = {
+		shake_complete_first = "dice_check",
+		shake_complete_reload = "revolver_reload",
+		shake_complete_no_reload = "dice_check",
+	},
+	dice_check = {
+		all_checked = "bidding_gap",
+	},
+	bidding_gap = {
+		open_bidding = "bidding",
 	},
 	bidding = {
-		bid_raised = "bidding",
-		challenge = "dualing",
+		bid_reload = "revolver_reload",
+		bid_no_reload = "bidding",
+		challenge = "duel",
 	},
-	dualing = {
-		duel_complete = "shaking",
+	duel = {
+		match_complete = "complete",
+		round_shake = "cup_shake",
+		exact_reload = "revolver_reload",
 	},
+	complete = {},
+}
+
+local TURN_KIND_BY_PHASE = {
+	waiting = "setup",
+	revolver_reload = "setup",
+	cup_shake = "shaking",
+	dice_check = "shaking",
+	bidding_gap = "shaking",
+	bidding = "bidding",
+	duel = "dualing",
+	complete = "complete",
 }
 
 local function alive_order(players)
@@ -47,64 +77,51 @@ local function next_alive_after(players, player_id)
 	return order[1]
 end
 
-local function effects_for(from, event, ctx)
-	if event == "shake_complete" and not ctx.turn.is_first_shake then
-		return {
-			pending_load = {
-				player_id = ctx.turn.active_player_id,
-				source = "shake",
-				count = 1,
-			},
-		}
-	end
-
-	if event == "bid_raised" then
-		return {
-			pending_load = {
-				player_id = ctx.turn.active_player_id,
-				source = "bid",
-				count = 1,
-			},
-		}
-	end
-
-	return {}
+local function phase(state)
+	return state and state.flow and state.flow.phase or "waiting"
 end
 
-local function rotate_active(turn, event, ctx)
-	if event == "bid_raised" then
-		return next_alive_after(ctx.players, turn.active_player_id)
-	end
-
-	if event == "duel_complete" then
-		return next_alive_after(ctx.players, turn.active_player_id)
-	end
-
-	return turn.active_player_id
+local function kind_for_phase(next_phase)
+	return TURN_KIND_BY_PHASE[next_phase]
 end
 
-function M.next(turn, event, ctx)
-	ctx = ctx or {}
-	local to = (TRANSITIONS[turn.kind] or {})[event]
-	if not to then
+function M.phase(state)
+	return phase(state)
+end
+
+function M.kind_for_phase(next_phase)
+	return kind_for_phase(next_phase)
+end
+
+function M.enter_phase(state, next_phase, options)
+	options = options or {}
+	state.flow = state.flow or {}
+	state.flow.phase = next_phase
+	if options.dice_check_delay_seconds then
+		state.flow.dice_check_delay_seconds = options.dice_check_delay_seconds
+	end
+	state.turn.kind = options.turn_kind or kind_for_phase(next_phase) or state.turn.kind
+	return state
+end
+
+function M.transition_phase(state, event, options)
+	local current = phase(state)
+	local next_phase = (PHASE_TRANSITIONS[current] or {})[event]
+	if not next_phase then
 		return {
 			ok = false,
-			reason = "invalid_turn_transition",
-			turn = turn,
-			effects = {},
+			reason = "invalid_phase_transition",
+			from = current,
+			event = event,
 		}
 	end
 
+	M.enter_phase(state, next_phase, options)
 	return {
 		ok = true,
-		turn = {
-			kind = to,
-			active_player_id = rotate_active(turn, event, ctx),
-			previous_player_id = turn.active_player_id,
-			round_index = turn.round_index or 0,
-			is_first_shake = turn.is_first_shake,
-		},
-		effects = effects_for(turn.kind, event, ctx),
+		from = current,
+		to = next_phase,
+		event = event,
 	}
 end
 

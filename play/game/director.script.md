@@ -1,5 +1,5 @@
 # 개요
-게임 화면 오케스트레이터. store 상태를 구독하고 `turn.kind`에 맞춰 `shaking`, `bidding`, `dualing` 화면 블럭을 전환한다. 배경 패닝, cylinder anchor 이동, 결투 시퀀스 시작, 매치 종료 emit을 조율한다.
+게임 화면 오케스트레이터. store 상태를 구독하고 `selectors.hud_kind(state)`에 맞춰 화면 블럭을 전환한다. 배경 패닝, cylinder anchor 이동, 결투 시퀀스 시작, 매치 종료 emit을 조율한다.
 
 # 의존성
 - `game/model/store.lua`: 상태 구독, action dispatch.
@@ -32,9 +32,9 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 
-local BLOCKS = {                       -- turn.kind -> 활성 GUI component 주소들
-    setup = { "/ui#shake", "/ui#local_hud" },
-    shaking = { "/ui#shake", "/ui#local_hud" },
+local BLOCKS = {                       -- selector.hud_kind -> 활성 GUI component 주소들
+    revolver_reload = { "/ui#player_carousel", "/ui#local_hud" },
+    cup_shake = { "/ui#shake", "/ui#local_hud" },
     bidding = {
         "/ui#player_carousel",
         "/ui#rail",
@@ -44,7 +44,6 @@ local BLOCKS = {                       -- turn.kind -> 활성 GUI component 주�
     dualing = { "/ui#duel" },
     complete = { "/ui#duel" },
 }
-local BG_LOCATION = { setup = "setup", bidding = "bidding", shaking = "shaking", dualing = "dualing" }
 
 function on_message(self, message_id, message, sender)
     if message_id == hash("boot") then
@@ -61,10 +60,10 @@ function on_message(self, message_id, message, sender)
 end
 
 function on_turn(self, state)
-    local kind = state.turn.kind
+    local kind = selectors.hud_kind(state)
     self:activate_block(kind)                                            -- 1) State: 이전 끄고 현재 켜기
-    msg.post("/background#background", "pan_to", { location = BG_LOCATION[kind] })  -- 2) Command
-    msg.post("/cylinder#cylinder", "set_target", { anchor = cylinder_target(state) }) -- 3) Command
+    msg.post("/background#background", "pan_to", { location = selectors.background_location(state) })  -- 2) Command
+    msg.post("/cylinder#cylinder", "set_target", { anchor = selectors.cylinder_anchor(state) }) -- 3) Command
 end
 
 function on_duel(self, state)
@@ -79,6 +78,5 @@ function on_match(self, state)
     end
 end
 
--- 순수 정책은 selector에 위임 (director는 분기 결과만 사용)
-function cylinder_target(state) return selectors.cylinder_anchor(state) end  -- hud | focal | offscreen
+-- 순수 presentation mapping은 selector에 위임 (director는 분기 결과만 사용)
 ```

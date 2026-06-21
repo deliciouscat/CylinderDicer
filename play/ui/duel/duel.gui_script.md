@@ -37,7 +37,7 @@ end
 
 function on_duel(self, s)
     if s.duel and s.duel.phase == "ready" then
-        self.steps = duel_sequence.build(s.duel, s.duel.judge, s.duel.resolution)  -- Builder
+        self.steps = duel_sequence.build(s.duel, s.duel.judge, s.duel.resolution)  -- Builder; resolution은 선택형 PerfectDuel 전까지 nil일 수 있음
         self.i = 0
         self:advance()
     end
@@ -50,7 +50,7 @@ function advance(self)
     if not step or step.name == "complete" then
         self.store:dispatch(actions.round_advance()); return
     end
-    apply_visual(step)                                  -- reveal/pan/judge/shot 화면 반영
+    apply_visual(step)                                  -- reveal/pan/judge/shot 화면 반영. nil resolution이면 shot 없이 판정 후 advance.
     if step.sound then audio.play_sfx(step.sound) end
     if step.name == "judge" then
         gui.set_text(gui.get_node("verdict"), i18n.t("duel.verdict." .. step.payload.verdict))
@@ -62,4 +62,3 @@ function advance(self)
     end
 end
 ```
-

@@ -67,7 +67,7 @@ state = {
     my_bid = { count = 1, face = 2 },
     rail = { selected_count = 1, window_start = 1, window_size = 10 },
   },
-  duel = nil,
+  duel = nil, -- { phase, bid, challenger_id, previous_bidder_id, judge, resolution }
   pending_load = nil, -- { player_id, count, source = "setup" | "shake" | "bid" | "exact_duel" }
   ui = {
     locale = "ko",
@@ -140,8 +140,11 @@ state = {
   - face `1`은 해골로 취급하되 집계 규칙은 `rules/dice.lua`에 고정한다.
 - 결투 규칙
   - `SHORT`, `OVER`, `EXACT` 판정.
-  - `SHORT/OVER`: `abs(actual - bid.count)`만큼 challenger가 previousBidder에게 trigger.
-  - `EXACT`: previousBidder가 나머지 플레이어를 순서대로 처리하는 `PerfectDuel` 상태 생성.
+  - `SHORT/OVER`: `abs(actual - bid.count)`만큼 russian roulette. 이 분기는 "누가 누구를 쏜다"가 아니라 `roulette_subject`가 자기 실린더로 피격 판정을 받는 구조로 모델링한다.
+    - `SHORT`: 실제 개수가 콜보다 적으므로 도전자가 틀림. `roulette_subject_id = challenger_id`.
+    - `OVER`: 실제 개수가 콜보다 많으므로 직전 콜러가 틀림. `roulette_subject_id = previous_bidder_id`.
+    - resolution shape: `{ kind = "duel_shots", verdict, challenger_id, previous_bidder_id, roulette_subject_id, steps, hp_changes }`.
+  - `EXACT`: previousBidder가 맞춘 사람(A)이 되며, 도전자부터 순서대로 6번의 actor/target interaction을 만든다. 이 분기는 `duel_shots`와 섞지 않고 `{ kind = "perfect_duel", actor_id, targets, steps, hp_changes }`로 분리한다.
 - selector
   - `is_my_turn`
   - `local_player`
@@ -162,6 +165,8 @@ state = {
   - second shake부터 pending load가 생긴다.
   - 빈 슬롯 장전 후 pending load가 감소/해제된다.
   - duel 판정이 SHORT/OVER/EXACT로 나뉜다.
+  - SHORT는 `roulette_subject_id`가 challenger이고, OVER는 previous bidder다.
+  - SHORT/OVER resolution step은 `roulette_subject_id`, `slot_index`, `hit`, `consumed`를 가진다.
   - EXACT 결투 후 previousBidder만 `pending_load(3, exact_duel)`이 생기고, 다른 플레이어는 생기지 않는다.
   - SHORT/OVER 결투 후에는 추가 pending load 없이 shaking으로 전환된다.
   - 매치 종료 시 `winner_id`, `turn_count`, `events_hash`를 만들 수 있다.
@@ -342,12 +347,15 @@ state = {
   - bid face 실제 개수 집계.
   - SHORT/OVER/EXACT label 표시.
 - SHORT/OVER
-  - 차이 수만큼 trigger step 생성.
-  - 실린더 장전 슬롯과 회전 위치에 따라 hit/miss 계산.
+  - 차이 수만큼 `roulette` step 생성.
+  - `roulette_subject_id`를 기준으로 실린더 장전 슬롯과 회전 위치에 따라 hit/miss 계산.
+  - `SHORT`는 도전자, `OVER`는 직전 콜러가 `roulette_subject_id`가 된다.
+  - UI 문구와 sequence payload도 "shooter가 target을 쏨"이 아니라 "roulette subject가 판정받음"을 기준으로 작성한다.
   - hp 감소와 사운드/이펙트 동기화.
 - EXACT
-  - previous bidder가 맞춘 사람으로 설정.
-  - 나머지 플레이어를 순서대로 처리하는 PerfectDuel state machine 구현.
+  - previous bidder를 맞춘 사람/actor(A)로 설정.
+  - 도전자부터 순서대로 6번의 target(B) interaction을 만드는 PerfectDuel state machine 구현.
+  - EXACT step은 `actor_id`, `target_id`, `actor_choice`, `target_choice`, `hit/miss/consume`를 가진다.
   - 첫 버전은 자동 선택 기본값으로 통과시키고, 후속 polish에서 선택 UI를 강화한다.
 - round reset
   - 생존자 확인.
@@ -359,6 +367,9 @@ state = {
 검증:
 
 - 부족/초과/정확 판정이 rules 테스트와 화면 결과에서 일치한다.
+- SHORT 화면/sequence에서 도전자가 roulette subject로 표시된다.
+- OVER 화면/sequence에서 직전 콜러가 roulette subject로 표시된다.
+- EXACT 화면/sequence는 actor/target interaction으로 표시되고 SHORT/OVER의 roulette subject 모델과 섞이지 않는다.
 - hp가 0이 된 플레이어는 이후 turn order에서 제외된다.
 - winner가 1명 남으면 result payload가 bridge로 emit된다.
 
@@ -413,7 +424,8 @@ state = {
   - 첫 shaking.
   - bidding pass 장전.
   - challenge 무장전.
-  - SHORT/OVER duel.
+  - SHORT duel: 도전자가 roulette subject.
+  - OVER duel: 직전 콜러가 roulette subject.
   - EXACT PerfectDuel → 맞춘 사람 3발 충전 → shaking.
   - SHORT/OVER duel → 바로 shaking(1발 장전 규칙).
   - 플레이어 탈락.
@@ -475,4 +487,3 @@ state = {
 - polish asset 작업.
 
 이 범위로 먼저 병합하면 이후 화면 작업은 안정된 상태/액션 계약 위에서 진행할 수 있다.
-

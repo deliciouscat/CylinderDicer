@@ -11,6 +11,14 @@ local ALL_BLOCKS = {
 }
 
 local BLOCKS = {
+	revolver_reload = {
+		"/ui#player_carousel",
+		"/ui#local_hud",
+	},
+	cup_shake = {
+		"/ui#shake",
+		"/ui#local_hud",
+	},
 	setup = {
 		"/ui#shake",
 		"/ui#local_hud",
@@ -31,14 +39,6 @@ local BLOCKS = {
 	complete = {
 		"/ui#duel",
 	},
-}
-
-local BG_LOCATION = {
-	setup = "setup",
-	shaking = "shaking",
-	bidding = "bidding",
-	dualing = "dualing",
-	complete = "dualing",
 }
 
 local function post_safe(url, message_id, payload)
@@ -65,15 +65,15 @@ local function set_block(self, kind)
 end
 
 local function sync_turn(self, state)
-	local kind = state.turn.kind
+	local kind = selectors.hud_kind(state)
 	set_block(self, kind)
 
 	post_safe("/background#background", "pan_to", {
-		location = BG_LOCATION[kind] or "shaking",
+		location = selectors.background_location(state),
 	})
 
 	post_safe("/cylinder#cylinder", "set_target", {
-		anchor = state.pending_load and selectors.cylinder_anchor(state) or "offscreen",
+		anchor = selectors.cylinder_anchor(state),
 	})
 end
 

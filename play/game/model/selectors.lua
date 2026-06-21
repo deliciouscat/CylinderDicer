@@ -5,6 +5,24 @@ local turn_machine = require("game.model.turn_machine")
 
 local M = {}
 
+local HUD_BY_PHASE = {
+	revolver_reload = "revolver_reload",
+	cup_shake = "cup_shake",
+	dice_check = "cup_shake",
+	bidding_gap = "cup_shake",
+	bidding = "bidding",
+	duel = "duel",
+	complete = "complete",
+}
+
+local BG_BY_HUD = {
+	revolver_reload = "bidding",
+	cup_shake = "shaking",
+	bidding = "bidding",
+	duel = "dualing",
+	complete = "dualing",
+}
+
 function M.is_my_turn(state)
 	return state.turn.active_player_id == state.match.local_player_id
 end
@@ -30,6 +48,39 @@ function M.hint_key(state)
 	return state.ui.hint_key
 end
 
+function M.phase(state)
+	return state.flow and state.flow.phase or "waiting"
+end
+
+function M.hud_kind(state)
+	return HUD_BY_PHASE[M.phase(state)] or state.turn.kind
+end
+
+function M.is_hud(state, hud)
+	return M.hud_kind(state) == hud
+end
+
+function M.background_location(state)
+	return BG_BY_HUD[M.hud_kind(state)] or "shaking"
+end
+
+function M.turn_label_key(state)
+	local hud = M.hud_kind(state)
+	if hud == "revolver_reload" then
+		return "turn.reload"
+	end
+	if hud == "bidding" then
+		return M.is_my_turn(state) and "turn.mine" or "turn.opponent"
+	end
+	if hud == "duel" then
+		return "turn.duel"
+	end
+	if hud == "cup_shake" then
+		return "turn.shake"
+	end
+	return "hud.hint.complete"
+end
+
 function M.last_alive_player(state)
 	local alive = turn_machine.alive_order(state.players)
 	return alive[1]
@@ -49,11 +100,11 @@ function M.player_bullets(player)
 end
 
 function M.cylinder_anchor(state)
-	if state.pending_load and (state.turn.kind == "shaking" or state.turn.kind == "setup") then
+	if state.pending_load and M.is_hud(state, "revolver_reload") then
 		return "focal"
 	end
 
-	if state.turn.kind == "bidding" then
+	if M.is_hud(state, "bidding") then
 		return "hud"
 	end
 

@@ -5,6 +5,8 @@ M.types = {
 	COSMETICS_APPLY = "cosmetics.apply",
 	SETUP_LOAD_INITIAL = "setup.load_initial",
 	SHAKE_ROLL = "shake.roll",
+	DICE_CHECK = "dice.check",
+	BIDDING_OPEN = "bidding.open",
 	BULLET_LOAD = "bullet.load",
 	BID_SELECT_COUNT = "bid.select_count",
 	BID_SELECT_FACE = "bid.select_face",
@@ -43,6 +45,16 @@ function M.shake_roll(player_id, rng)
 		player_id = player_id,
 		rng = rng,
 	})
+end
+
+function M.dice_check(player_id)
+	return action(M.types.DICE_CHECK, {
+		player_id = player_id,
+	})
+end
+
+function M.bidding_open()
+	return action(M.types.BIDDING_OPEN)
 end
 
 function M.bullet_load(slot_index, player_id)

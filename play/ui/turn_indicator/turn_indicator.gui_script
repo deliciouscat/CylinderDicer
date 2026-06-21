@@ -3,21 +3,8 @@ local selectors = require("game.model.selectors")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 
-local function label_key(state)
-	if state.turn.kind == "bidding" then
-		return selectors.is_my_turn(state) and "turn.mine" or "turn.opponent"
-	end
-	if state.turn.kind == "dualing" then
-		return "turn.duel"
-	end
-	if state.turn.kind == "shaking" or state.turn.kind == "setup" then
-		return "turn.shake"
-	end
-	return "hud.hint.complete"
-end
-
 local function render(self, state)
-	gui_util.set_text("label", i18n.t(label_key(state)))
+	gui_util.set_text("label", i18n.t(selectors.turn_label_key(state)))
 end
 
 function init(self)
@@ -32,6 +19,9 @@ function init(self)
 		render(self, state)
 	end)
 	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
 		render(self, state)
 	end)
 

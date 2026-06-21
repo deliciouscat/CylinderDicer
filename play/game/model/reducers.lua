@@ -7,6 +7,9 @@ local duel = require("game.model.rules.duel")
 
 local M = {}
 
+local SHAKE_REQUIRED_COUNT = 6
+local DICE_CHECK_DELAY_SECONDS = 3
+
 local DEFAULT_STATE = {
 	match = {
 		session_id = nil,
@@ -41,6 +44,15 @@ local DEFAULT_STATE = {
 			window_start = 1,
 			window_size = 10,
 		},
+	},
+	flow = {
+		phase = "waiting",
+		dice_check_delay_seconds = DICE_CHECK_DELAY_SECONDS,
+	},
+	shake = {
+		required_count = SHAKE_REQUIRED_COUNT,
+		counts = {},
+		checked = {},
 	},
 	duel = nil,
 	pending_load = nil,
@@ -129,7 +141,7 @@ local function append_event_hash(state, action)
 end
 
 local function publish_all()
-	return { "match", "players", "turn", "bidding", "duel", "ui" }
+	return { "match", "players", "turn", "bidding", "duel", "flow", "shake", "ui" }
 end
 
 local function update_bullets(player)
@@ -142,6 +154,147 @@ local function update_all_bullets(players)
 	for _, player in pairs(players.by_id or {}) do
 		update_bullets(player)
 	end
+end
+
+local function empty_slot_count(player)
+	if not player or not player.cylinder or not player.cylinder.slots then
+		return 0
+	end
+
+	return math.max(0, #player.cylinder.slots - cylinder.loaded_count(player.cylinder))
+end
+
+local function pending_for_player(state, player_id, source, count)
+	local player = state.players.by_id[player_id]
+	if not player then
+		return nil
+	end
+
+	local load_count = math.min(count or 0, empty_slot_count(player))
+	if load_count <= 0 then
+		return nil
+	end
+
+	return {
+		player_id = player_id,
+		source = source,
+		count = load_count,
+	}
+end
+
+local function enter_phase(next, phase, turn_kind)
+	turn_machine.enter_phase(next, phase, {
+		dice_check_delay_seconds = DICE_CHECK_DELAY_SECONDS,
+		turn_kind = turn_kind,
+	})
+end
+
+local function transition_phase(next, event, turn_kind)
+	local transition = turn_machine.transition_phase(next, event, {
+		dice_check_delay_seconds = DICE_CHECK_DELAY_SECONDS,
+		turn_kind = turn_kind,
+	})
+	return transition.ok, transition.reason
+end
+
+local function reset_shake(next)
+	next.shake = {
+		required_count = SHAKE_REQUIRED_COUNT,
+		counts = {},
+		checked = {},
+	}
+end
+
+local function is_alive(player)
+	return player and not player.eliminated and (player.hp or 0) > 0
+end
+
+local function roll_alive_dice(next, rng)
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		if is_alive(player) then
+			player.dice = dice.roll(player.dice_count or 5, rng)
+		end
+	end
+end
+
+local function enter_revolver_reload(next, pending, event)
+	next.pending_load = pending
+	local turn_kind
+	if pending and pending.source == "bid" then
+		turn_kind = "bidding"
+	elseif pending and (pending.source == "shake" or pending.source == "exact_duel") then
+		turn_kind = "shaking"
+	end
+	if event then
+		return transition_phase(next, event, turn_kind)
+	end
+	enter_phase(next, "revolver_reload", turn_kind)
+	return true
+end
+
+local function enter_cup_shake(next, event)
+	next.pending_load = nil
+	if event then
+		local ok, err = transition_phase(next, event)
+		if not ok then
+			return ok, err
+		end
+	else
+		enter_phase(next, "cup_shake")
+	end
+	reset_shake(next)
+	return true
+end
+
+local function enter_dice_check(next, event)
+	next.pending_load = nil
+	if event then
+		local ok, err = transition_phase(next, event)
+		if not ok then
+			return ok, err
+		end
+	else
+		enter_phase(next, "dice_check")
+	end
+	next.shake.checked = {}
+
+	local local_player_id = next.match.local_player_id
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		if is_alive(player) and player_id ~= local_player_id then
+			next.shake.checked[player_id] = true
+		end
+	end
+	return true
+end
+
+local function all_alive_checked(next)
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		if is_alive(player) and not next.shake.checked[player_id] then
+			return false
+		end
+	end
+	return true
+end
+
+local function enter_bidding_gap(next, event)
+	next.pending_load = nil
+	if event then
+		return transition_phase(next, event)
+	end
+	enter_phase(next, "bidding_gap")
+	return true
+end
+
+local function enter_bidding(next, event)
+	next.pending_load = nil
+	if event then
+		return transition_phase(next, event)
+	end
+	enter_phase(next, "bidding")
+	return true
 end
 
 local function normalize_player(player, local_player_id)
@@ -192,6 +345,10 @@ local function set_hint(next)
 		next.ui.hint_key = "hud.hint.complete"
 	elseif next.pending_load then
 		next.ui.hint_key = "hud.hint.load"
+	elseif next.flow and next.flow.phase == "dice_check" then
+		next.ui.hint_key = "hud.hint.dice_check"
+	elseif next.flow and next.flow.phase == "bidding_gap" then
+		next.ui.hint_key = "hud.hint.bidding_soon"
 	elseif next.turn.kind == "bidding" then
 		next.ui.hint_key = "hud.hint.bidding"
 	elseif next.turn.kind == "shaking" then
@@ -203,33 +360,15 @@ local function set_hint(next)
 	end
 end
 
-local function apply_transition(next, transition)
-	if not transition.ok then
-		return transition.reason
-	end
-
-	next.turn = transition.turn
-
-	if transition.effects and transition.effects.pending_load then
-		next.pending_load = clone(transition.effects.pending_load)
-	end
-
-	return nil
-end
-
 local function complete_setup_if_ready(next)
 	if next.pending_load then
 		return nil
 	end
 
-	local transition = turn_machine.next(next.turn, "setup_complete", next)
-	local err = apply_transition(next, transition)
-	if err then
+	local ok, err = enter_cup_shake(next, "reload_complete_setup")
+	if not ok then
 		return err
 	end
-
-	next.turn.kind = "shaking"
-	next.ui.hint_key = "hud.hint.shaking"
 	return nil
 end
 
@@ -238,21 +377,17 @@ local function complete_shake_load_if_ready(next)
 		return nil
 	end
 
-	local transition = turn_machine.next(next.turn, "load_complete", next)
-	local err = apply_transition(next, transition)
-	if err then
+	local ok, err = enter_dice_check(next, "reload_complete_shake")
+	if not ok then
 		return err
 	end
-
-	next.turn.kind = "bidding"
-	set_hint(next)
 	return nil
 end
 
 local function apply_bidding_preview(next)
 	local local_player_id = next.match.local_player_id or next.players.order[1]
 	next.pending_load = nil
-	next.turn.kind = "bidding"
+	enter_bidding(next)
 	next.turn.active_player_id = local_player_id
 	next.turn.previous_player_id = local_player_id
 	next.turn.is_first_shake = false
@@ -306,11 +441,19 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 	next.turn.active_player_id = payload.first_player_id or payload.firstPlayerId or local_player_id or next.players.order[1]
 	next.pending_load = payload.pending_load
 	if next.pending_load == nil and payload.requires_setup_load ~= false then
-		next.pending_load = {
-			player_id = local_player_id,
-			source = "setup",
-			count = 3,
-		}
+		next.pending_load = pending_for_player(next, local_player_id, "setup", 3)
+	end
+
+	if next.pending_load then
+		local ok, err = enter_revolver_reload(next, next.pending_load, "start_reload")
+		if not ok then
+			return state, nil, err
+		end
+	else
+		local ok, err = enter_cup_shake(next, "start_shake")
+		if not ok then
+			return state, nil, err
+		end
 	end
 
 	if payload.preview == "bidding" then
@@ -366,37 +509,93 @@ handlers[actions.types.SETUP_LOAD_INITIAL] = function(state, action)
 
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "players", "turn", "ui" }
+	return next, { "players", "turn", "flow", "shake", "ui" }
 end
 
 handlers[actions.types.SHAKE_ROLL] = function(state, action)
-	if state.turn.kind ~= "shaking" then
+	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "cup_shake" then
 		return state, nil, "not_shaking_turn"
 	end
 
 	local next = clone(state)
-	for _, player_id in ipairs(next.players.order or {}) do
-		local player = next.players.by_id[player_id]
-		if player and not player.eliminated then
-			player.dice = dice.roll(player.dice_count or 5, action.payload.rng)
-		end
+	local player_id = action.payload.player_id or next.turn.active_player_id or next.match.local_player_id
+	local count = ((next.shake.counts or {})[player_id] or 0) + 1
+	next.shake.counts[player_id] = count
+
+	if count < (next.shake.required_count or SHAKE_REQUIRED_COUNT) then
+		set_hint(next)
+		append_event_hash(next, action)
+		return next, { "shake", "ui" }
 	end
 
+	roll_alive_dice(next, action.payload.rng)
+	next.turn.previous_player_id = next.turn.active_player_id
+
 	if next.turn.is_first_shake then
-		next.turn.kind = "bidding"
-		next.turn.previous_player_id = next.turn.active_player_id
 		next.turn.is_first_shake = false
+		local ok, err = enter_dice_check(next, "shake_complete_first")
+		if not ok then
+			return state, nil, err
+		end
 	else
-		next.pending_load = {
-			player_id = next.turn.active_player_id,
-			source = "shake",
-			count = 1,
-		}
+		next.turn.is_first_shake = false
+		local pending = pending_for_player(next, next.turn.active_player_id, "shake", 1)
+		if pending then
+			local ok, err = enter_revolver_reload(next, pending, "shake_complete_reload")
+			if not ok then
+				return state, nil, err
+			end
+		else
+			local ok, err = enter_dice_check(next, "shake_complete_no_reload")
+			if not ok then
+				return state, nil, err
+			end
+		end
 	end
 
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "players", "turn", "ui" }
+	return next, { "players", "turn", "flow", "shake", "ui" }
+end
+
+handlers[actions.types.DICE_CHECK] = function(state, action)
+	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "dice_check" then
+		return state, nil, "not_dice_check_turn"
+	end
+
+	local next = clone(state)
+	local player_id = action.payload.player_id or next.match.local_player_id
+	if not is_alive(next.players.by_id[player_id]) then
+		return state, nil, "unknown_player"
+	end
+
+	next.shake.checked[player_id] = true
+	if all_alive_checked(next) then
+		local ok, err = enter_bidding_gap(next, "all_checked")
+		if not ok then
+			return state, nil, err
+		end
+	end
+
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "turn", "flow", "shake", "ui" }
+end
+
+handlers[actions.types.BIDDING_OPEN] = function(state, action)
+	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "bidding_gap" then
+		return state, nil, "not_bidding_gap"
+	end
+
+	local next = clone(state)
+	local ok, err = enter_bidding(next, "open_bidding")
+	if not ok then
+		return state, nil, err
+	end
+
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "turn", "flow", "ui" }
 end
 
 handlers[actions.types.BULLET_LOAD] = function(state, action)
@@ -425,7 +624,9 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 	update_bullets(player)
 	next.pending_load = cylinder.consume_pending(next.pending_load)
 
-	if pending.source == "setup" then
+	if next.pending_load then
+		enter_revolver_reload(next, next.pending_load)
+	elseif pending.source == "setup" then
 		local transition_err = complete_setup_if_ready(next)
 		if transition_err then
 			return state, nil, transition_err
@@ -435,11 +636,21 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 		if transition_err then
 			return state, nil, transition_err
 		end
+	elseif pending.source == "bid" then
+		local ok, err = enter_bidding(next, "reload_complete_bid")
+		if not ok then
+			return state, nil, err
+		end
+	elseif pending.source == "exact_duel" then
+		local ok, err = enter_cup_shake(next, "reload_complete_exact_duel")
+		if not ok then
+			return state, nil, err
+		end
 	end
 
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "players", "turn", "ui" }
+	return next, { "players", "turn", "flow", "shake", "ui" }
 end
 
 handlers[actions.types.BID_SELECT_COUNT] = function(state, action)
@@ -470,6 +681,9 @@ handlers[actions.types.BID_RAISE] = function(state, action)
 	if state.turn.kind ~= "bidding" then
 		return state, nil, "not_bidding_turn"
 	end
+	if state.pending_load then
+		return state, nil, "load_pending"
+	end
 
 	local bid = clone(action.payload.bid or state.bidding.my_bid)
 	bid.player_id = bid.player_id or state.turn.active_player_id
@@ -492,20 +706,39 @@ handlers[actions.types.BID_RAISE] = function(state, action)
 	next.bidding.recent_bids[#next.bidding.recent_bids + 1] = bid
 	next.match.turn_count = next.match.turn_count + 1
 
-	local transition = turn_machine.next(next.turn, "bid_raised", next)
-	local err = apply_transition(next, transition)
-	if err then
-		return state, nil, err
+	local previous_active = next.turn.active_player_id
+	next.turn = {
+		kind = "bidding",
+		active_player_id = turn_machine.next_alive_after(next.players, previous_active),
+		previous_player_id = previous_active,
+		round_index = next.turn.round_index or 0,
+		is_first_shake = next.turn.is_first_shake,
+	}
+
+	local pending = pending_for_player(next, previous_active, "bid", 1)
+	if pending then
+		local ok, err = enter_revolver_reload(next, pending, "bid_reload")
+		if not ok then
+			return state, nil, err
+		end
+	else
+		local ok, err = enter_bidding(next, "bid_no_reload")
+		if not ok then
+			return state, nil, err
+		end
 	end
 
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "match", "bidding", "turn", "ui" }
+	return next, { "match", "bidding", "turn", "flow", "ui" }
 end
 
 handlers[actions.types.BID_CHALLENGE] = function(state, action)
 	if state.turn.kind ~= "bidding" then
 		return state, nil, "not_bidding_turn"
+	end
+	if state.pending_load then
+		return state, nil, "load_pending"
 	end
 	if not state.bidding.current_bid then
 		return state, nil, "no_previous_bid"
@@ -519,12 +752,16 @@ handlers[actions.types.BID_CHALLENGE] = function(state, action)
 	next.turn.previous_player_id = previous_id
 	next.turn.active_player_id = challenger_id
 	next.pending_load = nil
+	local ok, err = transition_phase(next, "challenge")
+	if not ok then
+		return state, nil, err
+	end
 	next.duel = duel.begin(next, challenger_id, previous_id)
 	next.match.turn_count = next.match.turn_count + 1
 
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "match", "turn", "duel", "ui" }
+	return next, { "match", "turn", "duel", "flow", "ui" }
 end
 
 handlers[actions.types.DUEL_RESOLVE_CHOICE] = function(state, action)
@@ -542,10 +779,12 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 	end
 
 	local next = clone(state)
-	next.players = duel.apply_resolution(next.players, next.duel)
+	local resolution = duel.resolve(next, next.duel)
 	update_all_bullets(next.players)
 
 	local count, winner_id = alive_count(next.players)
+	local exact_reload_player_id = next.duel.previous_bidder_id
+	next.duel.resolution = resolution
 	next.duel.phase = "complete"
 
 	if count <= 1 then
@@ -553,6 +792,10 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 		next.match.winner_id = winner_id
 		next.turn.kind = "complete"
 		next.pending_load = nil
+		local ok, err = transition_phase(next, "match_complete")
+		if not ok then
+			return state, nil, err
+		end
 		set_hint(next)
 		append_event_hash(next, action)
 		return next, publish_all()
@@ -567,8 +810,27 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 	next.bidding.current_bid = nil
 	next.bidding.recent_bids = {}
 	next.duel = nil
-	next.pending_load = nil
 	reset_my_bid(next)
+
+	if resolution and resolution.kind == "perfect_duel" then
+		local pending = pending_for_player(next, exact_reload_player_id, "exact_duel", 3)
+		if pending then
+			local ok, err = enter_revolver_reload(next, pending, "exact_reload")
+			if not ok then
+				return state, nil, err
+			end
+		else
+			local ok, err = enter_cup_shake(next, "round_shake")
+			if not ok then
+				return state, nil, err
+			end
+		end
+	else
+		local ok, err = enter_cup_shake(next, "round_shake")
+		if not ok then
+			return state, nil, err
+		end
+	end
 
 	set_hint(next)
 	append_event_hash(next, action)
@@ -580,9 +842,10 @@ handlers[actions.types.MATCH_COMPLETE] = function(state, action)
 	next.match.status = "complete"
 	next.match.winner_id = action.payload.winner_id
 	next.turn.kind = "complete"
+	enter_phase(next, "complete")
 	set_hint(next)
 	append_event_hash(next, action)
-	return next, { "match", "turn", "ui" }
+	return next, { "match", "turn", "flow", "ui" }
 end
 
 function M.reduce(state, action)

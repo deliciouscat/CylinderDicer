@@ -7,7 +7,7 @@ local gui_util = require("ui.common.gui_util")
 
 local function render(self, state)
 	local bid = state.bidding.my_bid
-	local is_my_turn = state.turn.kind == "bidding" and selectors.is_my_turn(state)
+	local is_my_turn = selectors.is_hud(state, "bidding") and selectors.is_my_turn(state)
 	self.can_pass = is_my_turn and selectors.is_my_bid_valid(state)
 	self.can_challenge = is_my_turn and selectors.has_previous_bid(state)
 
@@ -65,6 +65,9 @@ function init(self)
 		render(self, state)
 	end)
 	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
+		render(self, state)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
 		render(self, state)
 	end)
 

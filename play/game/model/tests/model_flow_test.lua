@@ -65,6 +65,24 @@ local function load_setup(store, slots)
 	end
 end
 
+local function load_pending(store, slots)
+	for _, slot in ipairs(slots) do
+		local state = store:get_state()
+		dispatch_ok(store, actions.bullet_load(slot, state.pending_load.player_id))
+	end
+end
+
+local function complete_shake(store, player_id, rng)
+	for _ = 1, 6 do
+		dispatch_ok(store, actions.shake_roll(player_id, rng))
+	end
+end
+
+local function check_dice_and_open_bidding(store, player_id)
+	dispatch_ok(store, actions.dice_check(player_id))
+	dispatch_ok(store, actions.bidding_open())
+end
+
 function M.test_start_setup_and_first_shake()
 	local store = new_store()
 	local _, emitted = start_match(store, {
@@ -89,13 +107,26 @@ function M.test_start_setup_and_first_shake()
 	state = store:get_state()
 	assert_eq(state.pending_load, nil, "setup pending cleared")
 	assert_eq(state.turn.kind, "shaking", "setup complete moves to shaking")
+	assert_eq(state.flow.phase, "cup_shake", "setup complete enters cup shake")
+	assert_eq(selectors.hud_kind(state), "cup_shake", "cup shake hud")
 	assert_eq(selectors.local_player(state).bullets, 3, "local initial bullets")
 
-	dispatch_ok(store, actions.shake_roll("local", fixed_rng(2)))
+	complete_shake(store, "local", fixed_rng(2))
 	state = store:get_state()
-	assert_eq(state.turn.kind, "bidding", "first shake moves to bidding")
+	assert_eq(state.turn.kind, "shaking", "first shake waits for dice check")
+	assert_eq(state.flow.phase, "dice_check", "first shake moves to dice check")
 	assert_eq(state.pending_load, nil, "first shake has no load")
 	assert_eq(#selectors.local_player(state).dice, 5, "local dice rolled")
+
+	dispatch_ok(store, actions.dice_check("local"))
+	state = store:get_state()
+	assert_eq(state.turn.kind, "shaking", "dice check waits for bidding gap")
+	assert_eq(state.flow.phase, "bidding_gap", "dice check enters bidding gap")
+
+	dispatch_ok(store, actions.bidding_open())
+	state = store:get_state()
+	assert_eq(state.turn.kind, "bidding", "dice check moves to bidding")
+	assert_eq(selectors.hud_kind(state), "bidding", "bidding hud")
 end
 
 function M.test_bid_challenge_and_second_shake_load()
@@ -112,7 +143,8 @@ function M.test_bid_challenge_and_second_shake_load()
 		},
 	})
 	load_setup(store, { 1, 2, 3 })
-	dispatch_ok(store, actions.shake_roll("local", fixed_rng(2)))
+	complete_shake(store, "local", fixed_rng(2))
+	check_dice_and_open_bidding(store, "local")
 
 	dispatch_ok(store, actions.bid_raise({
 		player_id = "local",
@@ -122,13 +154,28 @@ function M.test_bid_challenge_and_second_shake_load()
 	local state = store:get_state()
 	assert_eq(state.turn.active_player_id, "opponent-1", "bid rotates active")
 	assert_eq(state.pending_load.player_id, "local", "bid load belongs to bidder")
+	assert_eq(state.pending_load.source, "bid", "bid load source")
+	assert_eq(selectors.hud_kind(state), "revolver_reload", "bid load uses reload hud")
 
 	local low = store:dispatch(actions.bid_raise({
 		player_id = "opponent-1",
 		count = 1,
 		face = 2,
 	}))
-	assert_eq(low.ok, false, "low bid rejected")
+	assert_eq(low.ok, false, "bid is blocked while load is pending")
+	assert_eq(low.error, "load_pending", "pending load error")
+
+	load_pending(store, { 4 })
+	state = store:get_state()
+	assert_eq(state.pending_load, nil, "bid load cleared")
+	assert_eq(selectors.hud_kind(state), "bidding", "bidding resumes after bid load")
+
+	low = store:dispatch(actions.bid_raise({
+		player_id = "opponent-1",
+		count = 1,
+		face = 2,
+	}))
+	assert_eq(low.ok, false, "low bid rejected after load")
 	assert_eq(low.error, "too_low", "low bid error")
 
 	dispatch_ok(store, actions.bid_challenge())
@@ -136,13 +183,20 @@ function M.test_bid_challenge_and_second_shake_load()
 	assert_eq(state.turn.kind, "dualing", "challenge enters duel")
 	assert_eq(state.pending_load, nil, "challenge clears pending load")
 	assert_eq(state.duel.judge.verdict, "EXACT", "exact verdict")
+	assert_eq(state.duel.resolution, nil, "challenge does not precompute exact resolution")
 
 	dispatch_ok(store, actions.round_advance())
 	state = store:get_state()
-	assert_eq(state.turn.kind, "shaking", "round returns to shaking")
+	assert_eq(state.turn.kind, "shaking", "round remains in shaking lane")
 	assert_eq(state.turn.is_first_shake, false, "round no longer first shake")
+	assert_eq(state.pending_load.source, "exact_duel", "exact creates reload")
+	assert_eq(state.pending_load.count, 3, "exact reloads three bullets")
 
-	dispatch_ok(store, actions.shake_roll(state.turn.active_player_id, fixed_rng(3)))
+	load_pending(store, { 1, 2, 3 })
+	state = store:get_state()
+	assert_eq(state.flow.phase, "cup_shake", "exact reload returns to shake")
+
+	complete_shake(store, state.turn.active_player_id, fixed_rng(3))
 	state = store:get_state()
 	assert_eq(state.turn.kind, "shaking", "second shake waits for load")
 	assert_true(state.pending_load ~= nil, "second shake creates pending load")
@@ -167,15 +221,18 @@ function M.test_match_result_payload_after_lethal_challenge()
 	local state = store:get_state()
 	assert_eq(state.turn.active_player_id, "opponent-1", "first player preserved after setup")
 
-	dispatch_ok(store, actions.shake_roll("opponent-1", fixed_rng(6)))
+	complete_shake(store, "opponent-1", fixed_rng(6))
+	check_dice_and_open_bidding(store, "local")
 	dispatch_ok(store, actions.bid_raise({
 		player_id = "opponent-1",
-		count = 5,
-		face = 4,
+		count = 1,
+		face = 6,
 	}))
+	load_pending(store, { 2 })
 	dispatch_ok(store, actions.bid_challenge())
 	state = store:get_state()
-	assert_eq(state.duel.judge.verdict, "SHORT", "short verdict")
+	assert_eq(state.duel.judge.verdict, "OVER", "over verdict")
+	assert_eq(state.duel.resolution, nil, "challenge does not precompute over resolution")
 
 	dispatch_ok(store, actions.round_advance())
 	state = store:get_state()
@@ -197,6 +254,39 @@ function M.test_match_result_payload_after_lethal_challenge()
 	adapter:submit_result()
 	assert_eq(emitted[1].type, "SUBMIT_MATCH_RESULT", "submit result type")
 	assert_eq(emitted[1].payload.winnerId, "local", "submit winner")
+end
+
+function M.test_duel_short_targets_challenger()
+	local store = new_store()
+	start_match(store, {
+		sessionId = "session-4",
+		matchId = "match-4",
+		playerId = "local",
+		mode = "casual",
+		firstPlayerId = "opponent-1",
+		players = {
+			{ id = "local", hp = 3, dice_count = 5 },
+			{ id = "opponent-1", hp = 3, dice_count = 5 },
+		},
+	})
+	load_setup(store, { 1, 2, 3 })
+	complete_shake(store, "opponent-1", fixed_rng(6))
+	check_dice_and_open_bidding(store, "local")
+	dispatch_ok(store, actions.bid_raise({
+		player_id = "opponent-1",
+		count = 10,
+		face = 4,
+	}))
+	load_pending(store, { 2 })
+	dispatch_ok(store, actions.bid_challenge())
+
+	local state = store:get_state()
+	assert_eq(state.duel.judge.verdict, "SHORT", "short verdict")
+	assert_eq(state.duel.resolution, nil, "challenge does not precompute short resolution")
+
+	dispatch_ok(store, actions.round_advance())
+	state = store:get_state()
+	assert_eq(selectors.local_player(state).hp, 0, "short damages challenger after advance")
 end
 
 return M

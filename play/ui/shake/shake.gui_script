@@ -6,20 +6,45 @@ local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 
+local function schedule_bidding_open(self, state)
+	if not state.flow or state.flow.phase ~= "bidding_gap" then
+		self.bidding_gap_armed = false
+		return
+	end
+	if self.bidding_gap_armed then
+		return
+	end
+
+	self.bidding_gap_armed = true
+	local delay = state.flow.dice_check_delay_seconds or 3
+	if timer and timer.delay then
+		timer.delay(delay, false, function()
+			self.bidding_gap_armed = false
+			if self.store and self.store:get_state().flow.phase == "bidding_gap" then
+				self.store:dispatch(actions.bidding_open())
+			end
+		end)
+	else
+		self.store:dispatch(actions.bidding_open())
+	end
+end
+
 local function render(self, state)
-	local active = state.turn.kind == "shaking" or state.turn.kind == "setup"
+	local active = selectors.is_hud(state, "cup_shake")
 	gui_util.set_enabled("root", active)
 	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
 
 	local player = selectors.local_player(state)
 	local dice = player and player.dice or {}
 	gui_util.set_text("dice_values", table.concat(dice, " "))
+	schedule_bidding_open(self, state)
 end
 
 function init(self)
 	self.store = store_mod.get()
 	self.gesture = gestures.new(nil)
 	self.subs = {}
+	self.bidding_gap_armed = false
 	gui_util.acquire_input_focus()
 
 	if not self.store then
@@ -45,14 +70,18 @@ function on_input(self, action_id, action)
 	end
 
 	local state = self.store:get_state()
-	if state.turn.kind ~= "shaking" then
+	if not state.flow or (state.flow.phase ~= "cup_shake" and state.flow.phase ~= "dice_check") then
 		return
 	end
 
 	local event = self.gesture:feed(action_id, action)
 	if event and event.kind == "shake" then
 		audio.play_sfx("shake")
-		self.store:dispatch(actions.shake_roll(state.match.local_player_id))
+		if state.flow.phase == "cup_shake" then
+			self.store:dispatch(actions.shake_roll(state.match.local_player_id))
+		elseif state.flow.phase == "dice_check" then
+			self.store:dispatch(actions.dice_check(state.match.local_player_id))
+		end
 	end
 end
 

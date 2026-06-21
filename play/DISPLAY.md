@@ -351,11 +351,10 @@ def DuelTurnBlock():
 def DuelResolution(duel, judge):
     # README '데미지 정책' 분기를 그대로 따른다.
     if judge.verdict in (SHORT, OVER):
-        # 차이 나는 숫자만큼, (이전 턴 ← 현재 턴 도전자)가 방아쇠를 당김.
+        # |실제−콜|만큼 russian roulette. SHORT→도전자, OVER→직전 콜러가 맞음.
         # 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
         return duelShots(
-            shooter = duel.challenger,
-            target  = duel.previousBidder,
+            target  = duel.challenger if judge.verdict == SHORT else duel.previousBidder,
             count   = abs(judge.actual - duel.bid.count),
         )
     else:  # EXACT(정확히 맞춤)

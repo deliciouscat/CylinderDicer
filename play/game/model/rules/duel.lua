@@ -42,6 +42,33 @@ local function player_snapshot(player)
 	return copy
 end
 
+local function is_alive(player)
+	return player and not player.eliminated and (player.hp or 0) > 0
+end
+
+local function target_order_from_challenger(players, challenger_id, actor_id)
+	local order = players.order or {}
+	local start_index = 1
+	local targets = {}
+
+	for i, player_id in ipairs(order) do
+		if player_id == challenger_id then
+			start_index = i
+			break
+		end
+	end
+
+	for offset = 0, #order - 1 do
+		local player_id = order[((start_index + offset - 1) % #order) + 1]
+		local player = players.by_id[player_id]
+		if player_id ~= actor_id and is_alive(player) then
+			targets[#targets + 1] = player_id
+		end
+	end
+
+	return targets
+end
+
 function M.begin(state, challenger_id, previous_id)
 	local bid = state.bidding.current_bid
 	local judge = M.judge(bid, state.players)
@@ -62,85 +89,126 @@ function M.begin(state, challenger_id, previous_id)
 		previous_bidder_id = previous_id or bid.player_id,
 		players = players,
 		judge = judge,
-		resolution = M.plan_resolution(state, challenger_id, previous_id or bid.player_id, judge),
+		resolution = nil,
 	}
 end
 
-function M.plan_resolution(state, challenger_id, previous_id, judge)
-	if judge.verdict == M.VERDICT.EXACT then
-		local targets = {}
-		for _, player_id in ipairs(state.players.order or {}) do
-			if player_id ~= previous_id then
-				local player = state.players.by_id[player_id]
-				if player and not player.eliminated and (player.hp or 0) > 0 then
-					targets[#targets + 1] = player_id
-				end
-			end
-		end
-
-		return {
-			kind = "perfect_duel",
-			shooter_id = previous_id,
-			targets = targets,
-			steps = {},
-			hp_changes = {},
-		}
-	end
-
-	local attacker = state.players.by_id[challenger_id]
-	local _, shots = cylinder.trigger(attacker.cylinder, judge.delta)
-	local steps = {}
-	local hp_changes = {}
-
-	for _, shot in ipairs(shots) do
-		steps[#steps + 1] = {
-			shooter_id = challenger_id,
-			target_id = previous_id,
-			hit = shot.hit,
-			slot_index = shot.slot_index,
-			consumed = shot.consumed,
-		}
-
-		if shot.hit then
-			hp_changes[previous_id] = (hp_changes[previous_id] or 0) - 1
-		end
-	end
-
-	return {
-		kind = "duel_shots",
-		shooter_id = challenger_id,
-		target_id = previous_id,
-		steps = steps,
-		hp_changes = hp_changes,
-	}
-end
-
-function M.apply_resolution(players, duel_state)
-	local resolution = duel_state and duel_state.resolution
-	if not resolution then
-		return players
-	end
-
-	if resolution.kind == "duel_shots" then
-		local shooter = players.by_id[resolution.shooter_id]
-		if shooter then
-			local next_cylinder = shooter.cylinder
-			next_cylinder = cylinder.trigger(next_cylinder, #(resolution.steps or {}))
-			if type(next_cylinder) == "table" then
-				shooter.cylinder = next_cylinder
-			end
-		end
-	end
-
-	for player_id, delta in pairs(resolution.hp_changes or {}) do
+local function apply_hp_changes(players, hp_changes)
+	for player_id, delta in pairs(hp_changes or {}) do
 		local player = players.by_id[player_id]
 		if player then
 			player.hp = math.max(0, (player.hp or 0) + delta)
 			player.eliminated = player.hp <= 0
 		end
 	end
+end
 
-	return players
+local function resolve_duel_shots(state, duel_state)
+	local judge = duel_state.judge
+	local challenger_id = duel_state.challenger_id
+	local previous_id = duel_state.previous_bidder_id
+	local target_id = previous_id
+
+	if judge.verdict == M.VERDICT.SHORT then
+		target_id = challenger_id
+	end
+
+	local target = state.players.by_id[target_id]
+	local steps = {}
+	local hp_changes = {}
+
+	if target then
+		local next_cylinder, shots = cylinder.trigger(target.cylinder, judge.delta)
+		target.cylinder = next_cylinder
+
+		for _, shot in ipairs(shots) do
+			steps[#steps + 1] = {
+				kind = "roulette",
+				target_id = target_id,
+				roulette_subject_id = target_id,
+				hit = shot.hit,
+				slot_index = shot.slot_index,
+				consumed = shot.consumed,
+			}
+
+			if shot.hit then
+				hp_changes[target_id] = (hp_changes[target_id] or 0) - 1
+			end
+		end
+	end
+
+	local resolution = {
+		kind = "duel_shots",
+		verdict = judge.verdict,
+		challenger_id = challenger_id,
+		previous_bidder_id = previous_id,
+		target_id = target_id,
+		roulette_subject_id = target_id,
+		steps = steps,
+		hp_changes = hp_changes,
+	}
+
+	apply_hp_changes(state.players, hp_changes)
+	return resolution
+end
+
+local function resolve_perfect_duel(state, duel_state)
+	local previous_id = duel_state.previous_bidder_id
+	local challenger_id = duel_state.challenger_id
+	local targets = target_order_from_challenger(state.players, challenger_id, previous_id)
+	local actor = state.players.by_id[previous_id]
+	local steps = {}
+	local hp_changes = {}
+
+	if actor and #targets > 0 then
+		local next_cylinder, shots = cylinder.trigger(actor.cylinder, 6)
+		actor.cylinder = next_cylinder
+
+		for i, shot in ipairs(shots) do
+			local target_id = targets[((i - 1) % #targets) + 1]
+			steps[#steps + 1] = {
+				kind = "perfect_duel",
+				actor_id = previous_id,
+				shooter_id = previous_id,
+				target_id = target_id,
+				actor_choice = "trigger",
+				target_choice = "take_hit",
+				hit = shot.hit,
+				slot_index = shot.slot_index,
+				consumed = shot.consumed,
+				needs_choice = true,
+			}
+
+			if shot.hit then
+				hp_changes[target_id] = (hp_changes[target_id] or 0) - 1
+			end
+		end
+	end
+
+	local resolution = {
+		kind = "perfect_duel",
+		actor_id = previous_id,
+		shooter_id = previous_id,
+		targets = targets,
+		steps = steps,
+		hp_changes = hp_changes,
+		reload_player_id = previous_id,
+	}
+
+	apply_hp_changes(state.players, hp_changes)
+	return resolution
+end
+
+function M.resolve(state, duel_state)
+	if not duel_state then
+		return nil
+	end
+
+	if duel_state.judge.verdict == M.VERDICT.EXACT then
+		return resolve_perfect_duel(state, duel_state)
+	end
+
+	return resolve_duel_shots(state, duel_state)
 end
 
 return M
