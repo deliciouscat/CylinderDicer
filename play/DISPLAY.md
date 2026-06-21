@@ -264,16 +264,19 @@ def DiceFace(face):
 #   - 데이터: player.cylinder (장전 슬롯, pendingLoad) — 턴과 무관하게 항상 존재
 #   - 위치  : 아래 규칙으로 정한 target 앵커로 tween 이동만 수행
 #
-# 총알 장전 규칙(각 1발):
+# 총알 장전 규칙:
+#   - 게임 시작 시: 각 플레이어 3발(setup).
 #   - bidding(넘기기)으로 턴 넘긴 직후, '넘기기 한 본인만' 1발.
 #   - 쉐이킹 턴(게임 최초 쉐이킹 제외)마다 1발.
 #   - 결투신청 시에는 장전하지 않는다.
-#   - 게임 시작 시에는 별도로 3발을 원하는 칸에 채우고 시작한다.
+#   - EXACT 결투 집행 후: 정확히 맞춘 사람(previousBidder)만 3발 충전 후 shaking 시작.
+#     다른 플레이어는 pendingLoad 없이 shaking에 참여한다.
 
 def cylinderTarget():
     # 턴 맥락에 따라 cylinder가 가야 할 앵커를 결정.
     if state.pendingLoad and data.currentTurn.kind in ("shaking", "setup"):
-        return anchors["focal"]        # 최초/shaking 장전: 화면 안으로 부각
+        # setup(3발), shaking(1발), EXACT 결투 후 3발 충전 모두 focal 부각
+        return anchors["focal"]
     if data.currentTurn.kind == "bidding":
         return anchors["hud"]          # bidding: 우하단 inline 홈
     return anchors["offscreen"]        # 그 외(예: 결투): 화면 밖 대기
@@ -365,6 +368,11 @@ def DuelResolution(duel, judge):
 
 # 전투 연출 공통 요소: 좌(전 턴) / 우(현재 턴 또는 지목 대상) 일러스트,
 # `철컥`/`탕` 이펙트·효과음 동기화 (README '결투 화면' 참고).
+#
+# 종료 후 전환:
+#   - judge.verdict == EXACT: previousBidder에게 pendingLoad(3, source="exact_duel") 설정
+#     → revolver reload(focal) 완료 후 shaking으로 전환.
+#   - SHORT/OVER: 추가 장전 없이 바로 shaking으로 전환.
 ```
 
 #### `ShakeTurnBlock` — 흔들기 + 장전
@@ -373,6 +381,9 @@ def DuelResolution(duel, judge):
 # 배경은 shaking = "테이블 있는 하단 위치".
 # 컵은 배경/테이블 prop으로 함께 등장한다. shake.gui에는 컵 노드를 만들지 않는다.
 # 흔들기로 주사위를 굴려 랜덤 배정(DiceTray에 결과 표시) 후,
-# 최초 쉐이킹이 아니면 cylinder가 focal로 등장해 1발 장전(pendingLoad).
+# pendingLoad가 있으면 cylinder가 focal로 등장해 장전:
+#   - setup / exact_duel: 3발
+#   - shake / bid: 1발
+# EXACT 결투 직후 진입 시에는 정확히 맞춘 사람만 3발 pendingLoad를 갖고 시작한다.
 ShakeTurnBlock
 ```

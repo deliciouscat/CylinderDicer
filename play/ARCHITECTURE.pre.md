@@ -8,7 +8,7 @@
 - 계층형 MVC: Model(순수 Lua) / View(GUI·GO) / Controller(director).
 - 단방향 데이터 흐름(Flux): `View -> dispatch(action) -> reducer -> store -> notify -> View`.
 - Observer(pub/sub): `core/event_bus.lua` 토픽 구독으로 store 변경을 View에 전파.
-- 유한 상태 기계(FSM): 턴 종류(`setup -> shaking -> bidding* -> dualing -> shaking`)와 결투 시퀀스(`revealDice -> panToTable -> judge -> execute`).
+- 유한 상태 기계(FSM): 턴 종류(`setup -> shaking -> bidding* -> dualing -> [EXACT 시 previousBidder 3발 장전] -> shaking`)와 결투 시퀀스(`revealDice -> panToTable -> judge -> execute`).
 - Command/Action: 모든 입력을 액션 객체로 표준화(`bid.raise`, `bid.challenge`, `bullet.load`, `shake.roll` 등).
 - Singleton Overlay + Anchor: `cylinderOverlay`는 단일 영구 인스턴스, `anchors`가 좌표만 제공, tween으로 이동.
 - Adapter: 브릿지/백엔드 연동을 어댑터로 캡슐화(`game_bridge.lua`, `match_adapter.lua`).
@@ -80,7 +80,7 @@ flowchart TD
 - `model/actions.lua`: 액션 타입 상수/생성자. ↔ 모든 View, `reducers`.
 - `model/selectors.lua`: 파생 읽기(`visibleRange`, `myBid.isValid`, `countFace`, `hintKey`). ↔ View, `rules`.
 - `model/turn_machine.lua`: 턴 전이 규칙(FSM). ↔ `reducers`, `director`.
-- `rules/bidding.lua`: 콜 유효성/상승 규칙. `rules/cylinder.lua`: 슬롯 장전/`pendingLoad`/장전 타이밍. `rules/dice.lua`: 흔들기 랜덤 배정, 면 의미(1=해골). `rules/duel.lua`: 판정(SHORT/OVER/EXACT) + `DuelResolution`/`PerfectDuel`(README 정책). ↔ `reducers`, `selectors`.
+- `rules/bidding.lua`: 콜 유효성/상승 규칙. `rules/cylinder.lua`: 슬롯 장전/`pendingLoad`/장전 타이밍(setup 3발, shake/bid 1발, EXACT 결투 후 previousBidder 3발). `rules/dice.lua`: 흔들기 랜덤 배정, 면 의미(1=해골). `rules/duel.lua`: 판정(SHORT/OVER/EXACT) + `DuelResolution`/`PerfectDuel`(README 정책). ↔ `reducers`, `selectors`.
 - `core/event_bus.lua`: 토픽 pub/sub. ↔ `store`, 모든 View, `director`.
 - `core/i18n.lua`: `t(key, params)`, 로케일 로드. ↔ View, `cosmetics`.
 - `core/cosmetics.lua`: skinId→atlas/이미지 해석(dice/cup/revolver/bg/rail), Live Update 대비. 컵 스킨은 배경/테이블 world prop에 적용한다. ↔ View, `match_adapter`.
@@ -94,7 +94,7 @@ flowchart TD
 ## 6. 대표 데이터 흐름 (문서에 시퀀스로 수록)
 - 베팅 상승: rail 드래그(또는 화살표 클릭, 키보드 arrow 입력 등) → `dispatch(bid.raise)` → `rules/bidding` 검증 → store 갱신 → `bid`/`rail` 토픽 → BidControls·rail·carousel 갱신.
 - 흔들기+장전: shake 입력 → `dispatch(shake.roll)` → `rules/dice` 배정 + `pendingLoad` 설정 → director가 cylinder 앵커를 `focal`로 → 슬롯 탭 `dispatch(bullet.load,i)` → 완료 시 `hud` 앵커 복귀.
-- 결투: `dispatch(bid.challenge)` → turn_machine `dualing` → director가 결투 시퀀스 실행(reveal→pan→judge→execute) → `rules/duel` 결과 + 연출/사운드 → 종료 후 `shaking` 복귀, 매치 종료 시 결과 emit.
+- 결투: `dispatch(bid.challenge)` → turn_machine `dualing` → director가 결투 시퀀스 실행(reveal→pan→judge→execute) → `rules/duel` 결과 + 연출/사운드 → EXACT면 previousBidder에게 `pendingLoad(3, exact_duel)` 후 shaking, SHORT/OVER면 바로 shaking 복귀, 매치 종료 시 결과 emit.
 
 ## 7. ARCHITECTURE.md 문서 구성(섹션)
 개요/원칙 → 디자인 패턴 → 계층·데이터 흐름(mermaid) → 디렉토리 구조 → 렌더링 전략(GUI/GO) → 모듈 책임·상호작용 표 → 턴/결투 FSM(mermaid) → 대표 데이터 흐름 → 브릿지·i18n·치장 연동 → 확장/미정(멀티플레이 권위, 전투 씬 와이어프레임 이후).

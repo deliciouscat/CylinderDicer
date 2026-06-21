@@ -68,7 +68,7 @@ state = {
     rail = { selected_count = 1, window_start = 1, window_size = 10 },
   },
   duel = nil,
-  pending_load = nil, -- { player_id, count, source = "setup" | "shake" | "bid" }
+  pending_load = nil, -- { player_id, count, source = "setup" | "shake" | "bid" | "exact_duel" }
   ui = {
     locale = "ko",
     hint_key = "hud.hint.waiting",
@@ -133,6 +133,7 @@ state = {
   - 최초 shaking 이후 shaking마다 1발 장전.
   - bidding으로 넘긴 사람만 1발 장전.
   - challenge는 장전 없음.
+  - EXACT 결투 집행 후 previousBidder(정확히 맞춘 사람)만 3발 장전(`source = "exact_duel"`) 후 shaking 시작.
   - 빈 슬롯에만 장전 가능.
 - 주사위 규칙
   - 흔들기 시 플레이어별 dice를 랜덤 배정.
@@ -161,6 +162,8 @@ state = {
   - second shake부터 pending load가 생긴다.
   - 빈 슬롯 장전 후 pending load가 감소/해제된다.
   - duel 판정이 SHORT/OVER/EXACT로 나뉜다.
+  - EXACT 결투 후 previousBidder만 `pending_load(3, exact_duel)`이 생기고, 다른 플레이어는 생기지 않는다.
+  - SHORT/OVER 결투 후에는 추가 pending load 없이 shaking으로 전환된다.
   - 매치 종료 시 `winner_id`, `turn_count`, `events_hash`를 만들 수 있다.
 
 완료 기준:
@@ -280,6 +283,7 @@ state = {
 - 이후 shaking은 cylinder가 `focal`로 들어오고, 슬롯 선택 후 pending load가 해제된다.
 - bidding turn에서는 cylinder가 `hud` 위치에 머문다.
 - duel turn에서는 cylinder가 `offscreen`으로 이동한다.
+- EXACT 결투 종료 후 previousBidder만 `pending_load(3, exact_duel)`이 생기고 cylinder가 `focal`로 등장한다.
 
 완료 기준:
 
@@ -349,6 +353,8 @@ state = {
   - 생존자 확인.
   - 매치 종료면 `SUBMIT_MATCH_RESULT`.
   - 계속 진행이면 `shaking`으로 복귀.
+  - EXACT verdict이면 previousBidder에게 `pending_load(3, exact_duel)` 설정 → 3발 충전 완료 후 shaking.
+  - SHORT/OVER verdict이면 추가 장전 없이 바로 shaking.
 
 검증:
 
@@ -408,7 +414,8 @@ state = {
   - bidding pass 장전.
   - challenge 무장전.
   - SHORT/OVER duel.
-  - EXACT PerfectDuel.
+  - EXACT PerfectDuel → 맞춘 사람 3발 충전 → shaking.
+  - SHORT/OVER duel → 바로 shaking(1발 장전 규칙).
   - 플레이어 탈락.
   - 매치 종료.
   - locale 전환.
