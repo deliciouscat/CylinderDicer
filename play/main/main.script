@@ -5,6 +5,7 @@ local reducers = require("game.model.reducers")
 local store_mod = require("game.model.store")
 local match_adapter = require("game.net.match_adapter")
 local i18n = require("game.core.i18n")
+local qa_cli = require("game.dev.qa_cli")
 
 local function start_dev_match(self)
 	if bridge.is_web() then
@@ -36,6 +37,7 @@ function init(self)
 	self.bus = event_bus.new()
 	self.store = store_mod.create(reducers.initial_state(), reducers.reduce, self.bus)
 	self.adapter = match_adapter.new(bridge, self.store, cosmetics)
+	self.qa_cli = qa_cli.new(self.store)
 	i18n.set_locale("ko")
 
 	self.result_sub = self.store:subscribe("match", function(state)
@@ -59,6 +61,10 @@ function init(self)
 end
 
 function update(self, dt)
+	if self.qa_cli and not bridge.is_web() then
+		qa_cli.poll(self.qa_cli)
+	end
+
 	while true do
 		local message = bridge.poll()
 		if not message then

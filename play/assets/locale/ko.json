@@ -20,5 +20,16 @@
   "hud.hint.duel": "결투 진행 중입니다.",
   "hud.hint.complete": "매치가 끝났습니다.",
   "hud.hint.control.pc": "PC 조작: 드래그 · ←→ · 스크롤",
-  "hud.hint.control.mobile": "모바일 조작: 터치 드래그"
+  "hud.hint.control.mobile": "모바일 조작: 터치 드래그",
+  "reload.title.setup": "초기 장전",
+  "reload.title.bid": "입찰 후 장전",
+  "reload.title.shake": "흔들기 후 장전",
+  "reload.title.exact_duel": "정확 판정 보상 장전",
+  "reload.target": "대상: {name}",
+  "reload.remaining": "남은 장전: {count}",
+  "reload.next.setup": "다음: 컵을 흔듭니다.",
+  "reload.next.bid": "다음: 입찰을 계속합니다.",
+  "reload.next.shake": "다음: 주사위를 확인합니다.",
+  "reload.next.exact_duel": "다음: 새 흔들기 라운드로 이동합니다.",
+  "reload.click_hint": "오른쪽 실린더의 빈 칸을 클릭하세요."
 }

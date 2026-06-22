@@ -5,13 +5,25 @@ local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 
+local ACTION_FACE_UP = hash("face_up")
+local ACTION_FACE_DOWN = hash("face_down")
+local ACTION_PASS = hash("pass")
+local ACTION_CHALLENGE = hash("challenge")
+local ACTION_POINTER = hash("pointer")
+local ACTION_TOUCH = hash("touch")
+
+local function can_drive_turn(state)
+	return selectors.is_my_turn(state) or state.match.mode == "dev"
+end
+
 local function render(self, state)
 	local bid = state.bidding.my_bid
-	local is_my_turn = selectors.is_hud(state, "bidding") and selectors.is_my_turn(state)
-	self.can_pass = is_my_turn and selectors.is_my_bid_valid(state)
-	self.can_challenge = is_my_turn and selectors.has_previous_bid(state)
+	local is_bidding = selectors.is_hud(state, "bidding")
+	local can_drive = is_bidding and can_drive_turn(state)
+	self.can_pass = can_drive and selectors.is_my_bid_valid(state)
+	self.can_challenge = can_drive and selectors.has_previous_bid(state)
 
-	gui_util.set_enabled("root", is_my_turn)
+	gui_util.set_enabled("root", is_bidding)
 	gui_util.set_text("pass_label", i18n.t("action.pass"))
 	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
 	gui_util.set_text("bid_value", bid.face)
@@ -21,6 +33,10 @@ local function render(self, state)
 	}))
 	gui_util.set_text("pass_enabled", self.can_pass and "enabled" or "disabled")
 	gui_util.set_text("challenge_enabled", self.can_challenge and "enabled" or "disabled")
+end
+
+local function request_render(self)
+	self.needs_render = true
 end
 
 local function handle_command(self, command)
@@ -50,33 +66,78 @@ local function handle_command(self, command)
 	end
 end
 
+local function pointer_position(action)
+	if action.touch and action.touch[1] then
+		action = action.touch[1]
+	end
+	if action.x and action.y then
+		return action.x, action.y
+	end
+	return nil, nil
+end
+
+local function handle_pointer(self, action)
+	local x, y = pointer_position(action)
+	if not x then
+		return false
+	end
+
+	if gui_util.pick("pass_button", x, y) then
+		handle_command(self, "pass")
+		return true
+	elseif gui_util.pick("challenge_button", x, y) then
+		handle_command(self, "challenge")
+		return true
+	elseif gui_util.pick("face_up", x, y) then
+		handle_command(self, "face_up")
+		return true
+	elseif gui_util.pick("face_down", x, y) then
+		handle_command(self, "face_down")
+		return true
+	end
+
+	return false
+end
+
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
 	self.can_pass = false
 	self.can_challenge = false
+	self.needs_render = false
+	if gui and gui.set_render_order then
+		gui.set_render_order(8)
+	end
 	gui_util.acquire_input_focus()
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("bidding", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("bidding", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
+		request_render(self)
 	end)
 
 	render(self, self.store:get_state())
 end
 
+function update(self, dt)
+	if self.needs_render and self.store then
+		self.needs_render = false
+		render(self, self.store:get_state())
+	end
+end
+
 function on_message(self, message_id, message)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
+		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
 	elseif message_id == hash("command") then
@@ -85,14 +146,26 @@ function on_message(self, message_id, message)
 end
 
 function on_input(self, action_id, action)
-	if action.pressed and action.command then
-		handle_command(self, action.command)
+	if not action.pressed then
+		return
+	end
+
+	if action_id == ACTION_POINTER or action_id == ACTION_TOUCH then
+		handle_pointer(self, action)
+	elseif action_id == ACTION_FACE_UP then
+		handle_command(self, "face_up")
+	elseif action_id == ACTION_FACE_DOWN then
+		handle_command(self, "face_down")
+	elseif action_id == ACTION_PASS then
+		handle_command(self, "pass")
+	elseif action_id == ACTION_CHALLENGE then
+		handle_command(self, "challenge")
 	end
 end
 
 function on_reload(self)
 	if self.store then
-		render(self, self.store:get_state())
+		request_render(self)
 	end
 end
 

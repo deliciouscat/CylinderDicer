@@ -1,0 +1,286 @@
+local store_mod = require("game.model.store")
+local selectors = require("game.model.selectors")
+local gui_util = require("ui.common.gui_util")
+
+local SLOT_COUNT = 6
+
+local function color(r, g, b, a)
+	return vmath.vector4(r, g, b, a)
+end
+
+local function animate_y(id, y, duration, easing, complete)
+	local node = gui_util.node(id)
+	if not node or not gui or not gui.animate then
+		print("[cylinder_gui]", "animate_y fallback (no node/api)", "id=" .. tostring(id), "node=" .. tostring(node))
+		if complete then
+			complete()
+		end
+		return
+	end
+
+	local ok, err = pcall(gui.animate, node, "position.y", y, easing or gui.EASING_OUTQUAD, duration or 0.18, 0.0, complete)
+	if not ok then
+		print("[cylinder_gui]", "animate_y pcall failed", "id=" .. tostring(id), "err=" .. tostring(err))
+		if complete then
+			complete()
+		end
+	end
+end
+
+local function set_cylinder_enabled(enabled)
+	gui_util.set_enabled("cylinder_group", enabled)
+	gui_util.set_enabled("ring", enabled)
+	gui_util.set_enabled("plate", enabled)
+	gui_util.set_enabled("hub", enabled)
+
+	for index = 1, SLOT_COUNT do
+		gui_util.set_enabled("slot_" .. tostring(index) .. "_rim", enabled)
+		gui_util.set_enabled("slot_" .. tostring(index), enabled)
+		if not enabled then
+			gui_util.set_enabled("primer_" .. tostring(index), false)
+		end
+	end
+end
+
+local function set_reload_enabled(enabled)
+	gui_util.set_enabled("shade", enabled)
+	gui_util.set_enabled("bullet_group", enabled)
+	gui_util.set_enabled("reload_title_box", enabled)
+	gui_util.set_enabled("reload_title", enabled)
+	gui_util.set_enabled("reload_count", enabled)
+
+	if not enabled then
+		for index = 1, 3 do
+			gui_util.set_enabled("bullet_" .. tostring(index), false)
+			gui_util.set_enabled("bullet_tip_" .. tostring(index), false)
+		end
+	end
+end
+
+local function visual_player(state)
+	local pending = state.pending_load
+	if pending then
+		return state.players.by_id[pending.player_id]
+	end
+	return selectors.local_player(state)
+end
+
+local function state_signature(state)
+	if not state then
+		return "nil"
+	end
+
+	local pending = state.pending_load
+	local player = visual_player(state)
+	local slots = player and player.cylinder and player.cylinder.slots or {}
+	local loaded = {}
+	for index = 1, SLOT_COUNT do
+		loaded[index] = slots[index] and slots[index].loaded and "1" or "0"
+	end
+
+	return table.concat({
+		selectors.hud_kind(state),
+		pending and pending.player_id or "-",
+		pending and pending.source or "-",
+		pending and tostring(pending.count) or "0",
+		table.concat(loaded, ""),
+	}, "|")
+end
+
+local function hide_reload_with_bounce(self)
+	if self.hiding_reload then
+		return
+	end
+
+	self.hiding_reload = true
+	gui_util.set_enabled("shade", false)
+	local easing = gui and (gui.EASING_OUTBOUNCE or gui.EASING_OUTBACK or gui.EASING_OUTQUAD)
+
+	animate_y("cylinder_group", 900.0, 0.24, easing, function()
+		self.hiding_reload = false
+		if self.mode == "offscreen" then
+			set_cylinder_enabled(false)
+			set_reload_enabled(false)
+			gui_util.set_enabled("root", false)
+		end
+	end)
+	animate_y("bullet_group", 560.0, 0.22, easing)
+	animate_y("reload_title_box", 860.0, 0.20, easing)
+	animate_y("reload_title", 860.0, 0.20, easing)
+	animate_y("reload_count", 620.0, 0.20, easing)
+end
+
+local function set_mode_layout(self, mode)
+	local is_reload = mode == "reload"
+	local is_visible = mode ~= "offscreen"
+	local previous_mode = self.mode
+	self.mode = mode
+
+	if mode == "offscreen" and self.hiding_reload then
+		return true
+	end
+
+	if mode == "offscreen" and previous_mode == "reload" then
+		hide_reload_with_bounce(self)
+		return true
+	end
+
+	gui_util.set_enabled("root", is_visible)
+	set_cylinder_enabled(is_visible)
+	set_reload_enabled(is_reload)
+
+	if is_reload then
+		gui_util.set_position("cylinder_group", vmath.vector3(0.0, 12.0, 0.2))
+		gui_util.set_scale("cylinder_group", vmath.vector3(2.28, 2.28, 1.0))
+		gui_util.set_position("bullet_group", vmath.vector3(-330.0, -170.0, 0.5))
+		gui_util.set_position("reload_title_box", vmath.vector3(0.0, 250.0, 0.6))
+		gui_util.set_position("reload_title", vmath.vector3(0.0, 250.0, 0.7))
+		gui_util.set_position("reload_count", vmath.vector3(-330.0, -85.0, 0.6))
+	else
+		gui_util.set_position("cylinder_group", vmath.vector3(500.0, -245.0, 0.2))
+		gui_util.set_scale("cylinder_group", vmath.vector3(1.0, 1.0, 1.0))
+	end
+
+	return false
+end
+
+local function render_slots(player, visible)
+	local slots = player and player.cylinder and player.cylinder.slots or {}
+
+	for index = 1, SLOT_COUNT do
+		local loaded = slots[index] and slots[index].loaded == true
+		gui_util.set_enabled("slot_" .. tostring(index), visible)
+		gui_util.set_enabled("slot_" .. tostring(index) .. "_rim", visible)
+		gui_util.set_color("slot_" .. tostring(index), loaded and color(0.36, 0.32, 0.24, 1.0) or color(0.13, 0.13, 0.13, 1.0))
+		gui_util.set_color("slot_" .. tostring(index) .. "_rim", loaded and color(0.86, 0.70, 0.38, 1.0) or color(0.62, 0.62, 0.62, 1.0))
+		gui_util.set_enabled("primer_" .. tostring(index), visible and loaded)
+	end
+end
+
+local function render_bullets(pending, player, visible)
+	local remaining = pending and (pending.count or 0) or 0
+	local loaded = player and selectors.player_bullets(player) or 0
+	local is_full = loaded >= SLOT_COUNT
+
+	for index = 1, 3 do
+		local bullet_visible = visible and index <= remaining
+		gui_util.set_enabled("bullet_" .. tostring(index), bullet_visible)
+		gui_util.set_enabled("bullet_tip_" .. tostring(index), bullet_visible)
+		if bullet_visible then
+			local alpha = is_full and 0.22 or 1.0
+			gui_util.set_alpha("bullet_" .. tostring(index), alpha)
+			gui_util.set_alpha("bullet_tip_" .. tostring(index), alpha)
+		end
+	end
+
+	gui_util.set_text("reload_count", tostring(remaining))
+end
+
+local function render(self, state)
+	if not state then
+		local animating = set_mode_layout(self, "offscreen")
+		if animating then
+			return
+		end
+		render_slots(nil, false)
+		render_bullets(nil, nil, false)
+		return
+	end
+
+	local signature = state_signature(state)
+	if signature == self.render_signature and not self.hiding_reload then
+		return
+	end
+
+	local hud = selectors.hud_kind(state)
+	local pending = state.pending_load
+	local player = visual_player(state)
+
+	local visible = hud == "revolver_reload" or hud == "bidding"
+	local animating = false
+	if hud == "revolver_reload" then
+		animating = set_mode_layout(self, "reload")
+	elseif hud == "bidding" then
+		animating = set_mode_layout(self, "hud")
+	else
+		animating = set_mode_layout(self, "offscreen")
+	end
+
+	if animating then
+		return
+	end
+
+	render_slots(player, visible)
+	render_bullets(pending, player, hud == "revolver_reload")
+	self.render_signature = signature
+end
+
+local function request_render(self)
+	self.needs_render = true
+end
+
+local function bind_store(self)
+	if self.store then
+		return true
+	end
+
+	self.store = store_mod.get()
+	if not self.store then
+		return false
+	end
+
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
+		request_render(self)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
+		request_render(self)
+	end)
+
+	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
+	self.subs = {}
+	self.mode = "offscreen"
+	self.hiding_reload = false
+	self.needs_render = false
+	if gui and gui.set_render_order then
+		gui.set_render_order(9)
+	end
+
+	render(self, nil)
+	bind_store(self)
+end
+
+function update(self, dt)
+	if not self.store then
+		bind_store(self)
+		return
+	end
+
+	local state = self.store:get_state()
+	local signature = state_signature(state)
+	if self.needs_render or signature ~= self.render_signature then
+		self.needs_render = false
+		render(self, state)
+	end
+end
+
+function on_reload(self)
+	if bind_store(self) then
+		render(self, self.store:get_state())
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

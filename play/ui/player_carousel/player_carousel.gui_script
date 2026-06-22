@@ -3,6 +3,15 @@ local selectors = require("game.model.selectors")
 local gui_util = require("ui.common.gui_util")
 
 local MAX_SLOTS = 6
+local CENTER_PREVIOUS_SLOT = 3
+local CENTER_ACTIVE_SLOT = 4
+local FILL_SLOTS = { 1, 2, 5, 6, 3, 4 }
+local TEXTURE_BY_SKIN = {
+	["rosemund"] = "rosemund",
+	["hush-feather"] = "hush_feather",
+	["samuel-saber"] = "samuel_saber",
+	["zippo-jay"] = "zippo_jay",
+}
 
 local function color(r, g, b, a)
 	if vmath and vmath.vector4 then
@@ -33,7 +42,45 @@ local function player_summary(state)
 	return table.concat(parts, "  ")
 end
 
-local function set_slot(index, player, is_active)
+local function texture_name(player)
+	return TEXTURE_BY_SKIN[player.skin] or TEXTURE_BY_SKIN[player.id] or "rosemund"
+end
+
+local function place_player(slots, assigned, slot_index, player_id)
+	if not player_id or assigned[player_id] then
+		return
+	end
+	slots[slot_index] = player_id
+	assigned[player_id] = true
+end
+
+local function visual_slots(state)
+	local slots = {}
+	local assigned = {}
+	local active_id = state.turn.active_player_id
+	local previous_id = state.turn.previous_player_id
+
+	if previous_id and previous_id ~= active_id then
+		place_player(slots, assigned, CENTER_PREVIOUS_SLOT, previous_id)
+	end
+	place_player(slots, assigned, CENTER_ACTIVE_SLOT, active_id)
+
+	local fill_index = 1
+	for _, player_id in ipairs(state.players.order or {}) do
+		if not assigned[player_id] then
+			while fill_index <= #FILL_SLOTS and slots[FILL_SLOTS[fill_index]] do
+				fill_index = fill_index + 1
+			end
+			if fill_index <= #FILL_SLOTS then
+				place_player(slots, assigned, FILL_SLOTS[fill_index], player_id)
+			end
+		end
+	end
+
+	return slots
+end
+
+local function set_slot(index, player, focus)
 	local prefix = "slot" .. tostring(index)
 	local visible = player ~= nil
 
@@ -53,43 +100,68 @@ local function set_slot(index, player, is_active)
 	gui_util.set_text(prefix .. "_bullets", selectors.player_bullets(player))
 	gui_util.set_text(prefix .. "_hp", player.hp or 0)
 	gui_util.set_text(prefix .. "_name", player.name or player.id)
-	gui_util.set_text(prefix .. "_marker", is_active and "내 턴" or "")
+	if focus.active then
+		gui_util.set_text(prefix .. "_marker", player.is_local and "내 턴" or "현재 턴")
+	elseif focus.previous then
+		gui_util.set_text(prefix .. "_marker", "전 턴")
+	else
+		gui_util.set_text(prefix .. "_marker", "")
+	end
 
-	gui_util.set_color(prefix .. "_body", color(1.0, 1.0, 1.0, is_active and 1.0 or 0.62))
+	gui_util.set_texture(prefix .. "_body", texture_name(player))
+	gui_util.set_color(prefix .. "_body", color(1.0, 1.0, 1.0, 1.0))
+	gui_util.set_alpha(prefix .. "_body", (focus.active or focus.previous) and 1.0 or 0.45)
 	gui_util.play_flipbook(prefix .. "_body", player.portrait_state or "front")
 end
 
 local function render(self, state)
 	gui_util.set_text("players", player_summary(state))
+	local slots = visual_slots(state)
 
 	for index = 1, MAX_SLOTS do
-		local player_id = state.players.order[index]
+		local player_id = slots[index]
 		local player = player_id and state.players.by_id[player_id] or nil
-		set_slot(index, player, player_id == state.turn.active_player_id)
+		set_slot(index, player, {
+			active = player_id == state.turn.active_player_id,
+			previous = player_id == state.turn.previous_player_id,
+		})
 	end
+end
+
+local function request_render(self)
+	self.needs_render = true
 end
 
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
+	self.needs_render = false
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
 	end)
 
 	render(self, self.store:get_state())
 end
 
+function update(self, dt)
+	if self.needs_render and self.store then
+		self.needs_render = false
+		render(self, self.store:get_state())
+	end
+end
+
 function on_message(self, message_id)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
+		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
 	end

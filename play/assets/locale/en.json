@@ -20,5 +20,16 @@
   "hud.hint.duel": "Duel in progress.",
   "hud.hint.complete": "Match complete.",
   "hud.hint.control.pc": "PC: drag / arrows / scroll",
-  "hud.hint.control.mobile": "Mobile: touch drag"
+  "hud.hint.control.mobile": "Mobile: touch drag",
+  "reload.title.setup": "Initial Reload",
+  "reload.title.bid": "Bid Reload",
+  "reload.title.shake": "Shake Reload",
+  "reload.title.exact_duel": "Exact Reward Reload",
+  "reload.target": "Target: {name}",
+  "reload.remaining": "Loads left: {count}",
+  "reload.next.setup": "Next: shake the cup.",
+  "reload.next.bid": "Next: bidding continues.",
+  "reload.next.shake": "Next: check dice.",
+  "reload.next.exact_duel": "Next: new shake round.",
+  "reload.click_hint": "Click an empty cylinder slot."
 }

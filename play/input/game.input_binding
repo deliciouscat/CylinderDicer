@@ -10,6 +10,22 @@ key_trigger {
   input: KEY_SPACE
   action: "shake"
 }
+key_trigger {
+  input: KEY_UP
+  action: "face_up"
+}
+key_trigger {
+  input: KEY_DOWN
+  action: "face_down"
+}
+key_trigger {
+  input: KEY_ENTER
+  action: "pass"
+}
+key_trigger {
+  input: KEY_C
+  action: "challenge"
+}
 mouse_trigger {
   input: MOUSE_BUTTON_1
   action: "pointer"

@@ -11,12 +11,22 @@ local function register_anchor()
 	end
 end
 
+local function set_dice_enabled(enabled)
+	for index = 1, 5 do
+		gui_util.set_enabled("dice_" .. tostring(index) .. "_box", enabled)
+		gui_util.set_enabled("dice_" .. tostring(index), enabled)
+	end
+	gui_util.set_enabled("dice_values", enabled)
+end
+
 local function render(self, state)
 	local player = selectors.local_player(state)
 	if not player then
 		return
 	end
 
+	local active = selectors.is_hud(state, "cup_shake") or selectors.is_hud(state, "bidding")
+	gui_util.set_enabled("root", active)
 	gui_util.set_text("name", player.name or player.id)
 	gui_util.set_text("hp", player.hp or 0)
 	gui_util.set_text("bullets", selectors.player_bullets(player))
@@ -31,31 +41,42 @@ local function render(self, state)
 		end
 	end
 
+	set_dice_enabled(true)
 	register_anchor()
+end
+
+local function request_render(self)
+	self.needs_render = true
 end
 
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
+	self.needs_render = false
+	gui_util.set_enabled("root", false)
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
+		request_render(self)
 	end)
 
 	render(self, self.store:get_state())
 end
 
 function update(self, dt)
+	if self.needs_render and self.store then
+		self.needs_render = false
+		render(self, self.store:get_state())
+	end
 	register_anchor()
 end
 

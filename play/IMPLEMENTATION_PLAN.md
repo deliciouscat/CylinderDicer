@@ -441,15 +441,42 @@ state = {
 
 ## 5. 권장 작업 순서
 
-1. Phase 0 문서 고정.
-2. Phase 1 순수 Lua 규칙 테스트 통과.
-3. Phase 2 bridge/store 연결.
-4. Phase 3 placeholder 화면 전환.
-5. Phase 4 shaking/cylinder 완성.
-6. Phase 5 bidding 완성.
-7. Phase 6 duel/round/match 종료 완성.
-8. Phase 7 Vue wrapper end-to-end.
-9. Phase 8 polish와 QA.
+현재 구현은 Phase 1-2 도메인/store/bridge가 먼저 올라와 있고, 화면은 E2E QA에 필요한 HUD가 부족한 상태다. 이후 순서는 `turn.kind`가 아니라 `flow.phase`를 기준으로 고정한다.
+
+1. Phase HUD 계약 정리.
+   - 대상 phase: `revolver_reload`, `cup_shake`, `dice_check`, `bidding_gap`, `bidding`, `duel`, `complete`.
+   - 각 phase에서 켜질 GUI/component와 turn indicator 문구를 명시한다.
+   - 구조 원칙: 최종 visibility 책임은 director가 가진다. 개별 GUI가 root visibility를 직접 결정하는 임시 코드는 HUD가 안정된 뒤 정리한다.
+2. `revolver_reload` HUD 먼저 구현.
+   - `setup`: 초기 장전.
+   - `bid`: 방금 입찰한 플레이어 장전.
+   - `exact_duel`: 정확 판정 보상 장전.
+   - 필수 표시: 장전 대상 player, 남은 장전 수, clickable cylinder 안내, 완료 후 다음 phase.
+3. Shake / Dice Check HUD 정리.
+   - `cup_shake`: 컵 등장, 흔들기 진행도.
+   - `dice_check`: 내 주사위 확인 + 확인 입력.
+   - `bidding_gap`: 입찰 시작 전 짧은 대기 안내.
+4. Bidding HUD 완성.
+   - rail, count/face 선택, 넘기기/pass, 결투신청/challenge.
+   - 현재 bid, 직전 caller, 현재 player 표시.
+   - 실제 제품 UI는 local turn만 직접 조작한다. dev-controlled opponent 조작은 QA CLI/adapter로 격리한다.
+5. Duel HUD 구현.
+   - verdict: SHORT / OVER / EXACT.
+   - attacker/target 또는 roulette subject 표시.
+   - damage count, russian roulette step, resolve/advance.
+6. Result HUD 구현.
+   - winner, match result payload, restart/dev reset 명령.
+7. QA CLI 정리.
+   - `state`, `advance`, `bidding`, `reload`, `shake`, `bid 6 3`, `challenge`, `resolve`.
+   - status file은 유지한다.
+   - UI script 안의 dev 조작 권한은 CLI/adapter로 이동한다.
+8. 구조 청소.
+   - director 단일 visibility 책임 복원.
+   - `state.match.mode == "dev"` 분기는 view에서 제거.
+   - QA hotkey/input binding은 실제 UX로 남길 것만 보존한다.
+   - carousel asset mapping은 cosmetics/asset registry 쪽으로 이동한다.
+9. Phase 7 Vue wrapper end-to-end.
+10. Phase 8 polish와 QA.
 
 이 순서를 지키면 화면 구현 중 규칙 변경이 생겨도 `rules/*`와 reducer 테스트에서 먼저 확인할 수 있고, Defold GUI는 store selector를 보는 얇은 레이어로 유지된다.
 

@@ -7,30 +7,43 @@ local function render(self, state)
 	gui_util.set_text("label", i18n.t(selectors.turn_label_key(state)))
 end
 
+local function request_render(self)
+	self.needs_render = true
+end
+
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
+	self.needs_render = false
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
+		request_render(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
-		render(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
+		request_render(self)
 	end)
 
 	render(self, self.store:get_state())
 end
 
+function update(self, dt)
+	if self.needs_render and self.store then
+		self.needs_render = false
+		render(self, self.store:get_state())
+	end
+end
+
 function on_message(self, message_id)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
+		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
 	end

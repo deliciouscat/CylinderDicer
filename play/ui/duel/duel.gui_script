@@ -41,12 +41,7 @@ local function advance(self)
 	end
 
 	apply_step(self, step)
-
-	if timer and timer.delay then
-		timer.delay(step.duration or 0.1, false, function()
-			advance(self)
-		end)
-	end
+	self.advance_delay = step.duration or 0.1
 end
 
 local function start_sequence(self, state)
@@ -59,23 +54,47 @@ local function start_sequence(self, state)
 	advance(self)
 end
 
+local function request_sequence(self)
+	self.needs_sequence = true
+end
+
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
+	self.steps = nil
+	self.index = 0
+	self.advance_delay = nil
+	self.needs_sequence = false
 	gui_util.acquire_input_focus()
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("duel", function(state)
-		start_sequence(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("duel", function(_state)
+		request_sequence(self)
 	end)
+end
+
+function update(self, dt)
+	if self.needs_sequence and self.store then
+		self.needs_sequence = false
+		start_sequence(self, self.store:get_state())
+	end
+
+	if self.advance_delay then
+		self.advance_delay = self.advance_delay - dt
+		if self.advance_delay <= 0 then
+			self.advance_delay = nil
+			advance(self)
+		end
+	end
 end
 
 function on_message(self, message_id)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
+		request_sequence(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
 	end

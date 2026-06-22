@@ -111,6 +111,23 @@ function M.cylinder_anchor(state)
 	return "offscreen"
 end
 
+function M.reload_summary(state)
+	local pending = state.pending_load
+	if not pending then
+		return nil
+	end
+
+	local player = state.players.by_id[pending.player_id]
+	local source = pending.source or "setup"
+	return {
+		source = source,
+		title_key = "reload.title." .. source,
+		target_name = player and (player.name or player.id) or pending.player_id,
+		remaining = pending.count or 0,
+		next_key = "reload.next." .. source,
+	}
+end
+
 function M.has_previous_bid(state)
 	return state.bidding.current_bid ~= nil
 end

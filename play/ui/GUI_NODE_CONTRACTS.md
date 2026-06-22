@@ -7,6 +7,20 @@
 - `activate`: 해당 GUI root 표시.
 - `deactivate`: 해당 GUI root 숨김.
 
+## Phase HUD 계약
+
+최종 visibility 책임은 `game/director.script`가 가진다. 개별 gui_script는 값을 주입하고 입력을 action으로 변환하되, 임시 QA 코드를 제외하면 phase visibility를 독자적으로 결정하지 않는다.
+
+| `flow.phase` | HUD kind | 활성 component | turn indicator |
+| --- | --- | --- | --- |
+| `revolver_reload` | `revolver_reload` | `turn_indicator`, `player_carousel`, `cylinder_overlay` | `turn.reload` |
+| `cup_shake` | `cup_shake` | `turn_indicator`, `shake`, `local_hud`, world cup | `turn.shake` |
+| `dice_check` | `cup_shake` | `turn_indicator`, `shake`, `local_hud` | `turn.shake` |
+| `bidding_gap` | `cup_shake` | `turn_indicator`, `shake`, `local_hud` | `turn.shake` |
+| `bidding` | `bidding` | `turn_indicator`, `player_carousel`, `rail`, `local_hud`, `bid_controls`, `cylinder_overlay` | `turn.mine` / `turn.opponent` |
+| `duel` | `duel` | `turn_indicator`, `duel` | `turn.duel` |
+| `complete` | `complete` | `turn_indicator`, `duel` 또는 result HUD | `hud.hint.complete` |
+
 ## turn_indicator.gui
 
 - `root`: 전체 컨테이너.
@@ -28,6 +42,8 @@
 - `hint`: 상태 안내.
 - `dice_values`: 로컬 주사위 값.
 - `cylinder_anchor`: cylinder overlay가 `hud` 위치로 이동할 기준점.
+
+`revolver_reload` 화면은 `local_hud`가 아니라 `cylinder_overlay`가 전담한다. local HUD 안에 reload 전용 panel/node를 다시 추가하지 않는다.
 
 ## player_carousel.gui
 
@@ -76,6 +92,14 @@ msg.post("#rail", "select_count", { count = 7 })
 - `verdict`: SHORT/OVER/EXACT 판정.
 - `fx`: HIT/MISS/COMPLETE 임시 표시.
 
-## cylinder_overlay.collection
+## cylinder_overlay.gui / cylinder_overlay.script
 
-GO script `cylinder_overlay.script`는 아직 sprite node를 요구하지 않는다. 실제 `revolver/default/cylinder.png`와 `bullet.png` asset이 생기기 전까지는 구체 cylinder visual을 만들지 않는다. 입력은 현 단계에서 screen center 기준 6등분 임시 hit-test를 쓴다. 실제 slot hit area가 생기면 script의 `hit_slot()`만 교체한다.
+- `root`: 전체 GUI. `revolver_reload`, `bidding`에서 표시.
+- `shade`: reload 중 player carousel 위에 깔리는 shading layer.
+- `cylinder_group`: cylinder visual 그룹. reload에서는 중앙 대형, bidding에서는 우하단 소형.
+- `ring`, `plate`, `hub`: 임시 cylinder placeholder. 실제 `revolver/default/cylinder.png`가 들어오면 교체한다.
+- `slot_{1..6}_rim`, `slot_{1..6}`, `primer_{1..6}`: 실린더 구멍/장전 상태. 총알이 있으면 primer node가 보이고, 비어 있으면 숨긴다.
+- `bullet_group`, `bullet_{1..3}`, `bullet_tip_{1..3}`: 남은 장전 bullet placeholder. asset이 들어오면 같은 id에 texture를 붙인다.
+- `reload_title`, `reload_count`: reload 전용 상태 표시.
+
+`cylinder_overlay.script`는 pending load 상태에서 빈 slot만 클릭 가능하게 action을 dispatch한다. 현재 hit-test는 reload 중앙 cylinder와 bidding 우하단 cylinder의 screen-space 중심을 기준으로 6등분한다. 실제 slot hit area asset이 들어오면 `hit_slot()`만 교체한다.
