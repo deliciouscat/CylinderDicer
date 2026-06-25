@@ -31,6 +31,15 @@ function M.load(cyl, slot_index)
     return next, true
 end
 
+-- 결투 직전 1~6칸 회전. 넘어간 슬롯은 원형으로 앞으로 당겨지고,
+-- trigger는 회전된 배열의 1번 슬롯부터 시작한다.
+function M.spin(cyl, steps)
+    local next = clone(cyl)
+    next.slots = rotate_left(next.slots, steps)
+    next.chamber_index = 1
+    return next
+end
+
 -- pending_load 1 감소(0이면 nil). reducer가 장전 후 호출.
 function M.consume_pending(pending)
     if not pending then return nil end
@@ -52,4 +61,3 @@ end
 
 return M
 ```
-

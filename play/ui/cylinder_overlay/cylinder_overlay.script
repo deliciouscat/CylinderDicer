@@ -3,6 +3,7 @@ local selectors = require("game.model.selectors")
 local actions = require("game.model.actions")
 local anchors = require("game.core.anchors")
 local tween = require("game.core.tween")
+local slot_geometry = require("ui.cylinder_overlay.slot_geometry")
 
 local SLOT_COUNT = 6
 local SLOT_CENTER = {
@@ -84,16 +85,14 @@ local function hit_slot(self, action)
 	end
 
 	local center = SLOT_CENTER[self.target] or SLOT_CENTER.focal
-	local dx = action.x - center.x
-	local dy = action.y - center.y
-	local distance = math.sqrt(dx * dx + dy * dy)
-	if distance > center.radius then
-		return nil
-	end
-
-	local angle = math.atan2(dy, dx)
-	local normalized = (angle + math.pi) / (math.pi * 2)
-	return math.floor(normalized * SLOT_COUNT) + 1
+	return slot_geometry.slot_at(
+		action.x,
+		action.y,
+		center.x,
+		center.y,
+		center.radius,
+		SLOT_COUNT
+	)
 end
 
 function init(self)

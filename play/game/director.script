@@ -16,15 +16,7 @@ local BLOCKS = {
 	},
 	cup_shake = {
 		"/ui#shake",
-		"/ui#local_hud",
-	},
-	setup = {
-		"/ui#shake",
-		"/ui#local_hud",
-	},
-	shaking = {
-		"/ui#shake",
-		"/ui#local_hud",
+		"/ui#player_carousel",
 	},
 	bidding = {
 		"/ui#player_carousel",
@@ -40,44 +32,36 @@ local BLOCKS = {
 	},
 }
 
-local function post_safe(url, message_id, payload)
-	local ok = pcall(msg.post, url, message_id, payload or {})
-	return ok
-end
-
 local function set_block(self, kind)
 	if self.active_kind ~= kind then
 		for _, url in ipairs(ALL_BLOCKS) do
-			post_safe(url, "deactivate")
+			msg.post(url, "deactivate")
 		end
 		self.active_kind = kind
 	end
 
 	for _, url in ipairs(BLOCKS[kind] or {}) do
-		post_safe(url, "activate")
+		msg.post(url, "activate")
 	end
 
-	post_safe("/ui#turn_indicator", "activate")
+	msg.post("/ui#turn_indicator", "activate")
 end
 
 local function sync_turn(self, state)
 	local kind = selectors.hud_kind(state)
 	set_block(self, kind)
 
-	post_safe("/background#background", "pan_to", {
+	msg.post("/background#background", "pan_to", {
 		location = selectors.background_location(state),
 	})
 
-	post_safe("/cylinder#cylinder", "set_target", {
+	msg.post("/cylinder#cylinder", "set_target", {
 		anchor = selectors.cylinder_anchor(state),
 	})
 end
 
-local function sync_match(self, state)
-	if state.match.status == "complete" and not self.result_requested then
-		self.result_requested = true
-		post_safe("/go#main", "submit_result")
-	end
+local function request_turn_sync(self)
+	self.needs_turn_sync = true
 end
 
 local function bind_store(self)
@@ -88,17 +72,15 @@ local function bind_store(self)
 		return false
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(state)
-		sync_turn(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_turn_sync(self)
 	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("match", function(state)
-		sync_match(self, state)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(state)
-		sync_turn(self, state)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
+		request_turn_sync(self)
 	end)
 
 	sync_turn(self, self.store:get_state())
+	self.needs_turn_sync = false
 	return true
 end
 
@@ -106,9 +88,16 @@ function init(self)
 	self.store = nil
 	self.subs = {}
 	self.active_kind = nil
-	self.result_requested = false
+	self.needs_turn_sync = false
 
 	bind_store(self)
+end
+
+function update(self, dt)
+	if self.needs_turn_sync and self.store then
+		self.needs_turn_sync = false
+		sync_turn(self, self.store:get_state())
+	end
 end
 
 function on_message(self, message_id, message)
@@ -116,6 +105,7 @@ function on_message(self, message_id, message)
 		bind_store(self)
 	elseif message_id == hash("boot") and self.store then
 		sync_turn(self, self.store:get_state())
+		self.needs_turn_sync = false
 	elseif message_id == hash("background_pan_complete") then
 		self.last_background_location = message.location
 	elseif message_id == hash("duel_sequence_complete") and self.store then

@@ -1,42 +1,38 @@
 local M = {}
 
-local SFX = {
-	click = "/audio#click",
-	click_empty = "/audio#click_empty",
-	shake = "/audio#shake",
-	load = "/audio#load",
-	shot = "/audio#shot",
-	hit = "/audio#hit",
-	miss = "/audio#miss",
-}
+-- Register component URLs here only after the matching sound resources and
+-- /audio game object exist in the bootstrap collection.
+local SFX = {}
+local BGM = {}
+local VOICE = {}
 
-local function can_play()
-	return sound and sound.play
+local function play(url, opts)
+	if not url then
+		return false
+	end
+	sound.play(url, opts)
+	return true
 end
 
 function M.play_sfx(name, opts)
-	local url = SFX[name]
-	if url and can_play() then
-		sound.play(url, opts)
-	end
+	return play(SFX[name], opts)
 end
 
 function M.play_bgm(name, opts)
-	if can_play() then
-		sound.play("/audio#bgm_" .. tostring(name), opts)
-	end
+	return play(BGM[name], opts)
 end
 
 function M.stop_bgm(name)
-	if sound and sound.stop then
-		sound.stop("/audio#bgm_" .. tostring(name))
+	local url = BGM[name]
+	if not url then
+		return false
 	end
+	sound.stop(url)
+	return true
 end
 
 function M.play_voice(name, opts)
-	if can_play() then
-		sound.play("/audio#voice_" .. tostring(name), opts)
-	end
+	return play(VOICE[name], opts)
 end
 
 return M

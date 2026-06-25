@@ -8,23 +8,8 @@ local function color(r, g, b, a)
 	return vmath.vector4(r, g, b, a)
 end
 
-local function animate_y(id, y, duration, easing, complete)
-	local node = gui_util.node(id)
-	if not node or not gui or not gui.animate then
-		print("[cylinder_gui]", "animate_y fallback (no node/api)", "id=" .. tostring(id), "node=" .. tostring(node))
-		if complete then
-			complete()
-		end
-		return
-	end
-
-	local ok, err = pcall(gui.animate, node, "position.y", y, easing or gui.EASING_OUTQUAD, duration or 0.18, 0.0, complete)
-	if not ok then
-		print("[cylinder_gui]", "animate_y pcall failed", "id=" .. tostring(id), "err=" .. tostring(err))
-		if complete then
-			complete()
-		end
-	end
+local function animate_y(node, y, duration, easing, complete)
+	gui.animate(node, "position.y", y, easing or gui.EASING_OUTQUAD, duration or 0.18, 0.0, complete)
 end
 
 local function set_cylinder_enabled(enabled)
@@ -96,7 +81,7 @@ local function hide_reload_with_bounce(self)
 	gui_util.set_enabled("shade", false)
 	local easing = gui and (gui.EASING_OUTBOUNCE or gui.EASING_OUTBACK or gui.EASING_OUTQUAD)
 
-	animate_y("cylinder_group", 900.0, 0.24, easing, function()
+	animate_y(self.nodes.cylinder_group, 900.0, 0.24, easing, function()
 		self.hiding_reload = false
 		if self.mode == "offscreen" then
 			set_cylinder_enabled(false)
@@ -104,10 +89,10 @@ local function hide_reload_with_bounce(self)
 			gui_util.set_enabled("root", false)
 		end
 	end)
-	animate_y("bullet_group", 560.0, 0.22, easing)
-	animate_y("reload_title_box", 860.0, 0.20, easing)
-	animate_y("reload_title", 860.0, 0.20, easing)
-	animate_y("reload_count", 620.0, 0.20, easing)
+	animate_y(self.nodes.bullet_group, 560.0, 0.22, easing)
+	animate_y(self.nodes.reload_title_box, 860.0, 0.20, easing)
+	animate_y(self.nodes.reload_title, 860.0, 0.20, easing)
+	animate_y(self.nodes.reload_count, 620.0, 0.20, easing)
 end
 
 local function set_mode_layout(self, mode)
@@ -249,6 +234,13 @@ function init(self)
 	self.mode = "offscreen"
 	self.hiding_reload = false
 	self.needs_render = false
+	self.nodes = {
+		cylinder_group = gui.get_node("cylinder_group"),
+		bullet_group = gui.get_node("bullet_group"),
+		reload_title_box = gui.get_node("reload_title_box"),
+		reload_title = gui.get_node("reload_title"),
+		reload_count = gui.get_node("reload_count"),
+	}
 	if gui and gui.set_render_order then
 		gui.set_render_order(9)
 	end

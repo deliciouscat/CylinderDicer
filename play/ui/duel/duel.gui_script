@@ -101,6 +101,7 @@ function on_message(self, message_id)
 end
 
 function final(self)
+	gui_util.release_input_focus()
 	if self.store then
 		for _, token in ipairs(self.subs or {}) do
 			self.store:unsubscribe(token)

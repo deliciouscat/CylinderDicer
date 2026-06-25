@@ -18,6 +18,7 @@ state 파생 조회 모듈. View가 raw state 구조에 강하게 묶이지 않�
   - `is_my_bid_valid`.
   - `count_face`.
   - `hint_key`.
+  - `shake_status`.
   - `match_result_payload`.
 
 # 의사코드
@@ -64,4 +65,3 @@ end
 
 return M
 ```
-

@@ -14,9 +14,9 @@
 | `flow.phase` | HUD kind | 활성 component | turn indicator |
 | --- | --- | --- | --- |
 | `revolver_reload` | `revolver_reload` | `turn_indicator`, `player_carousel`, `cylinder_overlay` | `turn.reload` |
-| `cup_shake` | `cup_shake` | `turn_indicator`, `shake`, `local_hud`, world cup | `turn.shake` |
-| `dice_check` | `cup_shake` | `turn_indicator`, `shake`, `local_hud` | `turn.shake` |
-| `bidding_gap` | `cup_shake` | `turn_indicator`, `shake`, `local_hud` | `turn.shake` |
+| `cup_shake` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
+| `dice_check` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
+| `bidding_gap` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
 | `bidding` | `bidding` | `turn_indicator`, `player_carousel`, `rail`, `local_hud`, `bid_controls`, `cylinder_overlay` | `turn.mine` / `turn.opponent` |
 | `duel` | `duel` | `turn_indicator`, `duel` | `turn.duel` |
 | `complete` | `complete` | `turn_indicator`, `duel` 또는 result HUD | `hud.hint.complete` |
@@ -29,10 +29,15 @@
 ## shake.gui
 
 - `root`: 전체 컨테이너.
+- `cup_local`: 로컬 플레이어의 중앙 대형 컵.
+- `cup_seat_{1..5}`: 반원 좌석의 상대 플레이어 컵.
+- `reveal_dice_{1..5}`: 로컬 컵 아래 테이블에 공개되는 주사위.
+- `dice_tray`: 로컬 패 요약 컨테이너.
+- `tray_dice_{1..5}`: 하단 주사위 트레이.
 - `hint`: 상태 안내.
-- `dice_values`: 로컬 플레이어 주사위 값을 임시 텍스트로 표시.
+- `progress`: 로컬 흔들기 진행도 임시 텍스트.
 
-컵은 `shake.gui` node 계약에 포함하지 않는다. 컵 visual은 background/table world prop으로 렌더링하고, shake/duel 시점 이동에 맞춰 등장한다.
+`cup_shake`에서는 모든 컵을 닫힌 상태로 표시하고 공개 주사위와 트레이를 숨긴다. `dice_check`와 `bidding_gap`에서는 로컬 컵만 위로 들어 올리고 로컬 주사위와 트레이를 표시한다. 상대 컵과 `player_carousel` 캐릭터는 `ui/common/table_seat_layout.lua`의 같은 좌석을 사용한다.
 
 ## local_hud.gui
 
@@ -51,6 +56,8 @@
 - `players`: 플레이어 목록 임시 텍스트. 이후 slot template으로 교체 가능.
 - `slot{n}_body`: 캐릭터 atlas 초상 box. 현재 실제 atlas가 있는 캐릭터만 표시한다.
 - `slot{n}_bullets`, `slot{n}_hp`, `slot{n}_name`, `slot{n}_marker`: 상태 텍스트.
+
+`cup_shake`, `dice_check`, `bidding_gap`에서는 shake arc 모드로 전환한다. 로컬 플레이어는 중앙 뒤쪽, 상대 플레이어는 반원 좌석에 표시하고 badge/name/marker는 숨긴다.
 
 ## bid_controls.gui
 
@@ -102,4 +109,4 @@ msg.post("#rail", "select_count", { count = 7 })
 - `bullet_group`, `bullet_{1..3}`, `bullet_tip_{1..3}`: 남은 장전 bullet placeholder. asset이 들어오면 같은 id에 texture를 붙인다.
 - `reload_title`, `reload_count`: reload 전용 상태 표시.
 
-`cylinder_overlay.script`는 pending load 상태에서 빈 slot만 클릭 가능하게 action을 dispatch한다. 현재 hit-test는 reload 중앙 cylinder와 bidding 우하단 cylinder의 screen-space 중심을 기준으로 6등분한다. 실제 slot hit area asset이 들어오면 `hit_slot()`만 교체한다.
+`cylinder_overlay.script`는 pending load 상태에서 빈 slot만 클릭 가능하게 action을 dispatch한다. Hit-test는 `slot_geometry.lua`가 담당하며, 위쪽 `slot_1`부터 시계방향으로 `slot_6`까지 GUI node 배치와 같은 순서를 사용한다. 장전 시 선택 slot만 채우고 회전하지 않는다. 결투 직전에 판정 대상 실린더를 1~6칸 무작위로 원형 회전한다.

@@ -1,10 +1,26 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
-local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 
+local function label_for_state(state)
+	local phase = selectors.phase(state)
+	if phase == "revolver_reload" then
+		return "RELOAD"
+	end
+	if phase == "cup_shake" or phase == "dice_check" or phase == "bidding_gap" then
+		return "SHAKE"
+	end
+	if phase == "bidding" then
+		return selectors.is_my_turn(state) and "YOUR TURN" or "OPPONENT TURN"
+	end
+	if phase == "duel" then
+		return "DUEL"
+	end
+	return "RESULT"
+end
+
 local function render(self, state)
-	gui_util.set_text("label", i18n.t(selectors.turn_label_key(state)))
+	gui_util.set_text("label", label_for_state(state))
 end
 
 local function request_render(self)
@@ -15,6 +31,7 @@ function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
 	self.needs_render = false
+	gui.set_render_order(6)
 
 	if not self.store then
 		return

@@ -60,6 +60,14 @@ local function state_summary(state)
 	if selectors.is_hud(state, "bidding") then
 		parts[#parts + 1] = "can_bid=true"
 	end
+	if selectors.phase(state) == "cup_shake" then
+		local player_id = state.match.local_player_id
+		local shake = selectors.shake_status(state, player_id)
+		parts[#parts + 1] = ("shake=%s/%s"):format(
+			tostring(shake.count),
+			tostring(shake.required)
+		)
+	end
 
 	return table.concat(parts, " ")
 end

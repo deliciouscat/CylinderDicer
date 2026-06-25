@@ -14,7 +14,6 @@ embedded_instances {
 }
 embedded_instances {
   id: "background"
-  children: "cup"
   data: "components {\n"
   "  id: \"background\"\n"
   "  component: \"/background/background.script\"\n"
@@ -38,29 +37,6 @@ embedded_instances {
   scale3 {
     x: 1.36
     y: 1.36
-  }
-}
-embedded_instances {
-  id: "cup"
-  data: "embedded_components {\n"
-  "  id: \"cup\"\n"
-  "  type: \"sprite\"\n"
-  "  data: \"default_animation: \\\"cup\\\"\\n"
-  "material: \\\"/builtins/materials/sprite.material\\\"\\n"
-  "textures {\\n"
-  "  sampler: \\\"texture_sampler\\\"\\n"
-  "  texture: \\\"/assets/atlases/props_default.atlas\\\"\\n"
-  "}\\n"
-  "\"\n"
-  "}\n"
-  ""
-  position {
-    y: -430.0
-    z: 0.2
-  }
-  scale3 {
-    x: 0.38
-    y: 0.38
   }
 }
 embedded_instances {

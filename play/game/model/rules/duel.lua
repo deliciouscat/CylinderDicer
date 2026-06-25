@@ -93,6 +93,24 @@ function M.begin(state, challenger_id, previous_id)
 	}
 end
 
+function M.spin_revolver(state, duel_state, steps)
+	local player_id = duel_state.previous_bidder_id
+	if duel_state.judge.verdict == M.VERDICT.SHORT then
+		player_id = duel_state.challenger_id
+	end
+
+	local player = state.players.by_id[player_id]
+	if not player then
+		return nil
+	end
+
+	player.cylinder = cylinder.spin(player.cylinder, steps)
+	return {
+		player_id = player_id,
+		steps = steps,
+	}
+end
+
 local function apply_hp_changes(players, hp_changes)
 	for player_id, delta in pairs(hp_changes or {}) do
 		local player = players.by_id[player_id]

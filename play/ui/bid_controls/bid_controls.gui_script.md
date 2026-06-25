@@ -28,7 +28,7 @@ local audio     = require("game.core.audio")
 
 function init(self)
     self.store = store_mod.get()
-    gui.acquire_input_focus()
+    msg.post(".", "acquire_input_focus")
     self.subs = {
         self.store:subscribe("bidding", function(s) self:render(s) end),
         self.store:subscribe("turn",    function(s) self:render(s) end),
@@ -59,4 +59,3 @@ function on_input(self, action_id, action)
     end
 end
 ```
-

@@ -757,6 +757,7 @@ handlers[actions.types.BID_CHALLENGE] = function(state, action)
 		return state, nil, err
 	end
 	next.duel = duel.begin(next, challenger_id, previous_id)
+	next.duel.revolver_spin = duel.spin_revolver(next, next.duel, action.payload.spin_steps)
 	next.match.turn_count = next.match.turn_count + 1
 
 	set_hint(next)

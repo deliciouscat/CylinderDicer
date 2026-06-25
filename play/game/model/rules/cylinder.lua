@@ -65,6 +65,29 @@ function M.load(cyl, slot_index)
 	return next, true
 end
 
+function M.spin(cyl, steps)
+	local next = clone_cylinder(cyl)
+	local size = #next.slots
+	if size == 0 then
+		return next
+	end
+
+	local offset = math.floor(steps or 0) % size
+	if offset == 0 then
+		next.chamber_index = 1
+		return next
+	end
+
+	local slots = {}
+	for index = 1, size do
+		local source_index = ((index + offset - 1) % size) + 1
+		slots[index] = next.slots[source_index]
+	end
+	next.slots = slots
+	next.chamber_index = 1
+	return next
+end
+
 function M.load_many(cyl, slots)
 	local next = clone_cylinder(cyl)
 

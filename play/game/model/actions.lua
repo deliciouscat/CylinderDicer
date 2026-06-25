@@ -25,6 +25,16 @@ local function action(type_, payload, meta)
 	}
 end
 
+local function random_int(rng, min, max)
+	if rng and type(rng.int) == "function" then
+		return rng:int(min, max)
+	end
+	if rng and type(rng.random) == "function" then
+		return rng:random(min, max)
+	end
+	return math.random(min, max)
+end
+
 function M.match_init(payload)
 	return action(M.types.MATCH_INIT, payload)
 end
@@ -76,8 +86,10 @@ function M.bid_raise(bid)
 	return action(M.types.BID_RAISE, { bid = bid })
 end
 
-function M.bid_challenge()
-	return action(M.types.BID_CHALLENGE)
+function M.bid_challenge(rng)
+	return action(M.types.BID_CHALLENGE, {
+		spin_steps = random_int(rng, 1, 6),
+	})
 end
 
 function M.duel_resolve_choice(choice)

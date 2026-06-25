@@ -7,6 +7,15 @@ local match_adapter = require("game.net.match_adapter")
 local i18n = require("game.core.i18n")
 local qa_cli = require("game.dev.qa_cli")
 
+local function submit_result_once(self)
+	if self.result_submitted or not self.adapter then
+		return
+	end
+
+	self.result_submitted = true
+	self.adapter:submit_result()
+end
+
 local function start_dev_match(self)
 	if bridge.is_web() then
 		return
@@ -38,15 +47,13 @@ function init(self)
 	self.store = store_mod.create(reducers.initial_state(), reducers.reduce, self.bus)
 	self.adapter = match_adapter.new(bridge, self.store, cosmetics)
 	self.qa_cli = qa_cli.new(self.store)
+	self.match_changed = false
+	self.result_submitted = false
 	i18n.set_locale("ko")
 
 	self.result_sub = self.store:subscribe("match", function(state)
 		self.state = state.match.status
-
-		if state.match.status == "complete" and not self.result_submitted then
-			self.result_submitted = true
-			self.adapter:submit_result()
-		end
+		self.match_changed = true
 	end)
 
 	bridge.install()
@@ -61,6 +68,13 @@ function init(self)
 end
 
 function update(self, dt)
+	if self.match_changed then
+		self.match_changed = false
+		if self.store:get_state().match.status == "complete" then
+			submit_result_once(self)
+		end
+	end
+
 	if self.qa_cli and not bridge.is_web() then
 		qa_cli.poll(self.qa_cli)
 	end
@@ -76,8 +90,8 @@ function update(self, dt)
 end
 
 function on_message(self, message_id)
-	if message_id == hash("submit_result") and self.adapter then
-		self.adapter:submit_result()
+	if message_id == hash("submit_result") then
+		submit_result_once(self)
 	end
 end
 

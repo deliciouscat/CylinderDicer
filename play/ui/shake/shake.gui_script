@@ -2,12 +2,92 @@ local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions = require("game.model.actions")
 local gestures = require("game.core.gestures")
-local audio = require("game.core.audio")
-local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
+local table_seat_layout = require("ui.common.table_seat_layout")
+
+local MAX_OPPONENTS = 5
+local DICE_COUNT = 5
+local DRAG_DISTANCE_PER_SHAKE = 72.0
+local LOCAL_CUP_CLOSED_Y = 8.0
+local LOCAL_CUP_REVEAL_Y = 48.0
+local CUP_WIDTH = 220.0
+local CUP_HEIGHT = 248.0
+
+local PHASE_CUP_SHAKE = "cup_shake"
+local PHASE_DICE_CHECK = "dice_check"
+local PHASE_BIDDING_GAP = "bidding_gap"
+
+local function is_shake_phase(phase)
+	return phase == PHASE_CUP_SHAKE
+		or phase == PHASE_DICE_CHECK
+		or phase == PHASE_BIDDING_GAP
+end
+
+local function visible_player_order(state)
+	local order = {}
+	for _, player_id in ipairs(state.players.order or {}) do
+		local player = state.players.by_id[player_id]
+		if player and not player.eliminated and (player.hp or 0) > 0 then
+			order[#order + 1] = player_id
+		end
+	end
+	return order
+end
+
+local function set_dice_visible(visible)
+	gui_util.set_enabled("dice_tray", visible)
+	for index = 1, DICE_COUNT do
+		gui_util.set_enabled("reveal_dice_" .. tostring(index), visible)
+		gui_util.set_enabled("tray_dice_" .. tostring(index), visible)
+	end
+end
+
+local function render_dice(player)
+	for index = 1, DICE_COUNT do
+		local face = player and player.dice and player.dice[index]
+		local animation = "f" .. tostring(face or 1) .. "_a0"
+		gui_util.play_flipbook("reveal_dice_" .. tostring(index), animation)
+		gui_util.play_flipbook("tray_dice_" .. tostring(index), animation)
+	end
+end
+
+local function render_cup_layout(self, state)
+	local layout = table_seat_layout.build(
+		visible_player_order(state),
+		state.match.local_player_id,
+		{
+			local_cup_y = LOCAL_CUP_CLOSED_Y,
+		}
+	)
+
+	self.local_cup_base_x = layout.local_seat.cup.x
+	for index = 1, MAX_OPPONENTS do
+		local id = "cup_seat_" .. tostring(index)
+		local seat = layout.opponents[index]
+		gui_util.set_enabled(id, seat ~= nil)
+		if seat then
+			gui_util.set_position(id, vmath.vector3(seat.cup.x, seat.cup.y, 0.2))
+			gui_util.set_size(id, vmath.vector3(
+				CUP_WIDTH * seat.cup.scale,
+				CUP_HEIGHT * seat.cup.scale,
+				0.0
+			))
+		end
+	end
+end
+
+local function hint_for_phase(phase)
+	if phase == PHASE_CUP_SHAKE then
+		return "[Space] repeatedly or drag the mouse to shake"
+	end
+	if phase == PHASE_DICE_CHECK then
+		return "Check your dice, then press [Space]"
+	end
+	return "Bidding starts soon"
+end
 
 local function schedule_bidding_open(self, state)
-	if not state.flow or state.flow.phase ~= "bidding_gap" then
+	if selectors.phase(state) ~= PHASE_BIDDING_GAP then
 		self.bidding_gap_armed = false
 		return
 	end
@@ -17,26 +97,45 @@ local function schedule_bidding_open(self, state)
 
 	self.bidding_gap_armed = true
 	local delay = state.flow.dice_check_delay_seconds or 3
-	if timer and timer.delay then
-		timer.delay(delay, false, function()
-			self.bidding_gap_armed = false
-			if self.store and self.store:get_state().flow.phase == "bidding_gap" then
-				self.store:dispatch(actions.bidding_open())
-			end
-		end)
-	else
-		self.store:dispatch(actions.bidding_open())
-	end
+	timer.delay(delay, false, function()
+		self.bidding_gap_armed = false
+		if self.store and selectors.phase(self.store:get_state()) == PHASE_BIDDING_GAP then
+			self.store:dispatch(actions.bidding_open())
+		end
+	end)
 end
 
 local function render(self, state)
-	local active = selectors.is_hud(state, "cup_shake")
+	local phase = selectors.phase(state)
+	local active = is_shake_phase(phase)
 	gui_util.set_enabled("root", active)
-	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
+	if not active then
+		return
+	end
 
-	local player = selectors.local_player(state)
-	local dice = player and player.dice or {}
-	gui_util.set_text("dice_values", table.concat(dice, " "))
+	render_cup_layout(self, state)
+
+	local local_player_id = state.match.local_player_id
+	local local_player = selectors.local_player(state)
+	local status = selectors.shake_status(state, local_player_id)
+	local reveal = phase == PHASE_DICE_CHECK or phase == PHASE_BIDDING_GAP
+
+	if self.last_shake_count and status.count > self.last_shake_count then
+		self.shake_impulse = 0.18
+	end
+	self.last_shake_count = status.count
+	self.local_cup_target_y = reveal and LOCAL_CUP_REVEAL_Y or LOCAL_CUP_CLOSED_Y
+
+	gui_util.set_alpha("cup_local", reveal and 0.78 or 1.0)
+	gui_util.set_text("hint", hint_for_phase(phase))
+	gui_util.set_text("progress", ("%d / %d"):format(status.count, status.required))
+	gui_util.set_enabled("progress", phase == PHASE_CUP_SHAKE)
+
+	set_dice_visible(reveal)
+	if reveal then
+		render_dice(local_player)
+	end
+
 	schedule_bidding_open(self, state)
 end
 
@@ -44,36 +143,118 @@ local function request_render(self)
 	self.needs_render = true
 end
 
+local function dispatch_shake(self)
+	if not self.store then
+		return false
+	end
+
+	local state = self.store:get_state()
+	if selectors.phase(state) ~= PHASE_CUP_SHAKE then
+		return false
+	end
+
+	local player_id = state.match.local_player_id
+	local status = selectors.shake_status(state, player_id)
+	if status.complete then
+		return false
+	end
+
+	local result = self.store:dispatch(actions.shake_roll(player_id))
+	if result and result.ok then
+		self.shake_impulse = 0.18
+		return true
+	end
+	return false
+end
+
+local function dispatch_dice_check(self)
+	if not self.store then
+		return false
+	end
+	local state = self.store:get_state()
+	if selectors.phase(state) ~= PHASE_DICE_CHECK then
+		return false
+	end
+	local result = self.store:dispatch(actions.dice_check(state.match.local_player_id))
+	return result and result.ok == true
+end
+
+local function consume_drag(self, event)
+	local dx = event.dx or 0.0
+	local dy = event.dy or 0.0
+	self.drag_distance = self.drag_distance + math.sqrt(dx * dx + dy * dy)
+
+	while self.drag_distance >= DRAG_DISTANCE_PER_SHAKE do
+		if not dispatch_shake(self) then
+			self.drag_distance = 0.0
+			return
+		end
+		self.drag_distance = self.drag_distance - DRAG_DISTANCE_PER_SHAKE
+	end
+end
+
+local function update_local_cup(self, dt)
+	local target_y = self.local_cup_target_y or LOCAL_CUP_CLOSED_Y
+	self.local_cup_y = self.local_cup_y or target_y
+	self.local_cup_y = self.local_cup_y + (target_y - self.local_cup_y) * math.min(1.0, dt * 10.0)
+
+	local offset_x = 0.0
+	local rotation = 0.0
+	if (self.shake_impulse or 0.0) > 0.0 then
+		self.shake_impulse = math.max(0.0, self.shake_impulse - dt)
+		local wave = math.sin(self.elapsed * 64.0)
+		offset_x = wave * 14.0
+		rotation = wave * 0.055
+	end
+
+	gui.set_position(self.local_cup_node, vmath.vector3(
+		(self.local_cup_base_x or 0.0) + offset_x,
+		self.local_cup_y,
+		0.4
+	))
+	gui.set_rotation(self.local_cup_node, vmath.quat_rotation_z(rotation))
+end
+
 function init(self)
 	self.store = store_mod.get()
 	self.gesture = gestures.new(nil)
 	self.subs = {}
-	self.bidding_gap_armed = false
 	self.needs_render = false
+	self.bidding_gap_armed = false
+	self.drag_distance = 0.0
+	self.elapsed = 0.0
+	self.shake_impulse = 0.0
+	self.local_cup_y = LOCAL_CUP_CLOSED_Y
+	self.local_cup_target_y = LOCAL_CUP_CLOSED_Y
+	self.local_cup_base_x = 0.0
+	self.last_shake_count = nil
+	self.local_cup_node = gui.get_node("cup_local")
+
+	gui.set_render_order(4)
 	gui_util.acquire_input_focus()
+	gui_util.set_enabled("root", false)
+	set_dice_visible(false)
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
-		request_render(self)
-	end)
+	for _, topic in ipairs({ "turn", "players", "shake", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
 
 	render(self, self.store:get_state())
 end
 
 function update(self, dt)
+	self.elapsed = self.elapsed + dt
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())
 	end
+	update_local_cup(self, dt)
 end
 
 function on_input(self, action_id, action)
@@ -81,19 +262,26 @@ function on_input(self, action_id, action)
 		return
 	end
 
-	local state = self.store:get_state()
-	if not state.flow or (state.flow.phase ~= "cup_shake" and state.flow.phase ~= "dice_check") then
+	local phase = selectors.phase(self.store:get_state())
+	if not is_shake_phase(phase) then
 		return
 	end
 
 	local event = self.gesture:feed(action_id, action)
-	if event and event.kind == "shake" then
-		audio.play_sfx("shake")
-		if state.flow.phase == "cup_shake" then
-			self.store:dispatch(actions.shake_roll(state.match.local_player_id))
-		elseif state.flow.phase == "dice_check" then
-			self.store:dispatch(actions.dice_check(state.match.local_player_id))
+	if not event then
+		return
+	end
+
+	if event.kind == "shake" then
+		if phase == PHASE_CUP_SHAKE then
+			dispatch_shake(self)
+		elseif phase == PHASE_DICE_CHECK then
+			dispatch_dice_check(self)
 		end
+	elseif event.kind == "drag" and phase == PHASE_CUP_SHAKE then
+		consume_drag(self, event)
+	elseif event.kind == "drag_end" then
+		self.drag_distance = 0.0
 	end
 end
 
@@ -106,7 +294,12 @@ function on_message(self, message_id)
 	end
 end
 
+function on_reload(self)
+	request_render(self)
+end
+
 function final(self)
+	gui_util.release_input_focus()
 	if self.store then
 		for _, token in ipairs(self.subs or {}) do
 			self.store:unsubscribe(token)

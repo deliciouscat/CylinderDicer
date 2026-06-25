@@ -8,6 +8,8 @@ package.path = table.concat({
 
 local tests = {
 	require("game.model.tests.model_flow_test"),
+	require("game.model.tests.shake_view_test"),
+	require("game.model.tests.cylinder_interaction_test"),
 }
 
 local total = 0

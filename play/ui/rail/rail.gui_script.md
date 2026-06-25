@@ -30,7 +30,7 @@ local gestures  = require("game.core.gestures")
 function init(self)
     self.store = store_mod.get()
     self.gest  = gestures.new(node_bounds("track"))
-    gui.acquire_input_focus()
+    msg.post(".", "acquire_input_focus")
     self.sub = self.store:subscribe("bidding", function(s) self:render(s) end)
     self:render(self.store:get_state())
 end
@@ -57,4 +57,3 @@ function on_input(self, action_id, action)
     end
 end
 ```
-

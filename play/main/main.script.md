@@ -1,5 +1,5 @@
 # 개요
-엔트리 포인트이자 Composition Root. Defold가 부팅하면 가장 먼저 실행되어 인프라 singleton(event_bus, store, i18n, cosmetics)을 한 번 생성·주입하고, 외부 경계(game_bridge)를 설치한 뒤 Controller(director)를 깨운다. 매 프레임 bridge 큐를 펌프해 외부 메시지를 adapter로 위임한다. 게임 규칙은 직접 다루지 않는다.
+엔트리 포인트이자 Composition Root. Defold가 부팅하면 가장 먼저 실행되어 인프라 singleton(event_bus, store, i18n, cosmetics)을 한 번 생성·주입하고, 외부 경계(game_bridge)를 설치한 뒤 Controller(director)를 깨운다. 매 프레임 bridge 큐를 펌프해 외부 메시지를 adapter로 위임하고, 매치 종료 결과를 한 번만 제출한다. 게임 규칙은 직접 다루지 않는다.
 
 # 의존성
 - `main/game_bridge.lua`: Vue ↔ Defold 메시지 transport 설치/펌프.
@@ -17,6 +17,7 @@
   - infra singleton 구성(주입).
   - `DEFOLD_READY` emit.
   - director boot 메시지.
+  - 매치 완료 시 `SUBMIT_MATCH_RESULT` emit.
 
 # 의사코드
 ```lua
@@ -63,6 +64,13 @@ function init(self)
 end
 
 function update(self, dt)
+    -- Store callback은 match dirty flag만 기록한다.
+    -- 실제 bridge 호출은 main script lifecycle에서 한 번만 수행한다.
+    if self.match_changed and self.store:get_state().match.status == "complete" then
+        self.match_changed = false
+        self:submit_result_once()
+    end
+
     -- Pattern: 외부 메시지 펌프. bridge 큐 -> adapter -> store.dispatch
     -- main은 메시지 의미를 해석하지 않고 adapter에 위임만 한다.
     while true do

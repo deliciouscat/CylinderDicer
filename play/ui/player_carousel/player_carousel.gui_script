@@ -1,6 +1,7 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local gui_util = require("ui.common.gui_util")
+local table_seat_layout = require("ui.common.table_seat_layout")
 
 local MAX_SLOTS = 6
 local CENTER_PREVIOUS_SLOT = 3
@@ -11,6 +12,11 @@ local TEXTURE_BY_SKIN = {
 	["hush-feather"] = "hush_feather",
 	["samuel-saber"] = "samuel_saber",
 	["zippo-jay"] = "zippo_jay",
+}
+local SHAKE_PHASES = {
+	cup_shake = true,
+	dice_check = true,
+	bidding_gap = true,
 }
 
 local function color(r, g, b, a)
@@ -80,18 +86,22 @@ local function visual_slots(state)
 	return slots
 end
 
-local function set_slot(index, player, focus)
-	local prefix = "slot" .. tostring(index)
-	local visible = player ~= nil
-
-	gui_util.set_enabled(prefix .. "_body", visible)
-	gui_util.set_enabled(prefix .. "_head", false)
+local function set_meta_enabled(prefix, visible)
 	gui_util.set_enabled(prefix .. "_bullet_badge", visible)
 	gui_util.set_enabled(prefix .. "_bullets", visible)
 	gui_util.set_enabled(prefix .. "_hp_badge", visible)
 	gui_util.set_enabled(prefix .. "_hp", visible)
 	gui_util.set_enabled(prefix .. "_name", visible)
 	gui_util.set_enabled(prefix .. "_marker", visible)
+end
+
+local function set_slot(index, player, focus, show_meta)
+	local prefix = "slot" .. tostring(index)
+	local visible = player ~= nil
+
+	gui_util.set_enabled(prefix .. "_body", visible)
+	gui_util.set_enabled(prefix .. "_head", false)
+	set_meta_enabled(prefix, visible and show_meta)
 
 	if not player then
 		return
@@ -114,17 +124,88 @@ local function set_slot(index, player, focus)
 	gui_util.play_flipbook(prefix .. "_body", player.portrait_state or "front")
 end
 
-local function render(self, state)
+local function restore_body(self, index)
+	local defaults = self.body_defaults[index]
+	if not defaults then
+		return
+	end
+	local id = "slot" .. tostring(index) .. "_body"
+	gui_util.set_position(id, defaults.position)
+	gui_util.set_scale(id, defaults.scale)
+	gui_util.set_size(id, defaults.size)
+end
+
+local function render_standard(self, state)
+	gui_util.set_enabled("players", true)
 	gui_util.set_text("players", player_summary(state))
 	local slots = visual_slots(state)
 
 	for index = 1, MAX_SLOTS do
+		restore_body(self, index)
 		local player_id = slots[index]
 		local player = player_id and state.players.by_id[player_id] or nil
 		set_slot(index, player, {
 			active = player_id == state.turn.active_player_id,
 			previous = player_id == state.turn.previous_player_id,
-		})
+		}, true)
+	end
+end
+
+local function alive_order(state)
+	local order = {}
+	for _, player_id in ipairs(state.players.order or {}) do
+		local player = state.players.by_id[player_id]
+		if player and not player.eliminated and (player.hp or 0) > 0 then
+			order[#order + 1] = player_id
+		end
+	end
+	return order
+end
+
+local function opponent_seats_by_id(layout)
+	local result = {}
+	for _, seat in ipairs(layout.opponents or {}) do
+		result[seat.player_id] = seat
+	end
+	return result
+end
+
+local function render_shake_arc(self, state)
+	gui_util.set_enabled("players", false)
+	local order = alive_order(state)
+	local layout = table_seat_layout.build(order, state.match.local_player_id)
+	local opponents = opponent_seats_by_id(layout)
+
+	for index = 1, MAX_SLOTS do
+		local player_id = order[index]
+		local player = player_id and state.players.by_id[player_id] or nil
+		set_slot(index, player, {
+			active = false,
+			previous = false,
+		}, false)
+
+		if player then
+			local visual = player_id == state.match.local_player_id
+				and layout.local_seat.character
+				or opponents[player_id].character
+			local id = "slot" .. tostring(index) .. "_body"
+			gui_util.set_position(id, vmath.vector3(visual.x, visual.y, 0.1))
+			gui_util.set_size(id, vmath.vector3(
+				190.0 * visual.scale,
+				270.0 * visual.scale,
+				0.0
+			))
+			gui_util.set_scale(id, vmath.vector3(1.0, 1.0, 1.0))
+			gui_util.set_alpha(id, player_id == state.match.local_player_id and 0.42 or 0.32)
+		end
+	end
+end
+
+local function render(self, state)
+	if SHAKE_PHASES[selectors.phase(state)] then
+		render_shake_arc(self, state)
+	else
+		render_standard(self, state)
 	end
 end
 
@@ -132,10 +213,26 @@ local function request_render(self)
 	self.needs_render = true
 end
 
+local function cache_body_defaults(self)
+	self.body_defaults = {}
+	for index = 1, MAX_SLOTS do
+		local node = gui_util.node("slot" .. tostring(index) .. "_body")
+		if node then
+			self.body_defaults[index] = {
+				position = gui.get_position(node),
+				scale = gui.get_scale(node),
+				size = gui.get_size(node),
+			}
+		end
+	end
+end
+
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
 	self.needs_render = false
+	gui.set_render_order(3)
+	cache_body_defaults(self)
 
 	if not self.store then
 		return
@@ -145,6 +242,9 @@ function init(self)
 		request_render(self)
 	end)
 	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
+		request_render(self)
+	end)
+	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
 		request_render(self)
 	end)
 

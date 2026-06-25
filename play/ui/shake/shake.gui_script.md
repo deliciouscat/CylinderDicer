@@ -1,5 +1,5 @@
 # 개요
-shake 입력을 `shake.roll` action으로 변환하고, 굴림 결과를 화면에 표시한다.
+shake 입력을 기존 `shake.roll` action으로 변환하고, 컵 배치와 주사위 확인 화면을 표시한다.
 
 # 의존성
 - `game/model/store.lua`: dispatch/subscribe.
@@ -15,12 +15,12 @@ shake 입력을 `shake.roll` action으로 변환하고, 굴림 결과를 화면�
   - `turn`, `players` topics.
 - 출력:
   - `shake.roll` action.
+  - cup shake/lift animation.
   - dice/result GUI update.
-  - audio request.
 
 # 의사코드
 ```lua
--- Pattern: View = Observer + gesture Adapter. drag/space -> shake.roll (1회).
+-- Pattern: View = Observer + gesture Adapter. space 또는 drag 거리 임계 -> shake.roll.
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions   = require("game.model.actions")
@@ -30,11 +30,8 @@ local audio     = require("game.core.audio")
 function init(self)
     self.store = store_mod.get()
     self.gest  = gestures.new(nil)
-    gui.acquire_input_focus()
-    self.subs = {
-        self.store:subscribe("turn",    function(s) self:on_turn(s) end),
-        self.store:subscribe("players", function(s) self:render(s) end),
-    }
+    msg.post(".", "acquire_input_focus")
+    -- subscribe callback은 dirty flag만 설정하고 실제 gui.* 호출은 update에서 수행.
     self:render(self.store:get_state())
 end
 
@@ -47,14 +44,14 @@ function on_input(self, action_id, action)
     if not self.armed then return end
     local e = self.gest:feed(action_id, action)
     if e and e.kind == "shake" then
-        self.armed = false
         audio.play_sfx("shake")
-        self.store:dispatch(actions.shake_roll(self.store:get_state().match.local_player_id, new_rng()))
+        self.store:dispatch(actions.shake_roll(self.store:get_state().match.local_player_id))
     end
 end
 
 function render(self, s)
-    show_hint(); render_reveal(selectors.local_player(s).dice)   -- 굴림 결과 표시
+    layout_cups(table_seat_layout.build(...))
+    render_progress(selectors.shake_status(s, s.match.local_player_id))
+    render_phase(s.flow.phase)
 end
 ```
-

@@ -453,9 +453,11 @@ state = {
    - `exact_duel`: 정확 판정 보상 장전.
    - 필수 표시: 장전 대상 player, 남은 장전 수, clickable cylinder 안내, 완료 후 다음 phase.
 3. Shake / Dice Check HUD 정리.
-   - `cup_shake`: 컵 등장, 흔들기 진행도.
-   - `dice_check`: 내 주사위 확인 + 확인 입력.
+   - `cup_shake`: `player_carousel`의 반원 player arc와 `shake.gui`의 플레이어별 컵 표시, 흔들기 진행도.
+   - `dice_check`: 로컬 컵 상승, 내 주사위 공개와 하단 트레이, 확인 입력.
    - `bidding_gap`: 입찰 시작 전 짧은 대기 안내.
+   - 캐릭터와 컵은 `ui/common/table_seat_layout.lua`의 플레이 인원별 반원 좌석 배치를 공유한다.
+   - 기존 world `/cup`은 제거하고 컵 visual 소유권을 `shake.gui`로 일원화한다.
 4. Bidding HUD 완성.
    - rail, count/face 선택, 넘기기/pass, 결투신청/challenge.
    - 현재 bid, 직전 caller, 현재 player 표시.

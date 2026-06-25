@@ -31,7 +31,7 @@ local duel_sequence  = require("ui.duel.duel_sequence")
 
 function init(self)
     self.store = store_mod.get()
-    gui.acquire_input_focus()
+    msg.post(".", "acquire_input_focus")
     self.sub = self.store:subscribe("duel", function(s) self:on_duel(s) end)
 end
 

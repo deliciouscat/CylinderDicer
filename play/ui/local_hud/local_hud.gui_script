@@ -25,7 +25,7 @@ local function render(self, state)
 		return
 	end
 
-	local active = selectors.is_hud(state, "cup_shake") or selectors.is_hud(state, "bidding")
+	local active = selectors.is_hud(state, "bidding")
 	gui_util.set_enabled("root", active)
 	gui_util.set_text("name", player.name or player.id)
 	gui_util.set_text("hp", player.hp or 0)

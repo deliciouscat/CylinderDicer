@@ -113,6 +113,7 @@ function on_input(self, action_id, action)
 end
 
 function final(self)
+	gui_util.release_input_focus()
 	if self.store then
 		for _, token in ipairs(self.subs or {}) do
 			self.store:unsubscribe(token)

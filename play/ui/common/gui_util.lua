@@ -1,97 +1,78 @@
 local M = {}
 
 function M.node(id)
-	if not gui or not gui.get_node then
-		return nil
-	end
-
-	local ok, node = pcall(gui.get_node, id)
-	if ok then
-		return node
-	end
-	return nil
+	return gui.get_node(id)
 end
 
 function M.set_text(id, value)
 	local node = M.node(id)
-	if node and gui.set_text then
-		gui.set_text(node, tostring(value or ""))
-	end
+	gui.set_text(node, tostring(value or ""))
 end
 
 function M.set_enabled(id, enabled)
 	local node = M.node(id)
-	if node and gui.set_enabled then
-		gui.set_enabled(node, enabled == true)
-	end
+	gui.set_enabled(node, enabled == true)
 end
 
 function M.set_color(id, color)
 	local node = M.node(id)
-	if node and gui.set_color then
-		gui.set_color(node, color)
-	end
+	gui.set_color(node, color)
 end
 
 function M.set_alpha(id, alpha)
 	local node = M.node(id)
-	if node and gui.set_alpha then
-		gui.set_alpha(node, alpha)
-	end
+	gui.set_alpha(node, alpha)
 end
 
 function M.set_texture(id, texture)
 	local node = M.node(id)
-	if node and gui.set_texture then
-		pcall(gui.set_texture, node, texture)
-	end
+	gui.set_texture(node, texture)
 end
 
 function M.play_flipbook(id, animation)
 	local node = M.node(id)
-	if node and gui.play_flipbook then
-		pcall(gui.play_flipbook, node, animation)
-	end
+	gui.play_flipbook(node, animation)
 end
 
 function M.set_position(id, position)
 	local node = M.node(id)
-	if node and gui.set_position then
-		gui.set_position(node, position)
-	end
+	gui.set_position(node, position)
 end
 
 function M.set_scale(id, scale)
 	local node = M.node(id)
-	if node and gui.set_scale then
-		gui.set_scale(node, scale)
-	end
+	gui.set_scale(node, scale)
+end
+
+function M.set_size(id, size)
+	local node = M.node(id)
+	gui.set_size(node, size)
+end
+
+function M.set_rotation(id, rotation)
+	local node = M.node(id)
+	gui.set_rotation(node, rotation)
 end
 
 function M.world_position(id)
 	local node = M.node(id)
-	if node and gui.get_screen_position then
+	if gui.get_screen_position then
 		return gui.get_screen_position(node)
 	end
-	if node and gui.get_position then
-		return gui.get_position(node)
-	end
-	return nil
+	return gui.get_position(node)
 end
 
 function M.pick(id, x, y)
 	local node = M.node(id)
-	if node and gui.pick_node then
-		local ok, picked = pcall(gui.pick_node, node, x, y)
-		return ok and picked == true
-	end
-	return false
+	return gui.pick_node(node, x, y)
 end
 
 function M.acquire_input_focus()
-	if gui and gui.acquire_input_focus then
-		gui.acquire_input_focus()
-	end
+	msg.post(".", "acquire_input_focus")
+end
+
+function M.release_input_focus()
+	msg.post(".", "release_input_focus")
 end
 
 return M

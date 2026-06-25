@@ -50,20 +50,17 @@ app = Stack(
 )
 ```
 
-#### 배경 / 컵 world prop
+#### 배경 / cup shake GUI
 
 ```
 # 배경은 단일 세로 파노라마 sprite다. 1280x720 viewport 너비에 맞게 scale하고,
 # background GO의 y 위치를 tween해서 위/아래 시점을 전환한다.
 backgroundPanorama = Sprite("/assets/images/backgrounds/default/background.png")
 
-# 컵은 GUI node가 아니라 테이블 위 world prop이다.
-# bidding/setup의 상단 시점에서는 화면 아래에 대기하고,
-# shaking/dualing의 테이블 시점으로 background가 이동하면서 같이 등장한다.
-# shake.gui는 cup visual을 소유하지 않고, shake 입력/힌트/결과 텍스트만 소유한다.
-tableProps = {
-    cup = Sprite("/assets/atlases/props_default.atlas#cup"),
-}
+# cup_shake 화면의 컵은 shake.gui가 소유한다.
+# 로컬 컵은 화면 중앙 전경, 상대 컵은 player arc와 같은 반원 좌석에 배치한다.
+# cup_shake에서는 모든 컵이 닫혀 있고, dice_check에서는 로컬 컵만 위로 올라간다.
+# 캐릭터와 컵은 ui/common/table_seat_layout.lua의 좌석 결과를 공유한다.
 ```
 
 #### 위치 앵커 — cylinder가 오갈 좌표만 제공 (그리기 X)
@@ -378,7 +375,7 @@ def DuelResolution(duel, judge):
 
 ```
 # 배경은 shaking = "테이블 있는 하단 위치".
-# 컵은 배경/테이블 prop으로 함께 등장한다. shake.gui에는 컵 노드를 만들지 않는다.
+# player_carousel은 shake용 player arc를 표시하고, shake.gui는 같은 좌석에 컵을 표시한다.
 # 흔들기로 주사위를 굴려 랜덤 배정(DiceTray에 결과 표시) 후,
 # pendingLoad가 있으면 cylinder가 focal로 등장해 장전:
 #   - setup / exact_duel: 3발

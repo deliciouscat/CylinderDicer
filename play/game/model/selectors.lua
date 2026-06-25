@@ -48,6 +48,18 @@ function M.hint_key(state)
 	return state.ui.hint_key
 end
 
+function M.shake_status(state, player_id)
+	local shake = state.shake or {}
+	local required = math.max(1, shake.required_count or 1)
+	local count = math.max(0, (shake.counts or {})[player_id] or 0)
+	return {
+		count = count,
+		required = required,
+		ratio = math.min(1.0, count / required),
+		complete = count >= required,
+	}
+end
+
 function M.phase(state)
 	return state.flow and state.flow.phase or "waiting"
 end
@@ -62,23 +74,6 @@ end
 
 function M.background_location(state)
 	return BG_BY_HUD[M.hud_kind(state)] or "shaking"
-end
-
-function M.turn_label_key(state)
-	local hud = M.hud_kind(state)
-	if hud == "revolver_reload" then
-		return "turn.reload"
-	end
-	if hud == "bidding" then
-		return M.is_my_turn(state) and "turn.mine" or "turn.opponent"
-	end
-	if hud == "duel" then
-		return "turn.duel"
-	end
-	if hud == "cup_shake" then
-		return "turn.shake"
-	end
-	return "hud.hint.complete"
 end
 
 function M.last_alive_player(state)
