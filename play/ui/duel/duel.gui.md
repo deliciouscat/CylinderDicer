@@ -3,28 +3,40 @@
 
 # 의존성
 - `duel.gui_script`
-- `ui/common/dice_face.gui`
-- `ui/common/badge.gui`
-- `assets/images/characters/*`
+- `assets/atlases/dices/dice_default.atlas`
+- `assets/atlases/props_default.atlas`
+- `assets/atlases/charcters/*`
 
 # I/O
 - 입력:
   - duel state.
   - sequence step.
 - 출력:
-  - dice spread.
-  - judge label.
+  - cup lift + dice reveal.
+  - called-face/skull count grid.
   - combat portraits.
+  - HP/bullet badges.
   - hit/miss effects.
 
 # 의사코드
 ```text
-# Pattern: 단계별 노출 node tree. duel.gui_script의 step에 따라 부분 노출/애니메이션.
+# Pattern: 고정 HUD node + 반복 주사위 runtime clone.
 root (box)
-├─ dice_spread (box) -> 플레이어별 dice_face 그룹   # reveal 단계
-├─ verdict (label)                                 # i18n: duel.verdict.SHORT/OVER/EXACT
-├─ portrait_left (sprite)                          # 전 턴(또는 맞춘 사람)
-├─ portrait_right (sprite)                         # 도전자/지목 대상
-└─ fx (box)                                        # 철컥/탕 hit/miss 이펙트
+├─ reveal_group
+│  ├─ title/title_box                              # reveal 단계
+│  ├─ duel_cup_{1..6}                              # reveal 단계 컵
+│  ├─ grid_panel                                   # 집계 영역
+│  │  └─ grid_dice_template                        # grid 좌표계 clone template
+│  └─ tray                                         # 로컬 패 요약
+│     └─ tray_dice_template                        # tray 좌표계 clone template
+├─ combat_group
+│  ├─ combat_left_body / combat_right_body         # 집행 단계 일러스트
+│  ├─ left/right HP·bullet badges                  # 집행 단계 상태
+│  ├─ combat_status / combat_shot / combat_result  # 판정/step/결과
+│  └─ hit_flash                                    # 명중 이펙트
+└─ template_group
+   └─ player_dice_template                         # root 좌표계 clone template
 ```
 
+# 메모
+반복되는 주사위 노드는 `.gui`에 직접 65개를 두지 않는다. `player_dice_template`, `grid_dice_template`, `tray_dice_template`만 두고 `duel.gui_script`가 런타임에 clone한다. `reveal_group`과 `combat_group`은 phase별 visibility 경계다.

@@ -55,7 +55,9 @@ handlers[actions.types.SHAKE_ROLL] = function(state, a)
     next.shake.counts[a.payload.player_id] = (next.shake.counts[a.payload.player_id] or 0) + 1
     if next.shake.counts[a.payload.player_id] < 6 then return next, { "shake", "ui" } end
     -- 6회 완료 시 전원 dice roll.
-    -- 최초 shake면 dice_check로, 이후 shake면 active player 1발 reload 후 dice_check로.
+    -- 최초 shake면 dice_check로.
+    -- 이후 shake면 shake.reload_player_id가 있을 때 해당 플레이어 1발 reload 후 dice_check로.
+    -- 결투 후 shake인데 reload_player_id가 없으면 추가 reload 없이 dice_check로.
     -- transition: cup_shake -> shake_complete_first/shake_complete_reload/shake_complete_no_reload
     return next, { "players", "turn", "flow", "shake", "ui" }
 end
@@ -92,7 +94,7 @@ handlers[actions.types.BULLET_LOAD] = function(state, a)
     pending_player.cylinder = (cylinder.load(pending_player.cylinder, a.payload.slot_index)) -- 빈 칸만
     next.pending_load = cylinder.consume_pending(next.pending_load)
     -- setup -> cup_shake
-    -- shake reload -> dice_check
+    -- shake/duel reload -> dice_check
     -- bid reload -> bidding
     -- exact_duel reload -> cup_shake
     -- transition: revolver_reload -> reload_complete_*
@@ -111,8 +113,8 @@ end
 handlers[actions.types.ROUND_ADVANCE] = function(state, a)
     local next = clone(state)
     local resolution = duel.resolve(next, next.duel) -- cylinder consume + hp changes를 여기서 한 번만 수행
-    -- SHORT/OVER: 바로 cup_shake.
-    -- EXACT: 맞춘 사람(previous_bidder)만 3발 reload 후 cup_shake.
+    -- SHORT/OVER: 바로 cup_shake. 실제 총알이 소진됐다면 다음 shake 후 소진한 플레이어만 duel reload 1발.
+    -- EXACT: 맞춘 사람(previous_bidder)만 3발 reload 후 cup_shake. 이후 active player 추가 reload는 없음.
     -- 생존자가 1명 이하이면 complete.
     -- transition: duel -> match_complete/exact_reload/round_shake
     return next, { "match", "players", "turn", "bidding", "duel", "flow", "shake", "ui" }

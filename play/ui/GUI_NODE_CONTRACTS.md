@@ -13,12 +13,13 @@
 
 | `flow.phase` | HUD kind | 활성 component | turn indicator |
 | --- | --- | --- | --- |
-| `revolver_reload` | `revolver_reload` | `turn_indicator`, `player_carousel`, `cylinder_overlay` | `turn.reload` |
+| `revolver_reload` + local pending load | `revolver_reload` | `turn_indicator`, `player_carousel`, `cylinder_overlay` | `turn.reload` |
+| `revolver_reload` + opponent pending load | `loading` | `turn_indicator` | `turn.loading` |
 | `cup_shake` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
 | `dice_check` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
 | `bidding_gap` | `cup_shake` | `turn_indicator`, `player_carousel`, `shake` | `turn.shake` |
 | `bidding` | `bidding` | `turn_indicator`, `player_carousel`, `rail`, `local_hud`, `bid_controls`, `cylinder_overlay` | `turn.mine` / `turn.opponent` |
-| `duel` | `duel` | `turn_indicator`, `duel` | `turn.duel` |
+| `duel` | `duel` | `turn_indicator`, `player_carousel`, `duel` | `turn.duel` |
 | `complete` | `complete` | `turn_indicator`, `duel` 또는 result HUD | `hud.hint.complete` |
 
 ## turn_indicator.gui
@@ -94,10 +95,21 @@ msg.post("#rail", "select_count", { count = 7 })
 ## duel.gui
 
 - `root`: 전체 컨테이너.
-- `step`: 현재 duel sequence step.
-- `dice_spread`: 공개된 dice 요약.
-- `verdict`: SHORT/OVER/EXACT 판정.
-- `fx`: HIT/MISS/COMPLETE 임시 표시.
+- `reveal_group`: 패 공개 화면 컨테이너. 공개 단계에서만 표시한다.
+- `combat_group`: duel 집행 화면 컨테이너. 집행 단계에서만 표시한다.
+- `template_group`: root 좌표계 runtime clone template 컨테이너.
+- `title`: 패 공개 제목.
+- `duel_cup_{1..6}`: 공개 연출용 컵.
+- `grid_panel`: 해골과 bidding된 눈 집계 영역.
+- `bid_summary`, `actual_summary`: 현재 콜과 공개된 실제 개수.
+- `hint`: 패 공개 안내.
+- `combat_shade`, `vignette_top`, `vignette_bottom`: duel 집행 중 shading/vignette.
+- `combat_left_body`, `combat_right_body`: 결투 참여자 일러스트.
+- `combat_left_name`, `combat_right_name`: 참여자 이름.
+- `left_bullets`, `left_hp`, `right_bullets`, `right_hp`: 참여자 탄/HP.
+- `combat_status`, `combat_shot`, `combat_result`: 판정, 현재 roulette step, hit/miss 결과.
+- `hit_flash`: 명중 이펙트 placeholder.
+- `player_dice_template`, `grid_dice_template`, `tray_dice_template`: 반복 주사위 runtime clone용 template. 에디터에 65개 반복 노드를 직접 두지 않는다. `grid_dice_template`과 `tray_dice_template`는 각각 `grid_panel`, `tray` 좌표계에 남긴다.
 
 ## cylinder_overlay.gui / cylinder_overlay.script
 

@@ -13,10 +13,11 @@ local TEXTURE_BY_SKIN = {
 	["samuel-saber"] = "samuel_saber",
 	["zippo-jay"] = "zippo_jay",
 }
-local SHAKE_PHASES = {
+local ARC_PHASES = {
 	cup_shake = true,
 	dice_check = true,
 	bidding_gap = true,
+	duel = true,
 }
 
 local function color(r, g, b, a)
@@ -202,7 +203,7 @@ local function render_shake_arc(self, state)
 end
 
 local function render(self, state)
-	if SHAKE_PHASES[selectors.phase(state)] then
+	if ARC_PHASES[selectors.phase(state)] then
 		render_shake_arc(self, state)
 	else
 		render_standard(self, state)

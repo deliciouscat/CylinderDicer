@@ -68,9 +68,22 @@ local function next_alive_after(players, player_id)
 		return order[1]
 	end
 
-	for i, id in ipairs(order) do
+	local all_order = players.order or {}
+	local start_index
+	for i, id in ipairs(all_order) do
 		if id == player_id then
-			return order[(i % #order) + 1]
+			start_index = i
+			break
+		end
+	end
+
+	if start_index then
+		for offset = 1, #all_order do
+			local candidate_id = all_order[((start_index + offset - 1) % #all_order) + 1]
+			local candidate = players.by_id[candidate_id]
+			if candidate and not candidate.eliminated and (candidate.hp or 0) > 0 then
+				return candidate_id
+			end
 		end
 	end
 

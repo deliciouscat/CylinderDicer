@@ -1,107 +1,604 @@
-local store_mod = require("game.model.store")
-local actions = require("game.model.actions")
 local i18n = require("game.core.i18n")
-local audio = require("game.core.audio")
+local actions = require("game.model.actions")
+local store_mod = require("game.model.store")
 local gui_util = require("ui.common.gui_util")
-local duel_sequence = require("ui.duel.duel_sequence")
+local table_seat_layout = require("ui.common.table_seat_layout")
 
-local function apply_step(self, step)
-	gui_util.set_text("step", step.name)
+local MAX_PLAYERS = 6
+local DICE_COUNT = 5
+local GRID_MAX = 30
+local REVEAL_INTERVAL = 0.16
+local REVEAL_DURATION = 0.34
+local REVEAL_HOLD_SECONDS = 3.0
+local CUP_WIDTH = 180.0
+local CUP_HEIGHT = 202.0
+local EXECUTE_INTRO_SECONDS = 0.45
+local ROULETTE_STEP_SECONDS = 0.66
+local PERFECT_DUEL_STEP_SECONDS = 1.18
+local HIT_APPLY_PROGRESS = 0.42
+local EXECUTE_COMPLETE_HOLD_SECONDS = 1.0
 
-	if step.name == "reveal_dice" then
-		local names = {}
-		for _, player in ipairs(step.payload.players or {}) do
-			names[#names + 1] = (player.name or player.id) .. ":" .. table.concat(player.dice or {}, " ")
-		end
-		gui_util.set_text("dice_spread", table.concat(names, " | "))
-	elseif step.name == "judge" then
-		local verdict = step.payload and step.payload.verdict or "UNKNOWN"
-		gui_util.set_text("verdict", i18n.t("duel.verdict." .. verdict))
-	elseif step.name == "shot" then
-		local hit = step.payload and step.payload.hit
-		gui_util.set_text("fx", hit and "HIT" or "MISS")
-	elseif step.name == "complete" then
-		gui_util.set_text("fx", "COMPLETE")
-	end
+local TEXTURE_BY_SKIN = {
+	["rosemund"] = "rosemund",
+	["hush-feather"] = "hush_feather",
+	["samuel-saber"] = "samuel_saber",
+	["zippo-jay"] = "zippo_jay",
+}
 
-	if step.sound then
-		audio.play_sfx(step.sound)
+local REVEAL_NODE_IDS = {
+	"reveal_group",
+}
+
+local COMBAT_NODE_IDS = {
+	"combat_group",
+}
+
+local DICE_OFFSETS = {
+	{ x = -50.0, y = -8.0 },
+	{ x = -22.0, y = 12.0 },
+	{ x = 8.0, y = -12.0 },
+	{ x = 38.0, y = 10.0 },
+	{ x = 64.0, y = -12.0 },
+}
+
+local function ease(value)
+	local t = math.max(0.0, math.min(1.0, value))
+	return t * t * (3.0 - 2.0 * t)
+end
+
+local function clamp01(value)
+	return math.max(0.0, math.min(1.0, value or 0.0))
+end
+
+local function set_nodes_enabled(ids, enabled)
+	for _, id in ipairs(ids) do
+		gui_util.set_enabled(id, enabled)
 	end
 end
 
-local function advance(self)
-	self.index = (self.index or 0) + 1
-	local step = self.steps and self.steps[self.index]
+local function set_node_enabled(node, enabled)
+	if node then
+		gui.set_enabled(node, enabled == true)
+	end
+end
 
-	if not step or step.name == "complete" then
-		if self.store then
+local function set_node_position(node, position)
+	if node then
+		gui.set_position(node, position)
+	end
+end
+
+local function set_node_size(node, size)
+	if node then
+		gui.set_size(node, size)
+	end
+end
+
+local function set_node_alpha(node, alpha)
+	if node then
+		gui.set_alpha(node, alpha)
+	end
+end
+
+local function play_node_flipbook(node, animation)
+	if node then
+		gui.play_flipbook(node, animation)
+	end
+end
+
+local function clone_template(template_id)
+	local template = gui_util.node(template_id)
+	local node = gui.clone(template)
+	gui.set_enabled(node, false)
+	return node
+end
+
+local function build_runtime_nodes(self)
+	self.player_dice_nodes = {}
+	for player_index = 1, MAX_PLAYERS do
+		self.player_dice_nodes[player_index] = {}
+		for dice_index = 1, DICE_COUNT do
+			self.player_dice_nodes[player_index][dice_index] = clone_template("player_dice_template")
+		end
+	end
+
+	self.grid_dice_nodes = {}
+	for index = 1, GRID_MAX do
+		self.grid_dice_nodes[index] = clone_template("grid_dice_template")
+	end
+
+	self.tray_dice_nodes = {}
+	for index = 1, DICE_COUNT do
+		self.tray_dice_nodes[index] = clone_template("tray_dice_template")
+	end
+
+	gui_util.set_enabled("player_dice_template", false)
+	gui_util.set_enabled("grid_dice_template", false)
+	gui_util.set_enabled("tray_dice_template", false)
+end
+
+local function snapshot_by_id(duel)
+	local result = {}
+	for _, player in ipairs((duel and duel.players) or {}) do
+		result[player.id] = player
+	end
+	return result
+end
+
+local function player_by_id(state, player_id)
+	return state.players.by_id[player_id]
+end
+
+local function player_name(player)
+	return player and (player.name or player.id) or "-"
+end
+
+local function texture_name(player)
+	return player and (TEXTURE_BY_SKIN[player.skin] or TEXTURE_BY_SKIN[player.id]) or "rosemund"
+end
+
+local function alive_order(state)
+	local order = {}
+	for _, player_id in ipairs(state.players.order or {}) do
+		local player = state.players.by_id[player_id]
+		if player and not player.eliminated and (player.hp or 0) > 0 then
+			order[#order + 1] = player_id
+		end
+	end
+	return order
+end
+
+local function opponent_seats_by_id(layout)
+	local result = {}
+	for _, seat in ipairs(layout.opponents or {}) do
+		result[seat.player_id] = seat
+	end
+	return result
+end
+
+local function reveal_progress(self, index)
+	local elapsed = (self.reveal_elapsed or 0.0) - (index - 1) * REVEAL_INTERVAL
+	if elapsed <= 0.0 then
+		return 0.0
+	end
+	return ease(elapsed / REVEAL_DURATION)
+end
+
+local function hide_player_slot(self, index)
+	gui_util.set_enabled("duel_cup_" .. tostring(index), false)
+	for dice_index = 1, DICE_COUNT do
+		set_node_enabled(self.player_dice_nodes[index] and self.player_dice_nodes[index][dice_index], false)
+	end
+end
+
+local function hide_unused_players(self, count)
+	for index = count + 1, MAX_PLAYERS do
+		hide_player_slot(self, index)
+	end
+end
+
+local function hide_reveal_nodes(self)
+	set_nodes_enabled(REVEAL_NODE_IDS, false)
+	for index = 1, MAX_PLAYERS do
+		hide_player_slot(self, index)
+	end
+	for index = 1, GRID_MAX do
+		set_node_enabled(self.grid_dice_nodes[index], false)
+	end
+	for index = 1, DICE_COUNT do
+		set_node_enabled(self.tray_dice_nodes[index], false)
+	end
+end
+
+local function hide_combat_nodes()
+	set_nodes_enabled(COMBAT_NODE_IDS, false)
+end
+
+local function dice_animation(face)
+	return "f" .. tostring(face or 1) .. "_a0"
+end
+
+local function render_player_dice(self, index, player, seat, is_local, progress)
+	local scale = is_local and 0.86 or (0.64 + (seat.depth or 0.0) * -0.08)
+	local dice_size = is_local and 56.0 or 46.0
+	local anchor_y = seat.cup.y - (is_local and 78.0 or 64.0)
+	for dice_index = 1, DICE_COUNT do
+		local node = self.player_dice_nodes[index] and self.player_dice_nodes[index][dice_index]
+		local face = player.dice and player.dice[dice_index]
+		local offset = DICE_OFFSETS[dice_index]
+		set_node_enabled(node, progress > 0.02 and face ~= nil)
+		if face then
+			set_node_position(node, vmath.vector3(
+				seat.cup.x + offset.x * scale,
+				anchor_y + offset.y * scale,
+				0.42 + dice_index * 0.01
+			))
+			set_node_size(node, vmath.vector3(dice_size * scale, dice_size * scale, 0.0))
+			set_node_alpha(node, progress)
+			play_node_flipbook(node, dice_animation(face))
+		end
+	end
+end
+
+local function render_player_cup(index, seat, is_local, progress)
+	local id = "duel_cup_" .. tostring(index)
+	local scale = is_local and 0.9 or seat.cup.scale
+	local lift = (is_local and 70.0 or 50.0) * progress
+	gui_util.set_enabled(id, true)
+	gui_util.set_position(id, vmath.vector3(seat.cup.x, seat.cup.y + lift, 0.28))
+	gui_util.set_size(id, vmath.vector3(CUP_WIDTH * scale, CUP_HEIGHT * scale, 0.0))
+	gui_util.set_alpha(id, 0.82 - 0.56 * progress)
+end
+
+local function grid_face_matches(face, bid_face)
+	return face == 1 or face == bid_face
+end
+
+local function collect_grid_faces(self, state, order, players)
+	local faces = {}
+	local bid_face = state.duel and state.duel.bid and state.duel.bid.face or 1
+	for index, player_id in ipairs(order) do
+		local player = players[player_id]
+		if player and reveal_progress(self, index) > 0.98 then
+			for _, face in ipairs(player.dice or {}) do
+				if grid_face_matches(face, bid_face) then
+					faces[#faces + 1] = face
+				end
+			end
+		end
+	end
+	return faces
+end
+
+local function all_revealed(self, order)
+	for index = 1, #order do
+		if reveal_progress(self, index) <= 0.98 then
+			return false
+		end
+	end
+	return #order > 0
+end
+
+local function reveal_complete_time(order)
+	if #order <= 0 then
+		return 0.0
+	end
+	return (#order - 1) * REVEAL_INTERVAL + REVEAL_DURATION
+end
+
+local function render_grid(self, state, order, players)
+	local duel = state.duel or {}
+	local bid = duel.bid or {}
+	local faces = collect_grid_faces(self, state, order, players)
+	local actual = duel.judge and duel.judge.actual or #faces
+
+	gui_util.set_text("grid_label", i18n.t("duel.reveal.grid"))
+	gui_util.set_text("bid_summary", i18n.t("duel.reveal.bid", {
+		count = bid.count or "-",
+		face = bid.face or "-",
+	}))
+
+	if all_revealed(self, order) then
+		gui_util.set_text("actual_summary", i18n.t("duel.reveal.actual", {
+			count = actual,
+		}))
+	else
+		gui_util.set_text("actual_summary", i18n.t("duel.reveal.actual_pending"))
+	end
+
+	for index = 1, GRID_MAX do
+		local node = self.grid_dice_nodes[index]
+		local face = faces[index]
+		set_node_enabled(node, face ~= nil)
+		if face then
+			local col = (index - 1) % 6
+			local row = math.floor((index - 1) / 6)
+			set_node_position(node, vmath.vector3((col - 2.5) * 48.0, 54.0 - row * 44.0, 0.12))
+			play_node_flipbook(node, dice_animation(face))
+		end
+	end
+end
+
+local function render_local_tray(self, state, players)
+	local local_player = players[state.match.local_player_id] or state.players.by_id[state.match.local_player_id]
+	for index = 1, DICE_COUNT do
+		local face = local_player and local_player.dice and local_player.dice[index]
+		local node = self.tray_dice_nodes[index]
+		set_node_enabled(node, face ~= nil)
+		if face then
+			set_node_position(node, vmath.vector3((index - 3) * 110.0, 0.0, 0.1))
+			play_node_flipbook(node, dice_animation(face))
+		end
+	end
+end
+
+local function set_badges(prefix, player, hp_override)
+	gui_util.set_text(prefix .. "_bullets", player and (player.bullets or 0) or 0)
+	gui_util.set_text(prefix .. "_hp", hp_override ~= nil and hp_override or (player and (player.hp or 0) or 0))
+	gui_util.set_alpha(prefix .. "_bullet_badge", 1.0)
+	gui_util.set_alpha(prefix .. "_bullets", 1.0)
+	gui_util.set_alpha(prefix .. "_hp_badge", 1.0)
+	gui_util.set_alpha(prefix .. "_hp", 1.0)
+end
+
+local function set_portrait(prefix, player, side, hp_override, x_offset, entry_offset)
+	local body_id = "combat_" .. prefix .. "_body"
+	gui_util.set_texture(body_id, texture_name(player))
+	gui_util.play_flipbook(body_id, player and (player.portrait_state or "front") or "front")
+	gui_util.set_text("combat_" .. prefix .. "_name", player_name(player))
+	gui_util.set_alpha("combat_" .. prefix .. "_name", 1.0)
+	set_badges(prefix, player, hp_override)
+	local x = side == "left" and -370.0 or 370.0
+	gui_util.set_position(body_id, vmath.vector3(x + (x_offset or 0.0) + (entry_offset or 0.0), -30.0, 0.84))
+	gui_util.set_alpha(body_id, 1.0)
+end
+
+local function execution_step_seconds(resolution)
+	if resolution and resolution.kind == "perfect_duel" then
+		return PERFECT_DUEL_STEP_SECONDS
+	end
+	return ROULETTE_STEP_SECONDS
+end
+
+local function current_execution_step(self, resolution)
+	local steps = resolution and resolution.steps or {}
+	local step_seconds = execution_step_seconds(resolution)
+	if #steps == 0 then
+		return nil, 0, true, 1.0, step_seconds
+	end
+
+	if (self.execute_elapsed or 0.0) < EXECUTE_INTRO_SECONDS then
+		return nil, 0, false, 0.0, step_seconds
+	end
+
+	local elapsed = math.max(0.0, (self.execute_elapsed or 0.0) - EXECUTE_INTRO_SECONDS)
+	local raw_index = math.floor(elapsed / step_seconds) + 1
+	local complete = raw_index > #steps
+	local index = math.max(1, math.min(#steps, raw_index))
+	local step_elapsed = complete and step_seconds or (elapsed - (index - 1) * step_seconds)
+	return steps[index], index, complete, clamp01(step_elapsed / step_seconds), step_seconds
+end
+
+local function combat_pair(state, resolution, step)
+	local left_id = state.duel.previous_bidder_id
+	local right_id = state.duel.challenger_id
+
+	if resolution and resolution.kind == "perfect_duel" then
+		left_id = resolution.actor_id or state.duel.previous_bidder_id
+		right_id = step and step.target_id or right_id
+	end
+
+	return player_by_id(state, left_id), left_id, player_by_id(state, right_id), right_id
+end
+
+local function hit_target_id(step)
+	return step and (step.target_id or step.roulette_subject_id) or nil
+end
+
+local function visible_hp(player_id, player, base_player, resolution, step_index, step_progress, sequence_complete)
+	local hp = base_player and base_player.hp or player and player.hp or 0
+	for index, step in ipairs((resolution and resolution.steps) or {}) do
+		if index > step_index and not sequence_complete then
+			break
+		end
+		local applied = sequence_complete or index < step_index or step_progress >= HIT_APPLY_PROGRESS
+		if applied and step.hit == true and hit_target_id(step) == player_id then
+			hp = hp - 1
+		end
+	end
+	return math.max(0, hp)
+end
+
+local function shake_offset(player_id, step, step_progress)
+	if not step or step.hit ~= true or hit_target_id(step) ~= player_id then
+		return 0.0
+	end
+	if step_progress < HIT_APPLY_PROGRESS or step_progress > 0.92 then
+		return 0.0
+	end
+	local t = clamp01((step_progress - HIT_APPLY_PROGRESS) / 0.5)
+	return math.sin(t * math.pi * 8.0) * 20.0 * (1.0 - t)
+end
+
+local function entry_offset(resolution, prefix, step_progress)
+	if not resolution or resolution.kind ~= "perfect_duel" or prefix ~= "right" then
+		return 0.0
+	end
+	local t = ease(clamp01(step_progress / 0.46))
+	return 156.0 * (1.0 - t)
+end
+
+local function render_hit_flash(step, step_progress)
+	local hit = step and step.hit == true and step_progress >= HIT_APPLY_PROGRESS
+	local amount = hit and (1.0 - clamp01((step_progress - HIT_APPLY_PROGRESS) / 0.42)) or 0.0
+	gui_util.set_enabled("hit_flash", amount > 0.02)
+	gui_util.set_alpha("hit_flash", 0.42 * amount)
+end
+
+local function render_combat(self, state)
+	local duel = state.duel or {}
+	local resolution = duel.resolution or {}
+	local step, step_index, sequence_complete, step_progress, step_seconds = current_execution_step(self, resolution)
+	local left, left_id, right, right_id = combat_pair(state, resolution, step)
+	local base_players = snapshot_by_id(duel)
+	local total = #(resolution.steps or {})
+	local verdict = duel.judge and duel.judge.verdict or "UNKNOWN"
+	local step_resolved = step and (sequence_complete or step_progress >= HIT_APPLY_PROGRESS)
+	local result_key = step_resolved and (step.hit and "duel.combat.hit" or "duel.combat.miss") or "duel.combat.ready"
+	local display_total = math.max(1, total)
+	local display_index = math.max(1, math.min(math.max(1, step_index), display_total))
+	local left_hp = visible_hp(left_id, left, base_players[left_id], resolution, step_index, step_progress, sequence_complete)
+	local right_hp = visible_hp(right_id, right, base_players[right_id], resolution, step_index, step_progress, sequence_complete)
+
+	hide_reveal_nodes(self)
+	set_nodes_enabled(COMBAT_NODE_IDS, true)
+	set_portrait("left", left, "left", left_hp, shake_offset(left_id, step, step_progress), 0.0)
+	set_portrait("right", right, "right", right_hp, shake_offset(right_id, step, step_progress), entry_offset(resolution, "right", step_progress))
+	render_hit_flash(step, step_progress)
+
+	gui_util.set_text("combat_status", i18n.t("duel.combat.status", {
+		verdict = i18n.t("duel.verdict." .. verdict),
+	}))
+	gui_util.set_text("combat_shot", i18n.t("duel.combat.shot", {
+		index = display_index,
+		total = display_total,
+	}))
+	gui_util.set_text("combat_result", i18n.t(result_key))
+	gui_util.set_alpha("combat_status", 1.0)
+	gui_util.set_alpha("combat_shot", 1.0)
+	gui_util.set_alpha("combat_result", 1.0)
+
+	if sequence_complete and not self.advance_requested then
+		local elapsed = (self.execute_elapsed or 0.0) - EXECUTE_INTRO_SECONDS - total * step_seconds
+		if elapsed >= EXECUTE_COMPLETE_HOLD_SECONDS then
+			self.advance_requested = true
 			self.store:dispatch(actions.round_advance())
 		end
+	end
+end
+
+local function duel_key(state)
+	local duel = state.duel or {}
+	local bid = duel.bid or {}
+	return table.concat({
+		tostring(state.match.turn_count or 0),
+		tostring(duel.challenger_id),
+		tostring(duel.previous_bidder_id),
+		tostring(bid.count),
+		tostring(bid.face),
+	}, ":")
+end
+
+local function reset_reveal_if_needed(self, state)
+	local key = duel_key(state)
+	if self.duel_key ~= key then
+		self.duel_key = key
+		self.reveal_elapsed = 0.0
+		self.execute_elapsed = 0.0
+		self.execute_requested = false
+		self.advance_requested = false
+	end
+end
+
+local function reset_execute_if_needed(self, state)
+	local key = duel_key(state) .. ":execute"
+	if self.execute_key ~= key then
+		self.execute_key = key
+		self.execute_elapsed = 0.0
+		self.advance_requested = false
+	end
+end
+
+local function render_reveal(self, state)
+	local order = alive_order(state)
+	local layout = table_seat_layout.build(order, state.match.local_player_id, {
+		arc_base_y = 84.0,
+		arc_radius_x = 560.0,
+		arc_radius_y = 176.0,
+		local_cup_y = -118.0,
+		local_character_y = -12.0,
+	})
+	local opponent_seats = opponent_seats_by_id(layout)
+	local players = snapshot_by_id(state.duel)
+
+	set_nodes_enabled(REVEAL_NODE_IDS, true)
+	hide_combat_nodes()
+	gui_util.set_text("title", i18n.t("duel.reveal.title"))
+	gui_util.set_text("hint", all_revealed(self, order) and i18n.t("duel.reveal.hold") or i18n.t("duel.reveal.hint"))
+
+	for index, player_id in ipairs(order) do
+		local player = players[player_id] or state.players.by_id[player_id]
+		local is_local = player_id == state.match.local_player_id
+		local seat = is_local and layout.local_seat or opponent_seats[player_id]
+		local progress = reveal_progress(self, index)
+		if player and seat then
+			render_player_cup(index, seat, is_local, progress)
+			render_player_dice(self, index, player, seat, is_local, progress)
+		else
+			hide_player_slot(self, index)
+		end
+	end
+
+	hide_unused_players(self, #order)
+	render_grid(self, state, order, players)
+	render_local_tray(self, state, players)
+
+	if all_revealed(self, order)
+		and (self.reveal_elapsed or 0.0) >= reveal_complete_time(order) + REVEAL_HOLD_SECONDS
+		and not self.execute_requested then
+		self.execute_requested = true
+		self.store:dispatch(actions.duel_execute())
+	end
+end
+
+local function render(self, state)
+	local active = state.flow and state.flow.phase == "duel" and state.duel ~= nil
+	gui_util.set_enabled("root", active)
+	if not active then
 		return
 	end
 
-	apply_step(self, step)
-	self.advance_delay = step.duration or 0.1
-end
-
-local function start_sequence(self, state)
-	if not state.duel or state.duel.phase ~= "ready" then
-		return
+	reset_reveal_if_needed(self, state)
+	if state.duel.resolution then
+		reset_execute_if_needed(self, state)
+		render_combat(self, state)
+	else
+		render_reveal(self, state)
 	end
-
-	self.steps = duel_sequence.build(state.duel, state.duel.judge, state.duel.resolution)
-	self.index = 0
-	advance(self)
 end
 
-local function request_sequence(self)
-	self.needs_sequence = true
+local function request_render(self)
+	self.needs_render = true
 end
 
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
-	self.steps = nil
-	self.index = 0
-	self.advance_delay = nil
-	self.needs_sequence = false
-	gui_util.acquire_input_focus()
+	self.needs_render = false
+	self.reveal_elapsed = 0.0
+	self.execute_elapsed = 0.0
+	self.duel_key = nil
+	self.execute_key = nil
+	self.execute_requested = false
+	self.advance_requested = false
+	gui.set_render_order(15)
+	build_runtime_nodes(self)
+	gui_util.set_enabled("root", false)
 
 	if not self.store then
 		return
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("duel", function(_state)
-		request_sequence(self)
-	end)
+	for _, topic in ipairs({ "duel", "turn", "players", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
+
+	render(self, self.store:get_state())
 end
 
 function update(self, dt)
-	if self.needs_sequence and self.store then
-		self.needs_sequence = false
-		start_sequence(self, self.store:get_state())
+	self.reveal_elapsed = (self.reveal_elapsed or 0.0) + dt
+	self.execute_elapsed = (self.execute_elapsed or 0.0) + dt
+	if self.needs_render and self.store then
+		self.needs_render = false
 	end
-
-	if self.advance_delay then
-		self.advance_delay = self.advance_delay - dt
-		if self.advance_delay <= 0 then
-			self.advance_delay = nil
-			advance(self)
-		end
+	if self.store then
+		render(self, self.store:get_state())
 	end
 end
 
 function on_message(self, message_id)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
-		request_sequence(self)
+		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
 	end
 end
 
 function final(self)
-	gui_util.release_input_focus()
 	if self.store then
 		for _, token in ipairs(self.subs or {}) do
 			self.store:unsubscribe(token)

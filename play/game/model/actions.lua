@@ -12,6 +12,7 @@ M.types = {
 	BID_SELECT_FACE = "bid.select_face",
 	BID_RAISE = "bid.raise",
 	BID_CHALLENGE = "bid.challenge",
+	DUEL_EXECUTE = "duel.execute",
 	DUEL_RESOLVE_CHOICE = "duel.resolve_choice",
 	ROUND_ADVANCE = "round.advance",
 	MATCH_COMPLETE = "match.complete",
@@ -90,6 +91,10 @@ function M.bid_challenge(rng)
 	return action(M.types.BID_CHALLENGE, {
 		spin_steps = random_int(rng, 1, 6),
 	})
+end
+
+function M.duel_execute()
+	return action(M.types.DUEL_EXECUTE)
 end
 
 function M.duel_resolve_choice(choice)

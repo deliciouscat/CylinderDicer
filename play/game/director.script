@@ -24,7 +24,8 @@ local BLOCKS = {
 		"/ui#local_hud",
 		"/ui#bid_controls",
 	},
-	dualing = {
+	duel = {
+		"/ui#player_carousel",
 		"/ui#duel",
 	},
 	complete = {

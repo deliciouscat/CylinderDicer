@@ -17,6 +17,7 @@ local HUD_BY_PHASE = {
 
 local BG_BY_HUD = {
 	revolver_reload = "bidding",
+	loading = "shaking",
 	cup_shake = "shaking",
 	bidding = "bidding",
 	duel = "dualing",
@@ -64,8 +65,17 @@ function M.phase(state)
 	return state.flow and state.flow.phase or "waiting"
 end
 
+function M.is_local_pending_load(state)
+	local pending = state.pending_load
+	return pending ~= nil and pending.player_id == state.match.local_player_id
+end
+
 function M.hud_kind(state)
-	return HUD_BY_PHASE[M.phase(state)] or state.turn.kind
+	local phase = M.phase(state)
+	if phase == "revolver_reload" and state.pending_load and not M.is_local_pending_load(state) then
+		return "loading"
+	end
+	return HUD_BY_PHASE[phase] or state.turn.kind
 end
 
 function M.is_hud(state, hud)

@@ -38,7 +38,7 @@ local BLOCKS = {                       -- selector.hud_kind -> 활성 GUI compon
         "/ui#local_hud",
         "/ui#bid_controls",
     },
-    dualing = { "/ui#duel" },
+    duel = { "/ui#player_carousel", "/ui#duel" },
     complete = { "/ui#duel" },
 }
 

@@ -197,11 +197,14 @@ local function transition_phase(next, event, turn_kind)
 	return transition.ok, transition.reason
 end
 
-local function reset_shake(next)
+local function reset_shake(next, options)
+	options = options or {}
 	next.shake = {
 		required_count = SHAKE_REQUIRED_COUNT,
 		counts = {},
 		checked = {},
+		reload_player_id = options.reload_player_id,
+		reload_source = options.reload_source,
 	}
 end
 
@@ -223,7 +226,7 @@ local function enter_revolver_reload(next, pending, event)
 	local turn_kind
 	if pending and pending.source == "bid" then
 		turn_kind = "bidding"
-	elseif pending and (pending.source == "shake" or pending.source == "exact_duel") then
+	elseif pending and (pending.source == "shake" or pending.source == "duel" or pending.source == "exact_duel") then
 		turn_kind = "shaking"
 	end
 	if event then
@@ -233,7 +236,7 @@ local function enter_revolver_reload(next, pending, event)
 	return true
 end
 
-local function enter_cup_shake(next, event)
+local function enter_cup_shake(next, event, shake_options)
 	next.pending_load = nil
 	if event then
 		local ok, err = transition_phase(next, event)
@@ -243,7 +246,7 @@ local function enter_cup_shake(next, event)
 	else
 		enter_phase(next, "cup_shake")
 	end
-	reset_shake(next)
+	reset_shake(next, shake_options)
 	return true
 end
 
@@ -329,6 +332,23 @@ local function alive_count(players)
 		end
 	end
 	return count, last
+end
+
+local function duel_reload_player_id(state, resolution)
+	if not resolution or resolution.kind ~= "duel_shots" then
+		return nil
+	end
+
+	for _, step in ipairs(resolution.steps or {}) do
+		if step.consumed == true then
+			local player_id = step.roulette_subject_id or step.target_id
+			if is_alive(state.players.by_id[player_id]) then
+				return player_id
+			end
+		end
+	end
+
+	return nil
 end
 
 local function reset_my_bid(next)
@@ -539,7 +559,14 @@ handlers[actions.types.SHAKE_ROLL] = function(state, action)
 		end
 	else
 		next.turn.is_first_shake = false
-		local pending = pending_for_player(next, next.turn.active_player_id, "shake", 1)
+		local reload_player_id = next.shake.reload_player_id
+		local reload_source = next.shake.reload_source
+		local pending = nil
+		if reload_player_id then
+			pending = pending_for_player(next, reload_player_id, reload_source or "shake", 1)
+		elseif reload_source ~= "duel" then
+			pending = pending_for_player(next, next.turn.active_player_id, "shake", 1)
+		end
 		if pending then
 			local ok, err = enter_revolver_reload(next, pending, "shake_complete_reload")
 			if not ok then
@@ -631,7 +658,7 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 		if transition_err then
 			return state, nil, transition_err
 		end
-	elseif pending.source == "shake" then
+	elseif pending.source == "shake" or pending.source == "duel" then
 		local transition_err = complete_shake_load_if_ready(next)
 		if transition_err then
 			return state, nil, transition_err
@@ -642,7 +669,9 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 			return state, nil, err
 		end
 	elseif pending.source == "exact_duel" then
-		local ok, err = enter_cup_shake(next, "reload_complete_exact_duel")
+		local ok, err = enter_cup_shake(next, "reload_complete_exact_duel", {
+			reload_source = "duel",
+		})
 		if not ok then
 			return state, nil, err
 		end
@@ -774,17 +803,39 @@ handlers[actions.types.DUEL_RESOLVE_CHOICE] = function(state, action)
 	return next, { "duel" }
 end
 
+handlers[actions.types.DUEL_EXECUTE] = function(state, action)
+	if state.turn.kind ~= "dualing" or not state.duel then
+		return state, nil, "not_dueling_turn"
+	end
+	if state.duel.resolution then
+		return state, nil, "duel_already_executed"
+	end
+
+	local next = clone(state)
+	next.duel.resolution = duel.resolve(next, next.duel)
+	next.duel.phase = "executing"
+	update_all_bullets(next.players)
+
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "players", "duel", "ui" }
+end
+
 handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 	if state.turn.kind ~= "dualing" or not state.duel then
 		return state, nil, "not_dueling_turn"
 	end
 
 	local next = clone(state)
-	local resolution = duel.resolve(next, next.duel)
-	update_all_bullets(next.players)
+	local resolution = next.duel.resolution
+	if not resolution then
+		resolution = duel.resolve(next, next.duel)
+		update_all_bullets(next.players)
+	end
 
 	local count, winner_id = alive_count(next.players)
 	local exact_reload_player_id = next.duel.previous_bidder_id
+	local reload_player_id = duel_reload_player_id(next, resolution)
 	next.duel.resolution = resolution
 	next.duel.phase = "complete"
 
@@ -802,10 +853,15 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 		return next, publish_all()
 	end
 
-	local previous_active = next.turn.active_player_id
+	local challenger_id = next.duel.challenger_id
+	local next_round_first_player_id = challenger_id
+	if not is_alive(next.players.by_id[next_round_first_player_id]) then
+		next_round_first_player_id = turn_machine.next_alive_after(next.players, next_round_first_player_id)
+	end
+
 	next.turn.kind = "shaking"
-	next.turn.previous_player_id = previous_active
-	next.turn.active_player_id = turn_machine.next_alive_after(next.players, previous_active)
+	next.turn.previous_player_id = challenger_id
+	next.turn.active_player_id = next_round_first_player_id
 	next.turn.round_index = (next.turn.round_index or 0) + 1
 	next.turn.is_first_shake = false
 	next.bidding.current_bid = nil
@@ -821,13 +877,18 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 				return state, nil, err
 			end
 		else
-			local ok, err = enter_cup_shake(next, "round_shake")
+			local ok, err = enter_cup_shake(next, "round_shake", {
+				reload_source = "duel",
+			})
 			if not ok then
 				return state, nil, err
 			end
 		end
 	else
-		local ok, err = enter_cup_shake(next, "round_shake")
+		local ok, err = enter_cup_shake(next, "round_shake", {
+			reload_player_id = reload_player_id,
+			reload_source = "duel",
+		})
 		if not ok then
 			return state, nil, err
 		end

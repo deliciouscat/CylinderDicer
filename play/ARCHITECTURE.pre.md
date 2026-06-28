@@ -1,3 +1,7 @@
+> 이 문서는 서버 권위형 전환 전의 Defold-local architecture 기록이다.
+> 제품 목표 구조는 root [`SERVER.md`](../SERVER.md)를 기준으로 한다.
+> 아래의 “Defold가 로컬에서 계산” 항목은 legacy/dev 구조 설명이며 제품 권위 모델이 아니다.
+
 ## 1. 핵심 설계 원칙
 - `play/DISPLAY.md`의 의사코드는 `emit(action)`으로 디스패치하고 `state`/`data`를 읽는 **반응형 단방향 흐름**을 전제한다. 따라서 아키텍처 중심을 **Flux/Redux-lite 단방향 데이터 흐름**으로 잡는다.
 - `README.md`의 게임 규칙(베팅/장전/결투 판정/PerfectDuel)은 **Defold가 로컬에서 계산**하고, 서버는 사후 검증한다(`SUBMIT_MATCH_RESULT`).

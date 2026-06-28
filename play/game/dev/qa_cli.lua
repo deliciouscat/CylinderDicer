@@ -5,6 +5,7 @@ local M = {}
 
 local COMMAND_FILE = "/tmp/cylinderdicer_qa_commands.txt"
 local STATUS_FILE = "/tmp/cylinderdicer_qa_status.txt"
+local PROTOCOL_VERSION = 1
 
 local function trim(value)
 	return (value or ""):match("^%s*(.-)%s*$")
@@ -34,9 +35,9 @@ local function dispatch(self, action)
 	local result = self.store:dispatch(action)
 	if result and not result.ok then
 		print("[qa]", "error", result.error)
-		return false
+		return false, result.error
 	end
-	return true
+	return true, nil
 end
 
 local function state_summary(state)
@@ -85,19 +86,32 @@ local function first_empty_slot(player)
 	return nil
 end
 
-local function qa_load(self, slot_index)
+local function empty_slots(player)
+	local slots = {}
+	for index, slot in ipairs((player and player.cylinder and player.cylinder.slots) or {}) do
+		if not slot.loaded then
+			slots[#slots + 1] = index
+		end
+	end
+	return slots
+end
+
+local function qa_load(self, slot_index, actor_id)
 	local state = self.store:get_state()
 	local pending = state.pending_load
 	if not pending then
 		print("[qa]", "no pending load")
-		return false
+		return false, "no_load_pending"
+	end
+	if actor_id and actor_id ~= pending.player_id then
+		return false, "wrong_pending_player"
 	end
 
 	local player = state.players.by_id[pending.player_id]
 	local slot = slot_index or first_empty_slot(player)
 	if not slot then
 		print("[qa]", "no empty cylinder slot")
-		return false
+		return false, "no_empty_slot"
 	end
 
 	if pending.source == "setup" then
@@ -106,32 +120,37 @@ local function qa_load(self, slot_index)
 	return dispatch(self, actions.bullet_load(slot, pending.player_id))
 end
 
-local function qa_load_all(self)
+local function qa_load_all(self, actor_id)
 	for _ = 1, 6 do
 		local state = self.store:get_state()
 		if not state.pending_load then
-			return true
+			return true, nil
 		end
-		if not qa_load(self) then
-			return false
+		local ok, err = qa_load(self, nil, actor_id)
+		if not ok then
+			return false, err
 		end
 	end
-	return true
+	return true, nil
 end
 
-local function qa_shake(self, count)
+local function qa_shake(self, count, actor_id)
 	local state = self.store:get_state()
 	local player_id = state.turn.active_player_id
+	if actor_id and actor_id ~= player_id then
+		return false, "wrong_active_player"
+	end
 	local current = ((state.shake and state.shake.counts) or {})[player_id] or 0
 	local required = (state.shake and state.shake.required_count) or 6
 	local repeat_count = count or math.max(1, required - current)
 
 	for _ = 1, repeat_count do
-		if not dispatch(self, actions.shake_roll(player_id)) then
-			return false
+		local ok, err = dispatch(self, actions.shake_roll(player_id))
+		if not ok then
+			return false, err
 		end
 	end
-	return true
+	return true, nil
 end
 
 local function qa_check(self, player_id)
@@ -140,10 +159,13 @@ local function qa_check(self, player_id)
 	return dispatch(self, actions.dice_check(id))
 end
 
-local function qa_bid(self, count, face)
+local function qa_bid(self, count, face, actor_id)
 	local state = self.store:get_state()
+	if actor_id and actor_id ~= state.turn.active_player_id then
+		return false, "wrong_active_player"
+	end
 	local bid = {
-		player_id = state.turn.active_player_id,
+		player_id = actor_id or state.turn.active_player_id,
 		count = count or state.bidding.my_bid.count,
 		face = face or state.bidding.my_bid.face,
 	}
@@ -170,6 +192,9 @@ local function qa_advance(self)
 		return qa_bid(self)
 	end
 	if phase == "duel" then
+		if state.duel and not state.duel.resolution then
+			return dispatch(self, actions.duel_execute())
+		end
 		return dispatch(self, actions.round_advance())
 	end
 
@@ -189,22 +214,244 @@ local function qa_to_bidding(self)
 	return selectors.phase(self.store:get_state()) == "bidding"
 end
 
+local function suggested_bid(state)
+	local current = state.bidding.current_bid
+	if not current then
+		return {
+			count = math.max(1, state.bidding.my_bid.count or 1),
+			face = math.max(1, state.bidding.my_bid.face or 1),
+		}
+	end
+	if current.face < 6 then
+		return {
+			count = current.count,
+			face = current.face + 1,
+		}
+	end
+	return {
+		count = math.min(36, current.count + 1),
+		face = 1,
+	}
+end
+
+local function available_actions(state, player_id)
+	local result = {}
+	local phase = selectors.phase(state)
+	local pending = state.pending_load
+
+	if pending and pending.player_id == player_id then
+		local player = state.players.by_id[player_id]
+		result[#result + 1] = {
+			type = "load",
+			slots = empty_slots(player),
+			remaining = pending.count,
+		}
+		result[#result + 1] = {
+			type = "load_all",
+			remaining = pending.count,
+		}
+		return result
+	end
+
+	if player_id ~= state.turn.active_player_id then
+		return result
+	end
+
+	if phase == "cup_shake" then
+		local shake = selectors.shake_status(state, player_id)
+		if not shake.complete then
+			result[#result + 1] = {
+				type = "shake",
+				remaining = math.max(0, shake.required - shake.count),
+			}
+		end
+	elseif phase == "dice_check" then
+		if not state.shake.checked[player_id] then
+			result[#result + 1] = { type = "check" }
+		end
+	elseif phase == "bidding_gap" then
+		result[#result + 1] = { type = "open" }
+	elseif phase == "bidding" then
+		result[#result + 1] = {
+			type = "bid",
+			min_count = 1,
+			max_count = 36,
+			min_face = 1,
+			max_face = 6,
+			suggested = suggested_bid(state),
+		}
+		if state.bidding.current_bid then
+			result[#result + 1] = { type = "challenge" }
+		end
+	elseif phase == "duel" then
+		result[#result + 1] = {
+			type = "resolve",
+			stage = state.duel and state.duel.resolution and "advance" or "execute",
+		}
+	end
+
+	return result
+end
+
+function M.status_snapshot(state)
+	local players = {}
+	for _, player_id in ipairs(state.players.order or {}) do
+		local player = state.players.by_id[player_id]
+		local slots = {}
+		for index, slot in ipairs((player.cylinder and player.cylinder.slots) or {}) do
+			slots[index] = slot.loaded == true
+		end
+		players[#players + 1] = {
+			id = player.id,
+			name = player.name,
+			is_local = player.id == state.match.local_player_id,
+			is_active = player.id == state.turn.active_player_id,
+			hp = player.hp,
+			eliminated = player.eliminated == true,
+			bullets = player.bullets or 0,
+			dice = player.dice or {},
+			cylinder = {
+				slots = slots,
+				chamber_index = player.cylinder and player.cylinder.chamber_index or 1,
+			},
+			available_actions = available_actions(state, player_id),
+		}
+	end
+
+	return {
+		protocol_version = PROTOCOL_VERSION,
+		phase = selectors.phase(state),
+		hud = selectors.hud_kind(state),
+		match = {
+			id = state.match.match_id,
+			status = state.match.status,
+			mode = state.match.mode,
+			local_player_id = state.match.local_player_id,
+			turn_count = state.match.turn_count,
+			events_hash = state.match.events_hash,
+			winner_id = state.match.winner_id,
+		},
+		turn = {
+			active_player_id = state.turn.active_player_id,
+			previous_player_id = state.turn.previous_player_id,
+			round_index = state.turn.round_index,
+			is_first_shake = state.turn.is_first_shake,
+		},
+		bidding = {
+			current_bid = state.bidding.current_bid,
+			suggested_bid = suggested_bid(state),
+		},
+		pending_load = state.pending_load,
+		shake = state.shake,
+		duel = state.duel and {
+			phase = state.duel.phase,
+			judge = state.duel.judge,
+			challenger_id = state.duel.challenger_id,
+			previous_bidder_id = state.duel.previous_bidder_id,
+			resolution = state.duel.resolution and {
+				kind = state.duel.resolution.kind,
+				verdict = state.duel.resolution.verdict,
+				target_id = state.duel.resolution.target_id,
+				roulette_subject_id = state.duel.resolution.roulette_subject_id,
+				actor_id = state.duel.resolution.actor_id,
+				steps = state.duel.resolution.steps,
+				hp_changes = state.duel.resolution.hp_changes,
+			} or nil,
+		} or nil,
+		players = players,
+	}
+end
+
+local function status_signature(self, state)
+	return table.concat({
+		tostring(state.match.events_hash),
+		state_summary(state),
+		tostring(self.last_command and self.last_command.id or "-"),
+		tostring(self.last_command and self.last_command.ok or "-"),
+		tostring(self.last_command and self.last_command.error or "-"),
+	}, "|")
+end
+
 local function write_status(self)
-	local summary = state_summary(self.store:get_state())
-	if self.last_status == summary then
+	local state = self.store:get_state()
+	local signature = status_signature(self, state)
+	if self.last_status == signature then
 		return
 	end
 
-	self.last_status = summary
-	local file = io.open(STATUS_FILE, "w")
+	self.last_status = signature
+	self.revision = self.revision + 1
+	local snapshot = M.status_snapshot(state)
+	snapshot.revision = self.revision
+	snapshot.generated_at = os.time()
+	snapshot.last_command = self.last_command
+
+	local next_file = STATUS_FILE .. ".next"
+	local file = io.open(next_file, "w")
 	if file then
-		file:write(summary .. "\n")
+		file:write(json.encode(snapshot) .. "\n")
 		file:close()
+		os.rename(next_file, STATUS_FILE)
 	end
 end
 
-local function process(self, line)
-	local stripped = trim((line:gsub("#.*$", "")))
+local function validate_actor(state, actor_id)
+	if not actor_id or not state.players.by_id[actor_id] then
+		return false, "unknown_actor"
+	end
+	return true, nil
+end
+
+local function process_json_command(self, command)
+	local state = self.store:get_state()
+	local actor_id = command.actor_id
+	local action = lower(command.action)
+	local payload = command.payload or {}
+	local actor_ok, actor_err = validate_actor(state, actor_id)
+	if not actor_ok then
+		return false, actor_err
+	end
+
+	if action == "load" then
+		return qa_load(self, number_or_nil(payload.slot_index), actor_id)
+	elseif action == "load_all" then
+		return qa_load_all(self, actor_id)
+	elseif action == "shake" then
+		return qa_shake(self, number_or_nil(payload.count), actor_id)
+	elseif action == "check" then
+		return qa_check(self, actor_id)
+	elseif action == "open" then
+		if actor_id ~= state.turn.active_player_id then
+			return false, "wrong_active_player"
+		end
+		return dispatch(self, actions.bidding_open())
+	elseif action == "bid" then
+		return qa_bid(self, number_or_nil(payload.count), number_or_nil(payload.face), actor_id)
+	elseif action == "challenge" then
+		if actor_id ~= state.turn.active_player_id then
+			return false, "wrong_active_player"
+		end
+		return dispatch(self, actions.bid_challenge())
+	elseif action == "resolve" then
+		if actor_id ~= state.turn.active_player_id then
+			return false, "wrong_active_player"
+		end
+		if state.duel and not state.duel.resolution then
+			return dispatch(self, actions.duel_execute())
+		end
+		return dispatch(self, actions.round_advance())
+	elseif action == "advance" then
+		if actor_id ~= state.turn.active_player_id then
+			return false, "wrong_active_player"
+		end
+		return qa_advance(self)
+	end
+
+	return false, "unknown_action"
+end
+
+local function process_legacy_command(self, stripped)
+	stripped = trim((stripped:gsub("#.*$", "")))
 	if stripped == "" then
 		return
 	end
@@ -269,13 +516,51 @@ local function process(self, line)
 		end
 		dispatch(self, actions.bid_challenge())
 	elseif command == "resolve" then
-		dispatch(self, actions.round_advance())
+		local next_state = self.store:get_state()
+		if next_state.duel and not next_state.duel.resolution then
+			dispatch(self, actions.duel_execute())
+		else
+			dispatch(self, actions.round_advance())
+		end
 	elseif command == "who" then
 		local player = current_player(state)
 		print("[qa]", player and player.name or state.turn.active_player_id)
 	else
 		print("[qa]", "unknown command", command)
 	end
+	write_status(self)
+end
+
+local function process(self, line)
+	local stripped = trim(line)
+	if stripped == "" then
+		return
+	end
+
+	if stripped:sub(1, 1) ~= "{" then
+		process_legacy_command(self, stripped)
+		return
+	end
+
+	local ok, command = pcall(json.decode, stripped)
+	if not ok or type(command) ~= "table" then
+		self.last_command = {
+			id = "decode-error",
+			ok = false,
+			error = "invalid_json",
+		}
+		write_status(self)
+		return
+	end
+
+	local command_ok, command_err = process_json_command(self, command)
+	self.last_command = {
+		id = command.id or "anonymous",
+		actor_id = command.actor_id,
+		action = command.action,
+		ok = command_ok == true,
+		error = command_err,
+	}
 	write_status(self)
 end
 
@@ -286,20 +571,22 @@ function M.new(store)
 			command_file:close()
 		end
 		local status_file = io.open(STATUS_FILE, "w")
-		if status_file then
-			status_file:write("booting\n")
-			status_file:close()
-		end
+			if status_file then
+				status_file:write('{"protocol_version":1,"phase":"booting"}\n')
+				status_file:close()
+			end
 	end
 
 	print("[qa]", "command file:", COMMAND_FILE)
 	print("[qa]", "status file:", STATUS_FILE)
 	print("[qa]", "try: echo state >> " .. COMMAND_FILE)
 
-	return {
-		store = store,
-		last_status = nil,
-	}
+		return {
+			store = store,
+			last_status = nil,
+			last_command = nil,
+			revision = 0,
+		}
 end
 
 function M.poll(self)

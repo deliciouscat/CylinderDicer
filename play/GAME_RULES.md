@@ -26,7 +26,7 @@ flowchart TD
     Reload3 --> Shake
 
     Shake -.->|최초 shaking| NoteFirst["추가 장전 없음"]
-    Shake -.->|이후 shaking 완료| NoteLater["본인 1발 장전<br/>(EXACT 결투 직후 3발은 위 분기)"]
+    Shake -.->|결투 후 shaking 완료| NoteLater["결투에서 총알을 소진한 사람 1발 장전<br/>(EXACT 3발 보상은 위 분기)"]
 ```
 
 게임 시작:
@@ -36,8 +36,8 @@ flowchart TD
 모두가 장전 완료 시:
     `cup shake` HUD/배경으로 이동. [space] 키 6번 정도 입력으로 흔들고 나면(또는 제한시간 20초 지나면) 플레이어 본인 주사위 확인.
     (다른 사람 컵들도 흔드는 것은 realtime으로 보여줌. 주사위 공개는 안하지만.)
-    (최초 쉐이킹은 추가 장전 없음. 이후 쉐이킹부터는 완료 시 본인 1발 장전.
-     EXACT 결투 직후에는 정확히 맞춘 사람만 3발 충전 후 shaking 시작 — 아래 `## duel` 참고.)
+    (최초 쉐이킹은 추가 장전 없음. 결투 후 쉐이킹은 결투에서 총알을 소진한 사람이 있을 때만 완료 후 1발 장전.
+     EXACT 결투 직후에는 정확히 맞춘 사람만 3발 충전 후 shaking 시작하며, 이후 active player 추가 장전은 없음 — 아래 `## duel` 참고.)
 
 가장 최후에 주사위 눈 확인한 사람이 확인한 후 3초 지나면:
     `bidding` HUD/배경으로 넘어감.
@@ -57,7 +57,8 @@ flowchart TD
 결투 집행 후:
     다시 `cup shake`로.
     EXACT(정확히 맞춘 턴)이면 정확히 맞춘 사람만 `revolver reload`로 3발 충전한 뒤 shaking 시작.
-    그 외(부족/초과)는 바로 shaking.
+    그 외(부족/초과)는 바로 shaking. 실제 총알이 소진됐다면 다음 shake 완료 후 그 총알을 소진한 플레이어만 1발 장전.
+    다음 라운드 첫 bidding 플레이어와 결투 후 장전 대상은 별개.
     모두 확인 후 3초 뒤 bidding 반복.
 
 def `결투집행`상세:
@@ -146,6 +147,9 @@ Sequence[
         for 6번: "도전자부터 그 이후 플레이어 순서로 돌아가면서 russian roulette 진행. 예를 들어 [p1, p2, p3, p4] 중 p4가 도전해서 p3가 정확히 맞춘 상황이면, [p4, p1, p2, p4, p1, p2] 순서로 russian roulette 진행하는거임. A(맞춘 사람): 방아쇠/회피, B(지목 대상): 응사/걍맞기",
     "배경 shading 및 vignetting이 ease-inout 되며 사라짐",
     "`cup shake` 차례로 돌아감. (EXACT이면 정확히 맞춘 사람만 3발 충전 후 shaking, SHORT/OVER면 바로 shaking)",
+    "SHORT/OVER에서 실제 총알이 소진됐다면 다음 shake 후 그 총알을 소진한 플레이어만 1발 장전함. 다음 첫 bidding 플레이어와 결투 후 장전 대상은 별개.",
+    "다음 라운드의 첫 bidding 순서는 결투를 신청한 도전자가 가져감. 도전자가 탈락했다면 그 다음 생존 플레이어가 첫 bidding을 시작함.",
+    "장전 대상이 local player일 때만 reload HUD와 cylinder 조작을 표시함. opponent가 장전 중이면 loading message만 표시.",
 ]
 
 

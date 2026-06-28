@@ -1,0 +1,9 @@
+{
+  "name": "cylinderdicer-opponent-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/bot.mjs",
+    "check": "node --check src/bot.mjs"
+  }
+}

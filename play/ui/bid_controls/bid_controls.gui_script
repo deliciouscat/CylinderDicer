@@ -4,6 +4,7 @@ local actions = require("game.model.actions")
 local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
+local local_permissions = require("ui.common.local_permissions")
 
 local ACTION_FACE_UP = hash("face_up")
 local ACTION_FACE_DOWN = hash("face_down")
@@ -12,18 +13,13 @@ local ACTION_CHALLENGE = hash("challenge")
 local ACTION_POINTER = hash("pointer")
 local ACTION_TOUCH = hash("touch")
 
-local function can_drive_turn(state)
-	return selectors.is_my_turn(state) or state.match.mode == "dev"
-end
-
 local function render(self, state)
 	local bid = state.bidding.my_bid
-	local is_bidding = selectors.is_hud(state, "bidding")
-	local can_drive = is_bidding and can_drive_turn(state)
-	self.can_pass = can_drive and selectors.is_my_bid_valid(state)
-	self.can_challenge = can_drive and selectors.has_previous_bid(state)
+	self.can_drive = local_permissions.can_bid(state)
+	self.can_pass = self.can_drive and selectors.is_my_bid_valid(state)
+	self.can_challenge = self.can_drive and selectors.has_previous_bid(state)
 
-	gui_util.set_enabled("root", is_bidding)
+	gui_util.set_enabled("root", self.can_drive)
 	gui_util.set_text("pass_label", i18n.t("action.pass"))
 	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
 	gui_util.set_text("bid_value", bid.face)
@@ -46,6 +42,11 @@ local function handle_command(self, command)
 
 	local state = self.store:get_state()
 	local bid = state.bidding.my_bid
+
+	if not self.can_drive then
+		audio.play_sfx("click_empty")
+		return
+	end
 
 	if command == "face_up" then
 		self.store:dispatch(actions.bid_select_face(bid.face + 1))
@@ -102,6 +103,7 @@ end
 function init(self)
 	self.store = store_mod.get()
 	self.subs = {}
+	self.can_drive = false
 	self.can_pass = false
 	self.can_challenge = false
 	self.needs_render = false
@@ -136,7 +138,6 @@ end
 
 function on_message(self, message_id, message)
 	if message_id == hash("activate") then
-		gui_util.set_enabled("root", true)
 		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)

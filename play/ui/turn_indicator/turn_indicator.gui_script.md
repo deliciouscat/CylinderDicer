@@ -1,5 +1,6 @@
 # 개요
-turn topic을 구독하고 indicator GUI를 갱신한다.
+turn topic을 구독하고 indicator GUI를 갱신한다. bidding에서는 local turn이면
+`내 턴`, 상대 turn이면 active opponent 이름을 표시한다.
 
 # 의존성
 - `game/model/store.lua`: topic subscribe.
@@ -36,12 +37,11 @@ function final(self)
 end
 
 function render(self, s)
-    local key = ({
-        bidding = selectors.is_my_turn(s) and "turn.mine" or "turn.opponent",
-        dualing = "turn.duel",
-        shaking = "turn.shake",
-    })[s.turn.kind]
-    gui.set_text(gui.get_node("label"), i18n.t(key))   -- 문자열은 항상 locale key 경유
+    if s.turn.kind == "bidding" and not selectors.is_my_turn(s) then
+        local active = s.players.by_id[s.turn.active_player_id]
+        gui.set_text(gui.get_node("label"), active.name)
+        return
+    end
+    -- 그 외 phase/local turn label 갱신.
 end
 ```
-

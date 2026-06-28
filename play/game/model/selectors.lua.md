@@ -19,6 +19,8 @@ state 파생 조회 모듈. View가 raw state 구조에 강하게 묶이지 않�
   - `count_face`.
   - `hint_key`.
   - `shake_status`.
+  - `hud_kind`.
+  - `is_local_pending_load`.
   - `match_result_payload`.
 
 # 의사코드
@@ -52,6 +54,13 @@ function M.count_face(s)
 end
 
 function M.hint_key(s) return s.ui.hint_key end
+
+function M.hud_kind(s)
+    if phase(s) == "revolver_reload" and s.pending_load.player_id ~= s.match.local_player_id then
+        return "loading" -- opponent reload: message only, no local cylinder HUD
+    end
+    return HUD_BY_PHASE[phase(s)]
+end
 
 -- 내부 state -> 외부 계약 payload. adapter가 이것만 보고 emit.
 function M.match_result_payload(s)

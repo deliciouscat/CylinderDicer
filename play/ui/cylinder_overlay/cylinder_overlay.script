@@ -4,6 +4,7 @@ local actions = require("game.model.actions")
 local anchors = require("game.core.anchors")
 local tween = require("game.core.tween")
 local slot_geometry = require("ui.cylinder_overlay.slot_geometry")
+local local_permissions = require("ui.common.local_permissions")
 
 local SLOT_COUNT = 6
 local SLOT_CENTER = {
@@ -19,10 +20,6 @@ local SLOT_CENTER = {
 	},
 }
 
-local function is_dev_match(state)
-	return state.match and state.match.mode == "dev"
-end
-
 local function post_state(self, state)
 	if not self.store then
 		return
@@ -31,16 +28,13 @@ local function post_state(self, state)
 	local local_player = selectors.local_player(state)
 	local pending = state.pending_load
 	local player = local_player
-	if pending and is_dev_match(state) then
-		player = state.players.by_id[pending.player_id] or player
-	end
 
 	if not player then
 		return
 	end
 
 	self.load_player_id = player.id
-	self.can_load = pending ~= nil and (pending.player_id == player.id or pending.player_id == (local_player and local_player.id) or is_dev_match(state))
+	self.can_load = local_permissions.can_load(state)
 	self.loaded_slots = {}
 	for i, slot in ipairs(player.cylinder.slots or {}) do
 		self.loaded_slots[i] = slot.loaded == true

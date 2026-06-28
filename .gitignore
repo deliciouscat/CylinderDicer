@@ -7,6 +7,10 @@
 /web/node_modules
 /web/dist
 /web/.vite
+/opponent-controller/node_modules
+/opponent-controller/dist
+/opponent-controller/.vite
+/vertual-server/node_modules
 .externalToolBuilders
 .DS_Store
 Thumbs.db
@@ -15,3 +19,4 @@ Thumbs.db
 .project
 .cproject
 builtins
+.gstack/
