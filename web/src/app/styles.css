@@ -22,6 +22,17 @@ button {
   cursor: pointer;
 }
 
+.auth-screen {
+  width: 100%;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    linear-gradient(rgb(16 16 19 / 78%), rgb(16 16 19 / 92%)),
+    #101013;
+}
+
 .lobby-screen {
   position: relative;
   width: 100%;
@@ -53,6 +64,58 @@ button {
     linear-gradient(rgb(12 10 8 / 4%), rgb(12 10 8 / 22%)),
     radial-gradient(circle at 50% 20%, rgb(255 218 143 / 12%), transparent 34%);
   pointer-events: none;
+}
+
+.lobby-auth {
+  position: absolute;
+  top: clamp(18px, 3vh, 30px);
+  right: clamp(18px, 3vw, 34px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lobby-auth__button {
+  min-width: 84px;
+  min-height: 38px;
+  border: 1px solid rgb(255 244 218 / 58%);
+  border-radius: 6px;
+  padding: 0 15px;
+  color: #fffaf2;
+  background: rgb(24 18 14 / 62%);
+  box-shadow: 0 10px 18px rgb(0 0 0 / 28%);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-shadow: 0 2px 3px rgb(0 0 0 / 55%);
+  backdrop-filter: blur(8px);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.lobby-auth__button--primary {
+  color: #2a160f;
+  border-color: rgb(255 232 169 / 78%);
+  background: #f3c262;
+  text-shadow: none;
+}
+
+.lobby-auth__button:hover {
+  border-color: rgb(255 250 235 / 88%);
+  background: rgb(42 30 21 / 74%);
+  transform: translateY(-1px);
+}
+
+.lobby-auth__button--primary:hover {
+  background: #ffd37a;
+}
+
+.lobby-auth__button:focus-visible {
+  outline: 3px solid rgb(255 239 187 / 88%);
+  outline-offset: 3px;
 }
 
 .lobby-stage {
@@ -154,8 +217,21 @@ button {
     min-height: 560px;
   }
 
+  .lobby-auth {
+    top: 14px;
+    right: 14px;
+    gap: 8px;
+  }
+
+  .lobby-auth__button {
+    min-width: 74px;
+    min-height: 34px;
+    padding: 0 11px;
+    font-size: 13px;
+  }
+
   .lobby-stage {
-    padding-top: 42px;
+    padding-top: 72px;
   }
 
   .lobby-title {

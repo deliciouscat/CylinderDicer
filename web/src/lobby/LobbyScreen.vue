@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/vue'
 import lobbyConfig from '../config/lobby.config.json'
 import { assetLoader } from '../assets/assetLoader'
 import { t } from '../i18n'
@@ -45,6 +46,19 @@ function openMenuItem(item: MenuEntry) {
 <template>
   <main class="lobby-screen" :style="lobbyStyles" :aria-label="t('lobby.screenLabel')">
     <div class="lobby-background" aria-hidden="true" />
+    <div class="lobby-auth">
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <button class="lobby-auth__button" type="button">Sign in</button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <button class="lobby-auth__button lobby-auth__button--primary" type="button">Sign up</button>
+        </SignUpButton>
+      </Show>
+      <Show when="signed-in">
+        <UserButton />
+      </Show>
+    </div>
     <section class="lobby-stage">
       <img class="lobby-title" :src="titleAsset.url" :alt="t('lobby.titleAlt')" />
 
