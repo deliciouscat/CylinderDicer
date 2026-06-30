@@ -1,5 +1,9 @@
 # BACKND Integration
 
+> Status: reference only. Current preferred backend plan is
+> [`FIREBASE_INTEGRATION.md`](FIREBASE_INTEGRATION.md). Keep this document for
+> Backnd feature comparison, payment/ranking notes, and fallback evaluation.
+
 ## Document Links
 
 - [BACKND Developer Documentation](https://docs.backnd.com/en/)

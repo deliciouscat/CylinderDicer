@@ -1,5 +1,10 @@
 # Server Authority Design
 
+> Status: superseded as the primary implementation plan by
+> [`CONVEX_IMPLEMENTATION.md`](CONVEX_IMPLEMENTATION.md).
+> The server-authority principles here still apply, but the preferred runtime is
+> now Convex + Clerk instead of a new FastAPI service.
+
 CylinderDicer의 제품 매치는 서버 권위형으로 간다.
 
 Defold와 Vue는 클라이언트다. 둘 다 유저 기기에서 실행되므로 신뢰하지 않는다. 클라이언트는 화면 렌더링, 입력 수집, 애니메이션, 사운드, 네트워크 송수신만 담당한다. 매치 규칙, 난수, 판정, HP/총알/주사위 상태, 승패, 보상 반영은 Python/FastAPI 서버가 최종 권위를 가진다.

@@ -5,6 +5,7 @@
 /play/build
 /play/.deps/**
 /web/node_modules
+/node_modules
 /web/dist
 /web/.vite
 /opponent-controller/node_modules
@@ -20,3 +21,12 @@ Thumbs.db
 .cproject
 builtins
 .gstack/
+.env
+.env.*
+!.env.example
+/web/.env
+/web/.env.*
+!/web/.env.example
+/convex/.env
+/convex/.env.*
+!/convex/.env.example

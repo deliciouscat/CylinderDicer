@@ -43,6 +43,5 @@ QA protocol documented in `shared/qa/README.md`.
 
 ## Key Docs
 
-- [Server authority design](SERVER.md)
+- [Convex implementation plan](shared/docs/CONVEX_IMPLEMENTATION.md)
 - [Defold gameplay project](play/README.md)
-- [BACKND integration notes](shared/docs/BACKND_INTEGRATION.md)
