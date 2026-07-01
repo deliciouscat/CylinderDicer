@@ -1,14 +1,27 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import OpponentControllerScreen from '../admin/OpponentControllerScreen.vue'
 import CustomGameScreen from '../custom-game/CustomGameScreen.vue'
 import LobbyScreen from '../lobby/LobbyScreen.vue'
+import ConvexPlayScreen from '../play-wrapper/ConvexPlayScreen.vue'
+import LocalPlayScreen from '../play-wrapper/LocalPlayScreen.vue'
 import SignInView from '../views/sign-in.vue'
 import SignUpView from '../views/sign-up.vue'
 
 const currentPath = ref(window.location.pathname)
+const useLocalDefoldSimulator = import.meta.env.VITE_USE_LOCAL_DEFOLD_SIMULATOR === 'true'
 const activeScreen = computed(() => {
   if (currentPath.value === '/play/custom-game') {
     return 'custom-game'
+  }
+  if (currentPath.value === '/admin/opponents') {
+    return 'admin-opponents'
+  }
+  if (currentPath.value === '/play/dev' && useLocalDefoldSimulator) {
+    return 'local-play'
+  }
+  if (currentPath.value === '/play/ladder' || currentPath.value === '/play/dev') {
+    return 'convex-play'
   }
   if (currentPath.value === '/sign-in') {
     return 'sign-in'
@@ -30,7 +43,10 @@ window.addEventListener('popstate', () => {
 </script>
 
 <template>
-  <CustomGameScreen v-if="activeScreen === 'custom-game'" @back="navigate('/')" />
+  <OpponentControllerScreen v-if="activeScreen === 'admin-opponents'" @back="navigate('/')" />
+  <CustomGameScreen v-else-if="activeScreen === 'custom-game'" @back="navigate('/')" />
+  <ConvexPlayScreen v-else-if="activeScreen === 'convex-play'" @back="navigate('/')" />
+  <LocalPlayScreen v-else-if="activeScreen === 'local-play'" @back="navigate('/')" />
   <SignInView v-else-if="activeScreen === 'sign-in'" />
   <SignUpView v-else-if="activeScreen === 'sign-up'" />
   <LobbyScreen v-else @navigate="navigate" />

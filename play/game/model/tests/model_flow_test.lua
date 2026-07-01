@@ -139,6 +139,107 @@ function M.test_start_setup_and_first_shake()
 	assert_eq(selectors.hud_kind(state), "bidding", "bidding hud")
 end
 
+function M.test_match_adapter_accepts_server_snapshot_and_reject()
+	local store = new_store()
+	local adapter = start_match(store, {
+		sessionId = "session-server",
+		matchId = "match-server",
+		playerId = "local",
+		mode = "dev",
+		players = {
+			{ id = "local", hp = 3, dice_count = 5 },
+			{ id = "opponent-1", hp = 3, dice_count = 5 },
+		},
+	})
+	local emitted = {}
+	adapter.bridge.emit = function(type_, out_payload)
+		emitted[#emitted + 1] = {
+			type = type_,
+			payload = out_payload,
+		}
+	end
+
+	adapter:on_bridge_message({
+		type = "SERVER_SNAPSHOT",
+		payload = {
+			matchId = "match-server",
+			revision = 3,
+			publicSnapshot = {
+				kind = "public",
+				matchId = "match-server",
+				revision = 3,
+				phase = "bidding",
+				hud = "bidding",
+				match = {
+					id = "match-server",
+					status = "ready",
+					mode = "dev",
+					localPlayerId = "local",
+					turnCount = 2,
+					eventsHash = "server-hash",
+				},
+				turn = {
+					activePlayerId = "opponent-1",
+					previousPlayerId = "local",
+					roundIndex = 0,
+					isFirstShake = false,
+				},
+				players = {
+					{ id = "local", name = "You", hp = 2, bullets = 4, eliminated = false },
+					{ id = "opponent-1", name = "Opponent", hp = 3, bullets = 3, eliminated = false },
+				},
+				bidding = {
+					currentBid = {
+						playerId = "local",
+						count = 2,
+						face = 4,
+					},
+					suggestedBid = {
+						count = 2,
+						face = 5,
+					},
+				},
+			},
+			privateDelta = {
+				kind = "private_delta",
+				matchId = "match-server",
+				revision = 3,
+				hud = "bidding",
+				viewerPlayerId = "local",
+				dice = { 1, 2, 3, 4, 5 },
+				cylinder = {
+					chamberIndex = 1,
+					slots = { true, false, true, false, true, false },
+				},
+			},
+		},
+	})
+	assert_eq(adapter.server_revision, 3, "server snapshot revision cached")
+	assert_eq(emitted[1].type, "SERVER_SNAPSHOT_RECEIVED", "server snapshot ack type")
+	assert_eq(emitted[1].payload.matchId, "match-server", "server snapshot ack match id")
+	local synced = store:get_state()
+	assert_eq(synced.flow.phase, "bidding", "server snapshot applies phase")
+	assert_eq(synced.turn.active_player_id, "opponent-1", "server snapshot applies active player")
+	assert_eq(synced.match.revision, 3, "server snapshot applies revision")
+	assert_eq(synced.bidding.current_bid.player_id, "local", "server snapshot applies current bid")
+	assert_eq(synced.players.by_id["local"].hp, 2, "server snapshot applies public hp")
+	assert_eq(synced.players.by_id["local"].dice[5], 5, "server snapshot applies private dice")
+	assert_eq(synced.players.by_id["local"].cylinder.slots[1].loaded, true, "server snapshot applies private cylinder")
+
+	adapter:on_bridge_message({
+		type = "COMMAND_REJECTED",
+		payload = {
+			matchId = "match-server",
+			commandId = "cmd-1",
+			code = "STALE_REVISION",
+			revision = 4,
+		},
+	})
+	assert_eq(adapter.last_command_rejected.code, "STALE_REVISION", "command reject cached")
+	assert_eq(emitted[2].type, "COMMAND_REJECTED_RECEIVED", "command reject ack type")
+	assert_eq(emitted[2].payload.commandId, "cmd-1", "command reject ack command id")
+end
+
 function M.test_bid_challenge_and_second_shake_load()
 	local store = new_store()
 	start_match(store, {

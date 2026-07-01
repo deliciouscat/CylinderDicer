@@ -1,5 +1,6 @@
 local i18n = require("game.core.i18n")
 local actions = require("game.model.actions")
+local server_command = require("game.net.server_command")
 local store_mod = require("game.model.store")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
@@ -452,7 +453,13 @@ local function render_combat(self, state)
 		local elapsed = (self.execute_elapsed or 0.0) - EXECUTE_INTRO_SECONDS - total * step_seconds
 		if elapsed >= EXECUTE_COMPLETE_HOLD_SECONDS then
 			self.advance_requested = true
-			self.store:dispatch(actions.round_advance())
+			if server_command.emit(state, "round.advance") then
+				return
+			end
+			local result = self.store:dispatch(actions.round_advance())
+			if result and result.ok then
+				server_command.emit(state, "round.advance")
+			end
 		end
 	end
 end
@@ -527,7 +534,13 @@ local function render_reveal(self, state)
 		and (self.reveal_elapsed or 0.0) >= reveal_complete_time(order) + REVEAL_HOLD_SECONDS
 		and not self.execute_requested then
 		self.execute_requested = true
-		self.store:dispatch(actions.duel_execute())
+		if server_command.emit(state, "duel.execute") then
+			return
+		end
+		local result = self.store:dispatch(actions.duel_execute())
+		if result and result.ok then
+			server_command.emit(state, "duel.execute")
+		end
 	end
 end
 

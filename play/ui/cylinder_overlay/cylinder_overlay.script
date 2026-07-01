@@ -1,6 +1,7 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions = require("game.model.actions")
+local server_command = require("game.net.server_command")
 local anchors = require("game.core.anchors")
 local tween = require("game.core.tween")
 local slot_geometry = require("ui.cylinder_overlay.slot_geometry")
@@ -136,8 +137,22 @@ function on_input(self, action_id, action)
 		return
 	end
 
+	local state = self.store:get_state()
+	local command_type = "bullet.load"
+	if state.pending_load and state.pending_load.source == "setup" then
+		command_type = "setup.load_initial"
+	end
+	if server_command.emit(state, command_type, {
+		slotIndex = slot_index,
+	}) then
+		print("[cylinder]", "load queued", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
+		return
+	end
 	local result = self.store:dispatch(actions.bullet_load(slot_index, self.load_player_id))
 	if result and result.ok then
+		server_command.emit(state, command_type, {
+			slotIndex = slot_index,
+		})
 		print("[cylinder]", "loaded", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
 	else
 		print("[cylinder]", "load failed", "slot=" .. tostring(slot_index), "error=" .. tostring(result and result.error))

@@ -38,7 +38,8 @@ export type MatchCommandType =
 export interface MatchCommand<TPayload = unknown> {
   commandId: string
   matchId: string
-  actorUserId: string
+  actorUserId?: string
+  actorVirtualOpponentId?: string
   actorPlayerId?: string
   revision: number
   type: MatchCommandType

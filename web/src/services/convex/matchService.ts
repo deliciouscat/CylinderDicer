@@ -36,7 +36,34 @@
  * ```
  */
 import type { ConvexClient } from 'convex/browser'
-import { makeFunctionReference } from 'convex/server'
+import { convexFunctions } from './functionReferences'
+
+export interface MatchPrivateDelta {
+  kind: 'private_delta'
+  matchId: string
+  revision: number
+  hud?: string
+  viewerPlayerId: string
+  dice?: number[]
+  cylinder?: unknown
+  availableActions?: unknown[]
+}
+
+export interface MatchPublicSnapshot {
+  kind: 'public'
+  matchId: string
+  revision: number
+  hud?: string
+  players?: unknown[]
+}
+
+export type MergedMatchSnapshot = MatchPublicSnapshot & {
+  private?: MatchPrivateDelta
+  viewerPlayerId?: string
+  dice?: number[]
+  cylinder?: unknown
+  availableActions?: unknown[]
+}
 
 export interface CreateDevMatchOptions {
   localPlayerName?: string
@@ -44,11 +71,20 @@ export interface CreateDevMatchOptions {
   requiresSetupLoad?: boolean
 }
 
+export interface CreateCustomMatchOptions {
+  localPlayerName?: string
+  virtualOpponentKeys?: string[]
+  firstPlayerId?: string
+  requiresSetupLoad?: boolean
+}
+
 export interface CreatedMatch {
   matchId: string
   revision: number
-  publicSnapshot?: unknown
-  privateDelta?: unknown
+  reused?: boolean
+  custom?: boolean
+  publicSnapshot?: MatchPublicSnapshot
+  privateDelta?: MatchPrivateDelta
 }
 
 export interface SubmitMatchCommandInput {
@@ -59,8 +95,14 @@ export interface SubmitMatchCommandInput {
   payload?: unknown
 }
 
+export interface CompactMatchLogsInput {
+  matchId: string
+  keepLastRevisions?: number
+  maxDelete?: number
+}
+
 export interface MatchSubscriptionHandlers {
-  onSnapshot(snapshot: unknown): void
+  onSnapshot(snapshot: MatchPublicSnapshot | MatchPrivateDelta | null): void
   onError?(error: Error): void
   private?: boolean
 }
@@ -70,30 +112,68 @@ export type SnapshotUnsubscribe = (() => void) & {
   getCurrentValue(): unknown | undefined
 }
 
-const createDevMatchMutation = makeFunctionReference<'mutation'>('matches:createDevMatch')
-const submitMatchCommandMutation = makeFunctionReference<'mutation'>('commands:submitMatchCommand')
-const publicSnapshotQuery = makeFunctionReference<'query'>('snapshots:getLatestPublicSnapshot')
-const privateDeltaQuery = makeFunctionReference<'query'>('snapshots:getLatestPrivateDelta')
+export function mergeMatchSnapshots(
+  publicSnapshot: MatchPublicSnapshot | null | undefined,
+  privateDelta: MatchPrivateDelta | null | undefined,
+): MergedMatchSnapshot | null {
+  if (!publicSnapshot) {
+    return null
+  }
+
+  if (!privateDelta || privateDelta.matchId !== publicSnapshot.matchId) {
+    return publicSnapshot
+  }
+
+  return {
+    ...publicSnapshot,
+    hud: privateDelta.hud ?? publicSnapshot.hud,
+    private: privateDelta,
+    viewerPlayerId: privateDelta.viewerPlayerId,
+    dice: privateDelta.dice,
+    cylinder: privateDelta.cylinder,
+    availableActions: privateDelta.availableActions,
+  }
+}
 
 export function createMatchService(client: ConvexClient) {
   return {
     async createDevMatch(options: CreateDevMatchOptions = {}): Promise<CreatedMatch> {
-      return await client.mutation(createDevMatchMutation, options)
+      return await client.mutation(convexFunctions.matches.createDevMatch, options)
+    },
+    async createCustomMatchWithOpponents(options: CreateCustomMatchOptions = {}): Promise<CreatedMatch | Record<string, any>> {
+      return await client.mutation(convexFunctions.matches.createCustomMatchWithOpponents, options)
     },
     async submitCommand(command: SubmitMatchCommandInput): Promise<unknown> {
-      return await client.mutation(submitMatchCommandMutation, command as Record<string, any>)
+      return await client.mutation(convexFunctions.commands.submitMatchCommand, command as Record<string, any>)
+    },
+    async getPublicSnapshot(matchId: string): Promise<MatchPublicSnapshot | null> {
+      return await client.query(convexFunctions.snapshots.getLatestPublicSnapshot, { matchId } as any)
+    },
+    async getPrivateDelta(matchId: string): Promise<MatchPrivateDelta | null> {
+      return await client.query(convexFunctions.snapshots.getLatestPrivateDelta, { matchId } as any)
+    },
+    async compactMatchLogs(input: CompactMatchLogsInput): Promise<unknown> {
+      return await client.mutation(convexFunctions.matches.compactMatchLogs, input as any)
     },
     subscribeSnapshot(
       matchId: string,
       handlers: MatchSubscriptionHandlers,
     ): SnapshotUnsubscribe {
-      const query = handlers.private ? privateDeltaQuery : publicSnapshotQuery
+      const query = handlers.private
+        ? convexFunctions.snapshots.getLatestPrivateDelta
+        : convexFunctions.snapshots.getLatestPublicSnapshot
       return client.onUpdate(
         query,
         { matchId },
         (snapshot) => handlers.onSnapshot(snapshot),
         handlers.onError,
       ) as SnapshotUnsubscribe
+    },
+    subscribePublicView(
+      matchId: string,
+      handlers: Omit<MatchSubscriptionHandlers, 'private'>,
+    ): SnapshotUnsubscribe {
+      return this.subscribeSnapshot(matchId, handlers)
     },
   }
 }

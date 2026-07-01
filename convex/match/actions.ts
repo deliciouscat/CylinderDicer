@@ -27,7 +27,7 @@ import type { MatchCommand, MatchCommandType } from '../protocol/commands'
 
 export interface MatchAction<TPayload = unknown> {
 	type: MatchCommandType
-	actorUserId: string
+	actorUserId?: string
 	actorPlayerId: string
 	payload?: TPayload
 }
@@ -35,7 +35,7 @@ export interface MatchAction<TPayload = unknown> {
 export function commandToAction(command: MatchCommand, actorPlayerId: string): MatchAction {
 	return {
 		type: command.type,
-		actorUserId: command.actorUserId,
+		actorUserId: command.actorUserId ?? command.actorVirtualOpponentId,
 		actorPlayerId,
 		payload: command.payload,
 	}

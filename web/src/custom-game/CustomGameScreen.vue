@@ -1,39 +1,40 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { useAuth } from '@clerk/vue'
+import { useConvexClient } from 'convex-vue'
+import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import { assetLoader } from '../assets/assetLoader'
-import customGameConfig from '../config/customGame.config.json'
 import { t } from '../i18n'
 import {
-  fetchCustomGameState,
-  fetchCustomGameRoom,
-  joinCustomGameRoom,
-  type MockCustomGameState,
-  type MockRoomDetail,
-  type MockRoomPlayer,
-  type MockRoomSummary,
-} from '../services/mock'
+  type CreatedMatch,
+} from '../services/convex/matchService'
+import {
+  createCustomGameService,
+  type CustomGameRoomUnsubscribe,
+  type CustomGameRoomView,
+} from '../services/convex/customGameService'
+import {
+  createVirtualOpponentService,
+  type VirtualOpponentProfile,
+} from '../services/convex/virtualOpponentService'
 
-type ButtonGroupName = keyof (typeof customGameConfig)['buttonGroups']
-type ButtonAction =
-  | 'back'
-  | 'create'
-  | 'joinByCode'
-  | 'leaveRoom'
-  | 'invite'
-  | 'kickSelected'
-  | 'startGame'
-  | 'toggleReady'
-type ButtonConfig = {
+type RoomPlayer = {
   id: string
-  action: ButtonAction
-  labelKey: string
-  alternateLabelKey?: string
-  variant: 'wood' | 'red'
+  nickname: string
+  isHost: boolean
+  isReady: boolean
+  kind: 'human' | 'virtual'
+  archetype?: string
+  virtualOpponentKey?: string
 }
 
 const emit = defineEmits<{
   back: []
 }>()
+
+const convex = useConvexClient()
+const auth = useAuth()
+const customGameService = createCustomGameService(convex)
+const virtualOpponentService = createVirtualOpponentService(convex)
 
 const backgroundAsset = assetLoader('background-custom-game')
 const boardAsset = assetLoader('board')
@@ -42,13 +43,16 @@ const woodButtonAsset = assetLoader('menu-panel')
 const redButtonAsset = assetLoader('menu-pannel-red')
 const titleAsset = assetLoader('title')
 
-const state = ref<MockCustomGameState | null>(null)
-const screen = ref<'room-list' | 'room'>('room-list')
-const selectedRoomId = ref('')
-const selectedPlayerId = ref('')
-const roomCode = ref('')
-const inviteName = ref('')
-const statusMessage = ref('')
+const virtualOpponents = ref<VirtualOpponentProfile[]>([])
+const roomView = ref<CustomGameRoomView | null>(null)
+const selectedPlayerId = ref('local-player')
+const inviteCodeInput = ref('')
+const statusMessage = ref(t('customGame.loadingOpponents'))
+const errorMessage = ref('')
+const busy = ref(false)
+const loadedOnce = ref(false)
+
+let roomUnsubscribe: CustomGameRoomUnsubscribe | undefined
 
 const customGameStyles = {
   '--custom-bg': `url(${backgroundAsset.url})`,
@@ -68,135 +72,342 @@ const customGameStyles = {
   '--red-button-ratio': `${redButtonAsset.manifest.width} / ${redButtonAsset.manifest.height}`,
 }
 
-const rooms = computed<MockRoomSummary[]>(() => state.value?.rooms ?? [])
-const activeRoom = computed<MockRoomDetail | null>(() => state.value?.activeRoom ?? null)
-const currentUserId = computed(() => state.value?.currentUserId ?? '')
-const currentPlayer = computed(() => activeRoom.value?.players.find((player) => player.userId === currentUserId.value))
-const selectedPlayer = computed(
-  () => activeRoom.value?.players.find((player) => player.userId === selectedPlayerId.value) ?? null,
-)
-const isHost = computed(() => activeRoom.value?.hostId === currentUserId.value)
-const isReady = computed(() => Boolean(currentPlayer.value?.isReady))
-
-const roomActionButtons = computed(() => {
-  const groupName: ButtonGroupName = isHost.value ? 'hostRoomActions' : 'playerRoomActions'
-  return customGameConfig.buttonGroups[groupName] as ButtonConfig[]
+const isSignedIn = computed(() => auth.isSignedIn.value === true)
+const canUseConvex = computed(() => auth.isLoaded.value && isSignedIn.value)
+const isHost = computed(() => roomView.value?.viewer?.isHost === true)
+const isGuest = computed(() => Boolean(roomView.value?.viewer && !roomView.value.viewer.isHost))
+const roomStarted = computed(() => roomView.value?.room.status === 'started')
+const startedMatchId = computed(() => roomView.value?.room.matchId ?? '')
+const canToggleOpponents = computed(() => isHost.value && !roomStarted.value && !busy.value)
+const canStartMatch = computed(() => isHost.value && !roomStarted.value && allOpponentsReady.value)
+const selectedOpponentKeys = computed(() => {
+  return roomView.value?.participants
+    ?.filter((participant) => participant.participantKind === 'virtual' && participant.status === 'active')
+    ?.map((participant) => {
+      const opponent = virtualOpponents.value.find((candidate) => candidate._id === participant.virtualOpponentId)
+      return opponent?.key ?? ''
+    })
+    ?.filter(Boolean) ?? []
+})
+const roomPlayers = computed<RoomPlayer[]>(() => [
+  ...(roomView.value?.participants ?? [])
+    .slice()
+    .sort((left, right) => left.seatIndex - right.seatIndex)
+    .map((participant) => {
+      const opponent = virtualOpponents.value.find((candidate) => candidate._id === participant.virtualOpponentId)
+      return {
+        id: participant.playerId,
+        nickname: participant.displayName,
+        isHost: participant.playerId === 'local-player',
+        isReady: participant.ready,
+        kind: participant.participantKind,
+        archetype: participant.archetype,
+        virtualOpponentKey: opponent?.key,
+      }
+    }),
+])
+const selectedPlayer = computed(() => {
+  return roomPlayers.value.find((player) => player.id === selectedPlayerId.value) ?? roomPlayers.value[0]
+})
+const selectedCountLabel = computed(() => {
+  return `${roomPlayers.value.length}/6`
+})
+const allOpponentsReady = computed(() => {
+  return roomView.value?.allReady === true
 })
 
-function buttonLabel(button: ButtonConfig): string {
-  const labelKey = button.action === 'toggleReady' && isReady.value && button.alternateLabelKey
-    ? button.alternateLabelKey
-    : button.labelKey
-
-  return t(labelKey)
+function isOpponentSelected(key: string) {
+  return selectedOpponentKeys.value.includes(key)
 }
 
-function groupButtons(groupName: ButtonGroupName): ButtonConfig[] {
-  return customGameConfig.buttonGroups[groupName] as ButtonConfig[]
-}
-
-async function loadCustomGameState() {
-  state.value = await fetchCustomGameState()
-  selectedRoomId.value = ''
-  selectedPlayerId.value = ''
-}
-
-function selectRoom(room: MockRoomSummary) {
-  selectedRoomId.value = room.id
-  statusMessage.value = ''
-}
-
-async function openSelectedRoom() {
-  if (!selectedRoomId.value) {
+function toggleOpponent(key: string) {
+  if (!canToggleOpponents.value || !roomView.value) {
     return
   }
-
-  const room = await fetchCustomGameRoom(selectedRoomId.value)
-  if (state.value) {
-    state.value.activeRoom = room
-    state.value.selectedRoomId = room.id
-  }
-  selectedPlayerId.value = room.players.find((player) => !player.isHost)?.userId ?? room.players[0]?.userId ?? ''
-  screen.value = 'room'
-  statusMessage.value = ''
-}
-
-function createRoom() {
-  selectedPlayerId.value = activeRoom.value?.players.find((player) => !player.isHost)?.userId ?? ''
-  screen.value = 'room'
-  statusMessage.value = ''
-}
-
-async function joinByCode() {
-  if (!roomCode.value.trim()) {
-    openSelectedRoom()
-    return
-  }
-
-  const room = await joinCustomGameRoom(roomCode.value.trim())
-  if (state.value) {
-    state.value.activeRoom = room
-    selectedRoomId.value = room.id
-    selectedPlayerId.value = room.players[0]?.userId ?? ''
-  }
-  screen.value = 'room'
-}
-
-function leaveRoom() {
-  screen.value = 'room-list'
-  statusMessage.value = ''
-}
-
-function selectPlayer(player: MockRoomPlayer) {
-  selectedPlayerId.value = player.userId
-  statusMessage.value = ''
-}
-
-function kickSelectedPlayer() {
-  if (!state.value || !selectedPlayer.value || selectedPlayer.value.isHost) {
-    return
-  }
-
-  state.value.activeRoom.players = state.value.activeRoom.players.filter(
-    (player) => player.userId !== selectedPlayer.value?.userId,
+  void setSelectedOpponents(
+    isOpponentSelected(key)
+      ? selectedOpponentKeys.value.filter((selectedKey) => selectedKey !== key)
+      : [...selectedOpponentKeys.value, key],
+    key,
   )
-  state.value.rooms = state.value.rooms.map((room) => room.id === state.value?.activeRoom.id
-    ? { ...room, players: state.value.activeRoom.players.length }
-    : room)
-  selectedPlayerId.value = state.value.activeRoom.players.find((player) => !player.isHost)?.userId ?? ''
 }
 
-function toggleReady() {
-  if (!currentPlayer.value) {
+async function setSelectedOpponents(nextKeys: string[], focusKey?: string) {
+  if (!roomView.value || busy.value) {
+    return
+  }
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    const updated = await customGameService.setMyCustomGameOpponents({
+      roomId: roomView.value.room._id,
+      virtualOpponentKeys: nextKeys,
+    })
+    if (!isRoomView(updated)) {
+      throw new Error((updated as any)?.message ?? 'custom_room_update_failed')
+    }
+    roomView.value = updated
+    selectedPlayerId.value = focusKey && selectedOpponentKeys.value.includes(focusKey)
+      ? `opponent-${selectedOpponentKeys.value.indexOf(focusKey) + 1}`
+      : roomPlayers.value[1]?.id ?? 'local-player'
+    statusMessage.value = roomView.value.allReady
+      ? t('customGame.allReady')
+      : t('customGame.waitingForReady')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+function defaultOpponentKeys() {
+  return virtualOpponents.value.slice(0, 3).map((opponent) => opponent.key)
+}
+
+function isRoomView(value: unknown): value is CustomGameRoomView {
+  return Boolean(value && typeof value === 'object' && 'room' in value && 'participants' in value)
+}
+
+async function loadRoom() {
+  roomView.value = await customGameService.getMyCustomGameRoom()
+}
+
+async function createRoom() {
+  if (!canUseConvex.value || busy.value) {
+    return
+  }
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    const created = await customGameService.ensureMyCustomGameRoom({
+      virtualOpponentKeys: defaultOpponentKeys(),
+    })
+    if (!isRoomView(created)) {
+      throw new Error((created as any)?.message ?? 'custom_room_not_available')
+    }
+    roomView.value = created
+    subscribeRoomUpdates()
+    selectedPlayerId.value = roomPlayers.value[1]?.id ?? 'local-player'
+    statusMessage.value = selectedStatusMessage()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function joinRoom() {
+  if (!canUseConvex.value || busy.value) {
+    return
+  }
+  const inviteCode = inviteCodeInput.value.trim()
+  if (!inviteCode) {
+    errorMessage.value = t('customGame.inviteCodeRequired')
     return
   }
 
-  currentPlayer.value.isReady = !currentPlayer.value.isReady
+  busy.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('customGame.joinQueued')
+  try {
+    const joined = await customGameService.joinCustomGameRoomByInviteCode(inviteCode)
+    if (!isRoomView(joined)) {
+      throw new Error(`${(joined as any)?.code ?? 'JOIN_FAILED'}: ${(joined as any)?.message ?? 'join_failed'}`)
+    }
+    roomView.value = joined
+    subscribeRoomUpdates()
+    selectedPlayerId.value = joined.viewer?.playerId ?? roomPlayers.value[0]?.id ?? 'local-player'
+    statusMessage.value = t('customGame.joinedRoom')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.joinError')
+  } finally {
+    busy.value = false
+  }
 }
 
-function handleAction(action: ButtonAction) {
-  const handlers: Record<ButtonAction, () => void | Promise<void>> = {
-    back: () => emit('back'),
-    create: createRoom,
-    joinByCode,
-    leaveRoom,
-    invite: () => {
-      statusMessage.value = inviteName.value.trim()
-        ? t('customGame.inviteQueued', { name: inviteName.value.trim() })
-        : t('customGame.inviteCodeStatus', { code: activeRoom.value?.inviteCode ?? '' })
+async function leaveRoom() {
+  if (!roomView.value || !isGuest.value || busy.value) {
+    return
+  }
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    await customGameService.leaveMyCustomGameRoom(roomView.value.room._id)
+    roomUnsubscribe?.unsubscribe()
+    roomView.value = null
+    inviteCodeInput.value = ''
+    statusMessage.value = t('customGame.leftRoom')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function toggleMyReady() {
+  if (!roomView.value || !isGuest.value || busy.value) {
+    return
+  }
+  const nextReady = roomView.value.viewer?.ready !== true
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    const updated = await customGameService.setMyCustomGameReady({
+      roomId: roomView.value.room._id,
+      ready: nextReady,
+    })
+    if (!isRoomView(updated)) {
+      throw new Error((updated as any)?.message ?? 'ready_update_failed')
+    }
+    roomView.value = updated
+    statusMessage.value = selectedStatusMessage()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function refreshRoom() {
+  await loadRoom()
+}
+
+function selectedStatusMessage() {
+  return roomView.value?.allReady
+    ? t('customGame.allReady')
+    : t('customGame.waitingForReady')
+}
+
+function subscribeRoomUpdates() {
+  roomUnsubscribe?.unsubscribe()
+  roomUnsubscribe = customGameService.subscribeMyCustomGameRoom(
+    (room) => {
+      if (room) {
+        roomView.value = room
+        statusMessage.value = selectedStatusMessage()
+        if (room.room.status === 'started' && room.room.matchId) {
+          statusMessage.value = t('customGame.matchStarted')
+        }
+      }
     },
-    kickSelected: kickSelectedPlayer,
-    startGame: () => {
-      statusMessage.value = t('customGame.startQueued')
+    (error) => {
+      errorMessage.value = error.message
     },
-    toggleReady,
+  )
+}
+
+async function loadVirtualOpponents() {
+  if (!canUseConvex.value || busy.value) {
+    return
   }
 
-  void handlers[action]()
+  busy.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('customGame.loadingOpponents')
+  try {
+    const loaded = await virtualOpponentService.ensureDefaultVirtualOpponentsLoaded()
+    virtualOpponents.value = loaded.length > 0
+      ? loaded
+      : await virtualOpponentService.listVirtualOpponents()
+    await refreshRoom()
+    if (roomView.value) {
+      subscribeRoomUpdates()
+      selectedPlayerId.value = roomView.value.viewer?.playerId ?? roomPlayers.value[1]?.id ?? 'local-player'
+    }
+    loadedOnce.value = true
+    statusMessage.value = selectedStatusMessage()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.startError')
+  } finally {
+    busy.value = false
+  }
 }
+
+function openMatch(match: CreatedMatch) {
+  window.location.assign(`/play/dev?matchId=${encodeURIComponent(match.matchId)}`)
+}
+
+async function startGame() {
+  if (!canUseConvex.value || !isHost.value) {
+    statusMessage.value = t('customGame.signInRequired')
+    return
+  }
+  if (selectedOpponentKeys.value.length === 0) {
+    errorMessage.value = t('customGame.selectOpponent')
+    return
+  }
+  if (!allOpponentsReady.value) {
+    errorMessage.value = t('customGame.waitingForReady')
+    return
+  }
+
+  busy.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('customGame.startQueued')
+  try {
+    if (!roomView.value) {
+      errorMessage.value = t('customGame.startError')
+      return
+    }
+    const result = await customGameService.startMyCustomGameRoom(roomView.value.room._id) as CreatedMatch & { ok?: boolean; code?: string; message?: string }
+
+    if (result.ok === false || !result.matchId) {
+      errorMessage.value = `${result.code ?? 'CUSTOM_MATCH_FAILED'}: ${result.message ?? 'custom_match_failed'}`
+      statusMessage.value = t('customGame.startError')
+      return
+    }
+
+    statusMessage.value = t('customGame.customMatchCreated')
+    openMatch(result)
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.startError')
+  } finally {
+    busy.value = false
+  }
+}
+
+watchEffect(() => {
+  if (!auth.isLoaded.value) {
+    return
+  }
+
+  if (!isSignedIn.value) {
+    convex.setAuth(async () => null)
+    statusMessage.value = t('customGame.signInRequired')
+    return
+  }
+
+  convex.setAuth(
+    async ({ forceRefreshToken }) => {
+      return await auth.getToken.value({
+        template: 'convex',
+        skipCache: forceRefreshToken,
+      })
+    },
+    () => {},
+  )
+})
+
+watchEffect(() => {
+  if (!canUseConvex.value || loadedOnce.value) {
+    return
+  }
+  void loadVirtualOpponents()
+})
 
 onMounted(() => {
-  void loadCustomGameState()
+  if (!canUseConvex.value) {
+    statusMessage.value = auth.isLoaded.value
+      ? t('customGame.signInRequired')
+      : t('customGame.loadingOpponents')
+  }
+})
+
+onUnmounted(() => {
+  roomUnsubscribe?.unsubscribe()
 })
 </script>
 
@@ -207,143 +418,148 @@ onMounted(() => {
     <section class="custom-game-stage">
       <img class="custom-game-title" :src="titleAsset.url" :alt="t('customGame.titleAlt')" />
 
-      <div v-if="state" class="custom-game-shell" :class="`custom-game-shell--${screen}`">
+      <div class="custom-game-shell custom-game-shell--room">
         <div class="custom-game-toolbar">
-          <template v-if="screen === 'room-list'">
-            <button
-              v-for="button in groupButtons('roomListToolbar').filter((item) => item.id !== 'join')"
-              :key="button.id"
-              class="texture-button texture-button--small texture-button--toolbar"
-              type="button"
-              @click="handleAction(button.action)"
-            >
-              <span>{{ buttonLabel(button) }}</span>
-            </button>
+          <button
+            class="texture-button texture-button--small texture-button--toolbar"
+            type="button"
+            @click="emit('back')"
+          >
+            <span>{{ t('customGame.back') }}</span>
+          </button>
 
+          <div class="custom-game-toolbar__spacer" />
+
+          <button
+            class="texture-button texture-button--small texture-button--toolbar"
+            type="button"
+            :disabled="busy || !canUseConvex"
+            @click="loadVirtualOpponents"
+          >
+            <span>{{ t('customGame.refreshOpponents') }}</span>
+          </button>
+        </div>
+
+        <section v-if="!roomView" class="custom-game-board custom-game-board--lobby">
+          <div class="room-join-panel">
+            <label class="room-join-panel__label" for="custom-game-invite-code">{{ t('customGame.inviteCode') }}</label>
             <input
-              v-model="roomCode"
-              class="custom-game-input custom-game-input--room-code"
+              id="custom-game-invite-code"
+              v-model="inviteCodeInput"
+              class="room-join-panel__input"
               type="text"
               :placeholder="t('customGame.roomCodePlaceholder')"
               :aria-label="t('customGame.roomCodeAria')"
-              @keyup.enter="handleAction('joinByCode')"
+              :disabled="busy || !canUseConvex"
             />
-
-            <button
-              v-for="button in groupButtons('roomListToolbar').filter((item) => item.id === 'join')"
-              :key="button.id"
-              class="texture-button texture-button--small texture-button--toolbar"
-              type="button"
-              @click="handleAction(button.action)"
-            >
-              <span>{{ buttonLabel(button) }}</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button
-              v-for="button in groupButtons('roomToolbar').filter((item) => item.id === 'back')"
-              :key="button.id"
-              class="texture-button texture-button--small texture-button--toolbar"
-              type="button"
-              @click="handleAction(button.action)"
-            >
-              <span>{{ buttonLabel(button) }}</span>
-            </button>
-
-            <div class="custom-game-toolbar__spacer" />
-
-            <input
-              v-model="inviteName"
-              class="custom-game-input custom-game-input--invite"
-              type="text"
-              :placeholder="t('customGame.namePlaceholder')"
-              :aria-label="t('customGame.inviteNameAria')"
-              @keyup.enter="handleAction('invite')"
-            />
-
-            <button
-              v-for="button in groupButtons('roomToolbar').filter((item) => item.id === 'invite')"
-              :key="button.id"
-              class="texture-button texture-button--small texture-button--toolbar"
-              type="button"
-              @click="handleAction(button.action)"
-            >
-              <span>{{ buttonLabel(button) }}</span>
-            </button>
-          </template>
-        </div>
-
-        <section class="custom-game-board" :class="`custom-game-board--${screen}`">
-          <template v-if="screen === 'room-list'">
-            <div class="room-list-header">
-              <span>{{ t('customGame.host') }}</span>
-              <span>{{ t('customGame.players') }}</span>
-            </div>
-
-            <div class="room-list-scroll">
+            <div class="room-action-bar">
               <button
-                v-for="room in rooms"
-                :key="room.id"
-                class="room-list-row"
-                :class="{ 'is-selected': selectedRoomId === room.id }"
+                class="texture-button texture-button--large texture-button--wood"
                 type="button"
-                @click="selectRoom(room)"
-                @dblclick="openSelectedRoom"
+                :disabled="busy || !canUseConvex"
+                @click="joinRoom"
               >
-                <span>{{ room.hostName }}</span>
-                <span>{{ room.players }}/{{ room.capacity }}</span>
+                <span>{{ t('customGame.join') }}</span>
+              </button>
+              <button
+                class="texture-button texture-button--large texture-button--red"
+                type="button"
+                :disabled="busy || !canUseConvex"
+                @click="createRoom"
+              >
+                <span>{{ t('customGame.create') }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section v-else class="custom-game-board custom-game-board--room">
+          <div class="room-detail-layout">
+            <div class="room-player-list">
+              <button
+                v-for="player in roomPlayers"
+                :key="player.id"
+                class="room-player-row"
+                :class="{ 'is-selected': selectedPlayer?.id === player.id }"
+                type="button"
+                @click="selectedPlayerId = player.id"
+              >
+                <span>{{ player.nickname }}</span>
+                <span v-if="player.isHost" class="room-player-row__host">{{ t('customGame.host') }}</span>
+                <span v-else-if="player.isReady" class="room-player-row__ready">{{ t('customGame.ready') }}</span>
+                <span v-else class="room-player-row__waiting">{{ t('customGame.notReady') }}</span>
               </button>
             </div>
 
+            <aside class="room-invite-panel">
+              <p>{{ isHost ? t('customGame.virtualOpponents') : t('customGame.players') }}</p>
+              <strong>{{ selectedCountLabel }}</strong>
+              <small v-if="isHost">{{ t('customGame.inviteCodeStatus', { code: roomView.room.inviteCode }) }}</small>
+              <small v-else-if="selectedPlayer?.archetype">
+                {{ t('customGame.archetype') }}: {{ selectedPlayer.archetype }}
+              </small>
+              <small v-else-if="roomStarted">{{ t('customGame.matchStarted') }}</small>
+            </aside>
+          </div>
+
+          <div v-if="isHost" class="virtual-opponent-grid">
             <button
-              class="texture-button texture-button--large texture-button--red room-list-join"
+              v-for="opponent in virtualOpponents"
+              :key="opponent.key"
+              class="virtual-opponent-tile"
+              :class="{ 'is-selected': isOpponentSelected(opponent.key) }"
               type="button"
-              @click="openSelectedRoom"
+              :disabled="!canToggleOpponents"
+              @click="toggleOpponent(opponent.key)"
             >
-              <span>{{ t('customGame.join') }}</span>
+              <span>{{ opponent.displayName }}</span>
+              <small>{{ opponent.archetype ?? opponent.key }}</small>
+              <strong>{{ isOpponentSelected(opponent.key) ? t('customGame.selected') : t('customGame.add') }}</strong>
             </button>
-          </template>
+          </div>
 
-          <template v-else-if="activeRoom">
-            <div class="room-detail-layout">
-              <div class="room-player-list">
-                <button
-                  v-for="player in activeRoom.players"
-                  :key="player.userId"
-                  class="room-player-row"
-                  :class="{ 'is-selected': selectedPlayerId === player.userId }"
-                  type="button"
-                  @click="selectPlayer(player)"
-                >
-                  <span>{{ player.nickname }}</span>
-                  <span v-if="player.isHost" class="room-player-row__host">{{ t('customGame.host') }}</span>
-                  <span v-else-if="player.isReady" class="room-player-row__ready">{{ t('customGame.ready') }}</span>
-                </button>
-              </div>
-
-              <aside class="room-invite-panel">
-                <p>{{ t('customGame.inviteCode') }}</p>
-                <strong>{{ activeRoom.inviteCode }}</strong>
-              </aside>
-            </div>
-
-            <div class="room-action-bar" :class="{ 'room-action-bar--single': !isHost }">
-              <button
-                v-for="button in roomActionButtons"
-                :key="button.id"
-                class="texture-button texture-button--large"
-                :class="button.variant === 'red' ? 'texture-button--red' : 'texture-button--wood'"
-                type="button"
-                @click="handleAction(button.action)"
-              >
-                <span>{{ buttonLabel(button) }}</span>
-              </button>
-            </div>
-          </template>
+          <div class="room-action-bar">
+            <button
+              v-if="isGuest && !roomStarted"
+              class="texture-button texture-button--large texture-button--wood"
+              type="button"
+              :disabled="busy || !canUseConvex"
+              @click="toggleMyReady"
+            >
+              <span>{{ roomView.viewer?.ready ? t('customGame.unready') : t('customGame.ready') }}</span>
+            </button>
+            <button
+              v-if="isGuest && !roomStarted"
+              class="texture-button texture-button--large texture-button--toolbar"
+              type="button"
+              :disabled="busy || !canUseConvex"
+              @click="leaveRoom"
+            >
+              <span>{{ t('customGame.leaveRoom') }}</span>
+            </button>
+            <button
+              v-if="canStartMatch"
+              class="texture-button texture-button--large texture-button--red"
+              type="button"
+              :disabled="busy || !canUseConvex"
+              @click="startGame"
+            >
+              <span>{{ t('customGame.start') }}</span>
+            </button>
+            <button
+              v-if="roomStarted && startedMatchId"
+              class="texture-button texture-button--large texture-button--red"
+              type="button"
+              :disabled="busy"
+              @click="openMatch({ matchId: startedMatchId, revision: 0 })"
+            >
+              <span>{{ t('customGame.openMatch') }}</span>
+            </button>
+          </div>
         </section>
 
         <p v-if="statusMessage" class="custom-game-status">{{ statusMessage }}</p>
+        <p v-if="errorMessage" class="custom-game-status custom-game-status--error">{{ errorMessage }}</p>
       </div>
     </section>
   </main>

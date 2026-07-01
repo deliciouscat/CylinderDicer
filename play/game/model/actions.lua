@@ -16,6 +16,7 @@ M.types = {
 	DUEL_RESOLVE_CHOICE = "duel.resolve_choice",
 	ROUND_ADVANCE = "round.advance",
 	MATCH_COMPLETE = "match.complete",
+	SERVER_SNAPSHOT_APPLY = "server_snapshot.apply",
 }
 
 local function action(type_, payload, meta)
@@ -107,6 +108,10 @@ end
 
 function M.match_complete(winner_id)
 	return action(M.types.MATCH_COMPLETE, { winner_id = winner_id })
+end
+
+function M.server_snapshot_apply(snapshot)
+	return action(M.types.SERVER_SNAPSHOT_APPLY, snapshot or {})
 end
 
 return M

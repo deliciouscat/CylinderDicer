@@ -1,6 +1,7 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions = require("game.model.actions")
+local server_command = require("game.net.server_command")
 local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
@@ -54,14 +55,33 @@ local function handle_command(self, command)
 		self.store:dispatch(actions.bid_select_face(bid.face - 1))
 	elseif command == "pass" and self.can_pass then
 		audio.play_sfx("click")
-		self.store:dispatch(actions.bid_raise({
+		local next_bid = {
 			player_id = state.turn.active_player_id,
 			count = bid.count,
 			face = bid.face,
-		}))
+		}
+		if server_command.emit(state, "bid.raise", {
+			bid = next_bid,
+		}) then
+			self.can_drive = false
+			return
+		end
+		local result = self.store:dispatch(actions.bid_raise(next_bid))
+		if result and result.ok then
+			server_command.emit(state, "bid.raise", {
+				bid = next_bid,
+			})
+		end
 	elseif command == "challenge" and self.can_challenge then
 		audio.play_sfx("click")
-		self.store:dispatch(actions.bid_challenge())
+		if server_command.emit(state, "bid.challenge") then
+			self.can_drive = false
+			return
+		end
+		local result = self.store:dispatch(actions.bid_challenge())
+		if result and result.ok then
+			server_command.emit(state, "bid.challenge")
+		end
 	else
 		audio.play_sfx("click_empty")
 	end

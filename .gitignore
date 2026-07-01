@@ -8,6 +8,7 @@
 /node_modules
 /web/dist
 /web/.vite
+/.tmp
 /opponent-controller/node_modules
 /opponent-controller/dist
 /opponent-controller/.vite
@@ -30,3 +31,6 @@ builtins
 /convex/.env
 /convex/.env.*
 !/convex/.env.example
+.agents/
+.claude/
+convex/_generated/

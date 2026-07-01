@@ -426,9 +426,16 @@ button {
   transform: scale(0.985);
 }
 
+.texture-button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.55) brightness(0.72);
+  opacity: 0.72;
+}
+
 .texture-button:focus-visible,
 .room-list-row:focus-visible,
 .room-player-row:focus-visible,
+.virtual-opponent-tile:focus-visible,
 .custom-game-input:focus-visible {
   outline: 2px solid var(--color-border);
   outline-offset: 4px;
@@ -527,8 +534,38 @@ button {
 
 .custom-game-board--room {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  row-gap: clamp(20px, 2vw, 36px);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  row-gap: clamp(14px, 1.4vw, 24px);
+}
+
+.custom-game-board--lobby {
+  display: grid;
+  place-items: center;
+  min-height: clamp(260px, 24vw, 420px);
+}
+
+.room-join-panel {
+  width: min(100%, clamp(420px, 34vw, 620px));
+  display: grid;
+  gap: clamp(12px, 1.2vw, 20px);
+  padding: clamp(18px, 1.8vw, 28px);
+  border-radius: 12px;
+  background: rgb(from var(--color-textbox-bg) r g b / 72%);
+}
+
+.room-join-panel__label {
+  font-size: clamp(22px, 1.45vw, 30px);
+  color: var(--color-text);
+}
+
+.room-join-panel__input {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: clamp(12px, 1vw, 18px) clamp(16px, 1.2vw, 22px);
+  font-size: clamp(22px, 1.45vw, 30px);
+  background: rgb(from var(--color-textbox-bg) r g b / 88%);
+  color: var(--color-text);
 }
 
 .room-detail-layout {
@@ -571,7 +608,8 @@ button {
 }
 
 .room-player-row__host,
-.room-player-row__ready {
+.room-player-row__ready,
+.room-player-row__waiting {
   justify-self: center;
 }
 
@@ -581,6 +619,10 @@ button {
 
 .room-player-row__ready {
   color: var(--color-text-status-ready);
+}
+
+.room-player-row__waiting {
+  color: var(--color-text-muted);
 }
 
 .room-invite-panel {
@@ -596,6 +638,66 @@ button {
 }
 
 .room-invite-panel strong {
+  display: block;
+  font-weight: 400;
+}
+
+.room-invite-panel small {
+  display: block;
+  margin-top: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.25;
+}
+
+.virtual-opponent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(8px, 0.8vw, 14px);
+}
+
+.virtual-opponent-tile {
+  min-height: clamp(58px, 4vw, 78px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px clamp(14px, 1.2vw, 22px);
+  color: var(--color-text);
+  background: rgb(from var(--color-textbox-bg) r g b / 54%);
+  text-align: left;
+  text-shadow: 0 2px 3px rgb(0 0 0 / 76%);
+}
+
+.virtual-opponent-tile.is-selected {
+  box-shadow: inset 0 0 0 2px var(--color-border);
+  background: rgb(from var(--color-textbox-bg) r g b / 78%);
+}
+
+.virtual-opponent-tile span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(18px, 1.12vw, 24px);
+}
+
+.virtual-opponent-tile small {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-opponent-tile strong {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  color: var(--color-text-status-ready);
+  font-size: clamp(14px, 0.95vw, 18px);
   font-weight: 400;
 }
 
@@ -618,6 +720,10 @@ button {
   color: var(--color-text-muted);
   text-align: right;
   font-size: 15px;
+}
+
+.custom-game-status--error {
+  color: #ffb3a8;
 }
 
 @keyframes custom-game-pan {
@@ -666,6 +772,10 @@ button {
 
   .room-player-list {
     max-height: 350px;
+  }
+
+  .virtual-opponent-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .texture-button--large {
@@ -731,6 +841,11 @@ button {
     grid-auto-rows: 46px;
     row-gap: 8px;
     padding-bottom: 0;
+  }
+
+  .virtual-opponent-tile {
+    min-height: 52px;
+    padding: 8px 14px;
   }
 
   .room-list-join {
@@ -824,6 +939,14 @@ button {
     grid-auto-rows: 50px;
     row-gap: 8px;
     padding-bottom: 0;
+  }
+
+  .virtual-opponent-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .virtual-opponent-tile {
+    min-height: 54px;
   }
 
   .room-invite-panel {

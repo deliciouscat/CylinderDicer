@@ -227,6 +227,20 @@ Convex backend package/CLI can be invoked with `npx convex dev`. If a root `pack
 
 Note: `convex-vue` and `@convex-vue/core` both exist. The attached local manual uses the `convex-vue` plugin style, so this plan starts there. Keep Convex usage behind `web/src/services/convex/` so the package can be swapped if needed.
 
+Current root scripts:
+
+```bash
+npm run convex:typecheck
+npm run convex:domain-test
+npm run phase0:test
+npm run phase1:check
+CONVEX_DEPLOYMENT_REF=<team_slug>:<project_slug>:<deployment_ref> npm run phase1:bootstrap
+```
+
+`phase1:check` is a non-secret preflight. It verifies that Convex source files, deployment selection, generated API files, web client env, and generated API frontend references are present.
+
+`phase1:bootstrap` selects an existing Convex deployment, syncs generated `CONVEX_URL` into `web/.env.local` as `VITE_CONVEX_URL`, optionally sets `CLERK_JWT_ISSUER_DOMAIN`, then runs `phase1:check`. It does not create a new Convex project unless `CONVEX_ALLOW_CREATE=1` is explicitly set.
+
 ## Environment variables
 
 ### `web/.env.local`
@@ -276,16 +290,66 @@ Use one canonical name in `convex/auth.config.ts`. Prefer `CLERK_JWT_ISSUER_DOMA
 
 ### Convex CLI generated env
 
-`npx convex dev` commonly writes local Convex deployment metadata for the project. Do not hand-edit generated deployment markers unless the CLI asks.
+`npx convex dev` commonly writes local Convex deployment metadata for the project. The first run may require an interactive terminal because the CLI needs a Convex team/project selection. Do not hand-edit generated deployment markers unless the CLI asks.
 
 Expected local values may include:
 
 ```env
 CONVEX_DEPLOYMENT=
-VITE_CONVEX_URL=
+CONVEX_URL=
+CONVEX_SITE_URL=
 ```
 
-`VITE_CONVEX_URL` is for the browser. `CONVEX_DEPLOYMENT` is for the Convex CLI to know which deployment it is talking to.
+`CONVEX_DEPLOYMENT` is for the Convex CLI to know which deployment it is talking to. `CONVEX_URL` is the deployment URL. Copy the same URL into `web/.env.local` as `VITE_CONVEX_URL` so browser code can initialize the Convex client.
+
+Recommended Phase 1 setup sequence:
+
+```bash
+npm run phase0:test
+CONVEX_DEPLOYMENT_REF=<team_slug>:<project_slug>:<deployment_ref> CLERK_JWT_ISSUER_DOMAIN=https://<issuer>.clerk.accounts.dev npm run phase1:bootstrap
+npm run phase1:check
+```
+
+If the Convex account has multiple teams, select an existing deployment explicitly:
+
+```bash
+npx convex login status
+CONVEX_DEPLOYMENT_REF=<team_slug>:<project_slug>:<deployment_ref> npm run phase1:bootstrap
+```
+
+Manual equivalent:
+
+```bash
+npx convex deployment select <team_slug>:<project_slug>:<deployment_ref>
+npx convex dev --once
+npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<issuer>.clerk.accounts.dev
+# copy root CONVEX_URL into web/.env.local as VITE_CONVEX_URL
+npm run phase1:check
+```
+
+If the project already exists, use `--configure existing` or select an existing deployment:
+
+```bash
+npx convex deployment select <team_slug>:<project_slug>:local
+npm run convex:codegen
+npm run phase1:check
+```
+
+Frontend services should use generated API references through one registry:
+
+```ts
+import { api } from "../../../../convex/_generated/api";
+```
+
+Current frontend code keeps generated references in one registry:
+
+```text
+web/src/services/convex/functionReferences.ts
+```
+
+This is the intended frontend access point for generated Convex API references. Service files should not import `makeFunctionReference(...)` directly.
+
+Important: `npm run convex:codegen` verifies and regenerates generated API references. Do not treat it as the canonical deployment step for schema/functions. Before manual E2E on MossBorg dev, confirm functions/schema are pushed with `npm run phase1:bootstrap` or `npx convex dev --once`.
 
 ## `.gitignore` requirements
 
@@ -332,6 +396,53 @@ npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<issuer>.clerk.accounts.dev
 ```
 
 The exact dashboard path can differ by Clerk UI version. Look for API keys, Frontend API URL, or JWT Templates.
+
+### Clerk admin claim for opponent controller
+
+The Phase 4 admin opponent controller checks custom claims on the Clerk JWT identity returned by `ctx.auth.getUserIdentity()`. For the current implementation in `convex/adminMatches.ts`, the simplest Convex JWT template claim is:
+
+```json
+{
+  "role": "admin"
+}
+```
+
+Another accepted shape is:
+
+```json
+{
+  "roles": ["admin"]
+}
+```
+
+The guard also accepts admin-like values in these keys, including nested metadata objects:
+
+- `role`
+- `roles`
+- `permission`
+- `permissions`
+- `org_role`
+- `organizationRole`
+- `organization_role`
+- `metadata`
+- `publicMetadata`
+- `public_metadata`
+- `privateMetadata`
+- `private_metadata`
+- `unsafeMetadata`
+- `unsafe_metadata`
+- `claims`
+- `authorization`
+
+Boolean admin flags are also accepted:
+
+- `admin`
+- `isAdmin`
+- `is_admin`
+- `cylinderdicerAdmin`
+- `cylinderdicer_admin`
+
+After editing the Clerk JWT template, sign out and sign back in so Clerk issues a fresh token. To verify the claim reaches Convex, temporarily inspect `await ctx.auth.getUserIdentity()` in a protected Convex function or run a small dev-only query that returns the identity shape. Remove any identity-dump helper before production use.
 
 ## Convex auth config
 
@@ -609,12 +720,17 @@ Target QA path:
 
 ```text
 opponent-controller / bot
-  -> Convex mutation submitMatchCommand
+  -> Convex admin mutation submitOpponentCommand
+  -> shared applyMatchCommand helper
   -> Convex authoritative state
   -> Vue/Defold snapshot subscription
 ```
 
-Keep `vertual-server/` as legacy fallback until the Convex dev match flow can drive all opponent actions.
+`submitOpponentCommand` must only be used after admin auth resolves the submitting user and target bot actor. Normal players still use `submitMatchCommand`; both paths share the reducer/write helper only after actor identity is established.
+
+Current Phase 4 admin UI is manual refresh based. It calls `listAdminDevMatches`, `getAdminMatchState`, and `submitOpponentCommand`, then reloads match detail after submit. The play client receives snapshot subscription updates, but `/admin/opponents` does not yet live-subscribe to admin state.
+
+Keep `vertual-server/` as legacy fallback until the Convex dev match flow can drive all opponent actions and the play/admin screens can reliably select the same match.
 
 For cost safety, QA automation should prefer local Convex deployments and should not spam production deployments with shake ticks or repeated polling. Opponent tools should send the same checkpoint-level commands as the real client.
 

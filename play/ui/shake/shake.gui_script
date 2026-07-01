@@ -1,6 +1,7 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions = require("game.model.actions")
+local server_command = require("game.net.server_command")
 local gestures = require("game.core.gestures")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
@@ -100,7 +101,14 @@ local function schedule_bidding_open(self, state)
 	timer.delay(delay, false, function()
 		self.bidding_gap_armed = false
 		if self.store and selectors.phase(self.store:get_state()) == PHASE_BIDDING_GAP then
-			self.store:dispatch(actions.bidding_open())
+			local before = self.store:get_state()
+			if server_command.emit(before, "bidding.open") then
+				return
+			end
+			local result = self.store:dispatch(actions.bidding_open())
+			if result and result.ok then
+				server_command.emit(before, "bidding.open")
+			end
 		end
 	end)
 end
@@ -162,6 +170,11 @@ local function dispatch_shake(self)
 	local result = self.store:dispatch(actions.shake_roll(player_id))
 	if result and result.ok then
 		self.shake_impulse = 0.18
+		local next_state = self.store:get_state()
+		local next_status = selectors.shake_status(next_state, player_id)
+		if next_status.complete then
+			server_command.emit(state, "shake.complete")
+		end
 		return true
 	end
 	return false
@@ -175,7 +188,13 @@ local function dispatch_dice_check(self)
 	if selectors.phase(state) ~= PHASE_DICE_CHECK then
 		return false
 	end
+	if server_command.emit(state, "dice.check") then
+		return true
+	end
 	local result = self.store:dispatch(actions.dice_check(state.match.local_player_id))
+	if result and result.ok then
+		server_command.emit(state, "dice.check")
+	end
 	return result and result.ok == true
 end
 

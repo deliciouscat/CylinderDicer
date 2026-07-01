@@ -47,11 +47,29 @@ import {
 } from './match/state'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
 import {
-	ensureBotUser,
 	requireCurrentUser,
 	requireExistingCurrentUser,
 	type GenericCtx,
 } from './users'
+import { ensureDefaultVirtualOpponents, getVirtualOpponentByKey } from './virtualOpponents'
+
+const DEFAULT_COMPACTION_KEEP_REVISIONS = 12
+const DEFAULT_COMPACTION_MAX_DELETE = 200
+const MAX_CUSTOM_OPPONENTS = 5
+
+export interface CreateDevMatchOptions {
+	localPlayerName?: string
+	firstPlayerId?: string
+	requiresSetupLoad?: boolean
+	reuseActive?: boolean
+}
+
+export interface CreateCustomMatchOptions {
+	localPlayerName?: string
+	virtualOpponentKeys?: string[]
+	firstPlayerId?: string
+	requiresSetupLoad?: boolean
+}
 
 function toConvexValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
@@ -132,22 +150,53 @@ export async function getMatchParticipant(ctx: GenericCtx, matchId: string, user
 		.first()
 }
 
-async function insertMatchParticipants(
+export async function getMatchParticipantByPlayerId(
+	ctx: GenericCtx,
+	matchId: string,
+	playerId: string,
+) {
+	return await ctx.db
+		.query('matchParticipants')
+		.withIndex('by_match_player', (q: any) => q.eq('matchId', matchId).eq('playerId', playerId))
+		.first()
+}
+
+export async function insertMatchParticipants(
 	ctx: GenericCtx,
 	matchId: string,
 	players: CreateInitialStateInput['players'],
 	now: number,
 ) {
 	for (const [index, player] of players.entries()) {
-		await ctx.db.insert('matchParticipants', {
-			matchId,
-			userId: player.userId,
-			playerId: player.id,
-			seatIndex: index,
-			status: 'active',
-			updatedAt: now,
-		})
+		await ctx.db.insert(
+			'matchParticipants',
+			toConvexValue({
+				matchId,
+				userId: player.userId,
+				virtualOpponentId: player.virtualOpponentId,
+				participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
+				playerId: player.id,
+				seatIndex: index,
+				status: 'active',
+				updatedAt: now,
+			}),
+		)
 	}
+}
+
+async function matchHasVirtualOpponents(ctx: GenericCtx, matchId: string, state: MatchState) {
+	const participants = await ctx.db
+		.query('matchParticipants')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.take(8)
+	const participantsHaveVirtualOpponent = participants.some((participant: any) => {
+		return participant.participantKind === 'virtual' || Boolean(participant.virtualOpponentId)
+	})
+	const stateHasVirtualOpponent = state.players.order.some((playerId) => {
+		const player = state.players.byId[playerId]
+		return player?.participantKind === 'virtual' || Boolean(player?.virtualOpponentId)
+	})
+	return participantsHaveVirtualOpponent && stateHasVirtualOpponent
 }
 
 async function findReusableDevMatch(ctx: GenericCtx, currentUserId: string) {
@@ -160,7 +209,7 @@ async function findReusableDevMatch(ctx: GenericCtx, currentUserId: string) {
 		const match = await ctx.db.get(participant.matchId)
 		if (match?.mode === 'dev' && match.status === 'ready' && match.hostUserId === currentUserId) {
 			const state = await getLatestMatchState(ctx, participant.matchId)
-			if (state) {
+			if (state && (await matchHasVirtualOpponents(ctx, participant.matchId, state))) {
 				return {
 					match,
 					state,
@@ -173,26 +222,227 @@ async function findReusableDevMatch(ctx: GenericCtx, currentUserId: string) {
 	return null
 }
 
-async function buildDevPlayers(ctx: GenericCtx, currentUser: any, localPlayerName?: string) {
-	const bots = [
-		await ensureBotUser(ctx, 'opponent-1', 'Hush Feather'),
-		await ensureBotUser(ctx, 'opponent-2', 'Samuel Saber'),
-		await ensureBotUser(ctx, 'opponent-3', 'Zippo Jay'),
-	]
+export async function buildDevPlayers(ctx: GenericCtx, currentUser: any, localPlayerName?: string) {
+	const opponents = await ensureDefaultVirtualOpponents(ctx)
 
 	return [
 		{
 			id: 'local-player',
 			userId: currentUser._id,
+			participantKind: 'human',
 			name: localPlayerName ?? currentUser.displayName ?? 'You',
 		},
-		...bots.map((bot, index) => ({
+		...opponents.map((opponent, index) => ({
 			id: `opponent-${index + 1}`,
-			userId: bot._id,
-			name: bot.displayName,
+			virtualOpponentId: opponent._id,
+			participantKind: 'virtual' as const,
+			name: opponent.displayName,
 			initialLoadedSlots: [1, 3, 5],
 		})),
 	] satisfies CreateInitialStateInput['players']
+}
+
+async function buildCustomPlayers(
+	ctx: GenericCtx,
+	currentUser: any,
+	options: CreateCustomMatchOptions,
+) {
+	await ensureDefaultVirtualOpponents(ctx)
+	const requestedKeys = Array.from(new Set(options.virtualOpponentKeys ?? []))
+	const keys = requestedKeys.length > 0
+		? requestedKeys.slice(0, MAX_CUSTOM_OPPONENTS)
+		: ['opponent-1', 'opponent-2', 'opponent-3']
+	const opponents = []
+	for (const key of keys) {
+		const opponent = await getVirtualOpponentByKey(ctx, key)
+		if (!opponent) {
+			return {
+				ok: false as const,
+				code: 'VIRTUAL_OPPONENT_NOT_FOUND',
+				message: 'virtual_opponent_not_found',
+				key,
+			}
+		}
+		opponents.push(opponent)
+	}
+
+	return {
+		ok: true as const,
+		players: [
+			{
+				id: 'local-player',
+				userId: currentUser._id,
+				participantKind: 'human' as const,
+				name: options.localPlayerName ?? currentUser.displayName ?? 'You',
+			},
+			...opponents.map((opponent, index) => ({
+				id: `opponent-${index + 1}`,
+				virtualOpponentId: opponent._id,
+				participantKind: 'virtual' as const,
+				name: opponent.displayName,
+				initialLoadedSlots: [1, 3, 5],
+			})),
+		] satisfies CreateInitialStateInput['players'],
+	}
+}
+
+export async function createDevMatchForUser(
+	ctx: GenericCtx,
+	currentUser: any,
+	options: CreateDevMatchOptions = {},
+) {
+	const now = Date.now()
+	if (options.reuseActive !== false) {
+		const reusable = await findReusableDevMatch(ctx, currentUser._id)
+		if (reusable) {
+			return {
+				matchId: reusable.match._id,
+				revision: reusable.state.revision,
+				reused: true,
+				publicSnapshot: buildPublicSnapshot(reusable.state),
+				privateDelta: buildPrivateDelta(reusable.state, reusable.participant.playerId),
+			}
+		}
+	}
+
+	const players = await buildDevPlayers(ctx, currentUser, options.localPlayerName)
+	const matchId = await ctx.db.insert('matches', {
+		mode: 'dev' satisfies MatchMode,
+		status: 'ready',
+		revision: 0,
+		hostUserId: currentUser._id,
+		createdAt: now,
+		updatedAt: now,
+	})
+	await insertMatchParticipants(ctx, matchId, players, now)
+
+	const state = createInitialMatchState({
+		matchId,
+		mode: 'dev',
+		localPlayerId: 'local-player',
+		firstPlayerId: options.firstPlayerId,
+		requiresSetupLoad: options.requiresSetupLoad,
+		rngSeed: now % 2147483647,
+		players,
+	})
+	await writeStateAndPublicView(ctx, state)
+
+	return {
+		matchId,
+		revision: state.revision,
+		publicSnapshot: buildPublicSnapshot(state),
+		privateDelta: buildPrivateDelta(state, 'local-player'),
+	}
+}
+
+export async function createCustomMatchForUser(
+	ctx: GenericCtx,
+	currentUser: any,
+	options: CreateCustomMatchOptions = {},
+) {
+	const now = Date.now()
+	const built = await buildCustomPlayers(ctx, currentUser, options)
+	if (!built.ok) {
+		return built
+	}
+
+	const matchId = await ctx.db.insert('matches', {
+		mode: 'dev' satisfies MatchMode,
+		status: 'ready',
+		revision: 0,
+		hostUserId: currentUser._id,
+		createdAt: now,
+		updatedAt: now,
+	})
+	await insertMatchParticipants(ctx, matchId, built.players, now)
+
+	const state = createInitialMatchState({
+		matchId,
+		mode: 'dev',
+		localPlayerId: 'local-player',
+		firstPlayerId: options.firstPlayerId,
+		requiresSetupLoad: options.requiresSetupLoad,
+		rngSeed: now % 2147483647,
+		players: built.players,
+	})
+	await writeStateAndPublicView(ctx, state)
+
+	return {
+		matchId,
+		revision: state.revision,
+		custom: true,
+		publicSnapshot: buildPublicSnapshot(state),
+		privateDelta: buildPrivateDelta(state, 'local-player'),
+	}
+}
+
+export async function createCustomMatchFromRoomParticipants(
+	ctx: GenericCtx,
+	hostUser: any,
+	roomParticipants: Array<{
+		participantKind: 'human' | 'virtual'
+		playerId: string
+		userId?: string
+		virtualOpponentId?: string
+		displayName: string
+		seatIndex: number
+	}>,
+	options: { requiresSetupLoad?: boolean; firstPlayerId?: string } = {},
+) {
+	const now = Date.now()
+	const ordered = roomParticipants
+		.slice()
+		.sort((left, right) => left.seatIndex - right.seatIndex)
+	const hostParticipant = ordered.find(
+		(participant) => participant.participantKind === 'human' && participant.userId === hostUser._id,
+	)
+	const localPlayerId = hostParticipant?.playerId ?? 'local-player'
+	const players = ordered.map((participant) => {
+		if (participant.participantKind === 'virtual') {
+			return {
+				id: participant.playerId,
+				virtualOpponentId: participant.virtualOpponentId,
+				participantKind: 'virtual' as const,
+				name: participant.displayName,
+				initialLoadedSlots: [1, 3, 5],
+			}
+		}
+		return {
+			id: participant.playerId,
+			userId: participant.userId,
+			participantKind: 'human' as const,
+			name: participant.displayName,
+		}
+	})
+
+	const matchId = await ctx.db.insert('matches', {
+		mode: 'dev' satisfies MatchMode,
+		status: 'ready',
+		revision: 0,
+		hostUserId: hostUser._id,
+		createdAt: now,
+		updatedAt: now,
+	})
+	await insertMatchParticipants(ctx, matchId, players, now)
+
+	const state = createInitialMatchState({
+		matchId,
+		mode: 'dev',
+		localPlayerId,
+		firstPlayerId: options.firstPlayerId,
+		requiresSetupLoad: options.requiresSetupLoad,
+		rngSeed: now % 2147483647,
+		players,
+	})
+	await writeStateAndPublicView(ctx, state)
+
+	return {
+		matchId,
+		revision: state.revision,
+		custom: true,
+		publicSnapshot: buildPublicSnapshot(state),
+		privateDelta: buildPrivateDelta(state, localPlayerId),
+	}
 }
 
 export const createDevMatch = mutationGeneric({
@@ -204,46 +454,31 @@ export const createDevMatch = mutationGeneric({
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: any) => {
 		const currentUser = await requireCurrentUser(ctx)
-		const now = Date.now()
-		const reusable = await findReusableDevMatch(ctx, currentUser._id)
-		if (reusable) {
-			return {
-				matchId: reusable.match._id,
-				revision: reusable.state.revision,
-				reused: true,
-				publicSnapshot: buildPublicSnapshot(reusable.state),
-				privateDelta: buildPrivateDelta(reusable.state, reusable.participant.playerId),
-			}
-		}
-
-		const players = await buildDevPlayers(ctx, currentUser, args.localPlayerName)
-		const matchId = await ctx.db.insert('matches', {
-			mode: 'dev' satisfies MatchMode,
-			status: 'ready',
-			revision: 0,
-			hostUserId: currentUser._id,
-			createdAt: now,
-			updatedAt: now,
-		})
-		await insertMatchParticipants(ctx, matchId, players, now)
-
-		const state = createInitialMatchState({
-			matchId,
-			mode: 'dev',
-			localPlayerId: 'local-player',
+		return await createDevMatchForUser(ctx, currentUser, {
+			localPlayerName: args.localPlayerName,
 			firstPlayerId: args.firstPlayerId,
 			requiresSetupLoad: args.requiresSetupLoad,
-			rngSeed: now % 2147483647,
-			players,
+			reuseActive: true,
 		})
-		await writeStateAndPublicView(ctx, state)
+	},
+})
 
-		return {
-			matchId,
-			revision: state.revision,
-			publicSnapshot: buildPublicSnapshot(state),
-			privateDelta: buildPrivateDelta(state, 'local-player'),
-		}
+export const createCustomMatchWithOpponents = mutationGeneric({
+	args: {
+		localPlayerName: v.optional(v.string()),
+		virtualOpponentKeys: v.optional(v.array(v.string())),
+		firstPlayerId: v.optional(v.string()),
+		requiresSetupLoad: v.optional(v.boolean()),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const currentUser = await requireCurrentUser(ctx)
+		return await createCustomMatchForUser(ctx, currentUser, {
+			localPlayerName: args.localPlayerName,
+			virtualOpponentKeys: args.virtualOpponentKeys,
+			firstPlayerId: args.firstPlayerId,
+			requiresSetupLoad: args.requiresSetupLoad,
+		})
 	},
 })
 
@@ -309,5 +544,84 @@ export const getPrivateDelta = queryGeneric({
 		}
 
 		return buildPrivateDelta(state, participant.playerId)
+	},
+})
+
+export const compactMatchLogs = mutationGeneric({
+	args: {
+		matchId: v.id('matches'),
+		keepLastRevisions: v.optional(v.number()),
+		maxDelete: v.optional(v.number()),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const currentUser = await requireCurrentUser(ctx)
+		const match = await ctx.db.get(args.matchId)
+		if (!match) {
+			return {
+				ok: false,
+				code: 'MATCH_NOT_FOUND',
+				message: 'match_not_found',
+			}
+		}
+		if (match.hostUserId !== currentUser._id) {
+			return {
+				ok: false,
+				matchId: args.matchId,
+				code: 'NOT_MATCH_HOST',
+				message: 'not_match_host',
+			}
+		}
+
+		const state = await getLatestMatchState(ctx, args.matchId)
+		const latestRevision = state?.revision ?? match.revision ?? 0
+		const keepLastRevisions = Math.max(1, args.keepLastRevisions ?? DEFAULT_COMPACTION_KEEP_REVISIONS)
+		const maxDelete = Math.max(1, Math.min(args.maxDelete ?? DEFAULT_COMPACTION_MAX_DELETE, DEFAULT_COMPACTION_MAX_DELETE))
+		const compactThroughRevision = Math.max(0, latestRevision - keepLastRevisions)
+		const now = Date.now()
+
+		const oldEvents = await ctx.db
+			.query('matchEvents')
+			.withIndex('by_match_revision', (q: any) => q.eq('matchId', args.matchId).lte('revision', compactThroughRevision))
+			.take(maxDelete)
+		for (const event of oldEvents) {
+			await ctx.db.delete(event._id)
+		}
+
+		const expiredCommands = await ctx.db
+			.query('matchCommands')
+			.withIndex('by_match_expires', (q: any) => q.eq('matchId', args.matchId).lte('expiresAt', now))
+			.take(maxDelete)
+		for (const command of expiredCommands) {
+			await ctx.db.delete(command._id)
+		}
+
+		if (oldEvents.length > 0 || expiredCommands.length > 0) {
+			await ctx.db.insert(
+				'matchEvents',
+				toConvexValue({
+					matchId: args.matchId,
+					revision: latestRevision,
+					type: 'log.compacted',
+					actorUserId: currentUser._id,
+					payload: {
+						compactThroughRevision,
+						deletedEvents: oldEvents.length,
+						deletedCommands: expiredCommands.length,
+					},
+					createdAt: now,
+				}),
+			)
+		}
+
+		return {
+			ok: true,
+			matchId: args.matchId,
+			latestRevision,
+			compactThroughRevision,
+			deletedEvents: oldEvents.length,
+			deletedCommands: expiredCommands.length,
+			mayHaveMore: oldEvents.length === maxDelete || expiredCommands.length === maxDelete,
+		}
 	},
 })

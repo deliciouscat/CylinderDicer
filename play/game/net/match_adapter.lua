@@ -79,6 +79,7 @@ local function to_internal(payload, cosmetics)
 		players = normalize_players(payload, local_player_id),
 		first_player_id = payload.firstPlayerId or payload.first_player_id or local_player_id,
 		requires_setup_load = payload.requiresSetupLoad ~= false and payload.requires_setup_load ~= false,
+		local_simulator = payload.localSimulator == true or payload.local_simulator == true,
 		preview = payload.preview,
 	}
 end
@@ -114,6 +115,30 @@ function HANDLERS.SET_COSMETICS(self, payload)
 	})
 end
 
+function HANDLERS.SERVER_SNAPSHOT(self, payload)
+	payload = payload or {}
+	self.server_snapshot = payload
+	self.server_revision = payload.revision
+	local result = self.store:dispatch(actions.server_snapshot_apply(payload))
+	self.bridge.emit("SERVER_SNAPSHOT_RECEIVED", {
+		matchId = payload.matchId or payload.match_id,
+		revision = payload.revision,
+		applied = result and result.ok == true,
+		error = result and result.error,
+	})
+end
+
+function HANDLERS.COMMAND_REJECTED(self, payload)
+	payload = payload or {}
+	self.last_command_rejected = payload
+	self.bridge.emit("COMMAND_REJECTED_RECEIVED", {
+		matchId = payload.matchId or payload.match_id,
+		commandId = payload.commandId or payload.command_id,
+		code = payload.code,
+		revision = payload.revision,
+	})
+end
+
 function HANDLERS.PING(self)
 	self.bridge.emit("PONG")
 end
@@ -123,6 +148,9 @@ function M.new(bridge, store, cosmetics)
 		bridge = bridge,
 		store = store,
 		cosmetics = cosmetics,
+		server_snapshot = nil,
+		server_revision = nil,
+		last_command_rejected = nil,
 	}, M)
 end
 

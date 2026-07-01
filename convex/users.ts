@@ -138,33 +138,6 @@ export async function requireCurrentUser(ctx: GenericCtx) {
 	return user
 }
 
-export async function ensureBotUser(ctx: GenericCtx, botId: string, displayName: string) {
-	const now = Date.now()
-	const clerkId = `bot:${botId}`
-	const existing = await getUserByClerkId(ctx, clerkId)
-	if (existing) {
-		await ctx.db.patch(existing._id, {
-			displayName,
-			updatedAt: now,
-		})
-		await createDefaultInventory(ctx, existing._id, now)
-		return {
-			...existing,
-			displayName,
-			updatedAt: now,
-		}
-	}
-
-	const userId = await ctx.db.insert('users', {
-		clerkId,
-		displayName,
-		createdAt: now,
-		updatedAt: now,
-	})
-	await createDefaultInventory(ctx, userId, now)
-	return await ctx.db.get(userId)
-}
-
 export const getCurrentUser = queryGeneric({
 	args: {},
 	returns: v.any(),

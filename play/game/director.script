@@ -1,5 +1,6 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
+local server_command = require("game.net.server_command")
 
 local ALL_BLOCKS = {
 	"/ui#shake",
@@ -111,7 +112,14 @@ function on_message(self, message_id, message)
 		self.last_background_location = message.location
 	elseif message_id == hash("duel_sequence_complete") and self.store then
 		local actions = require("game.model.actions")
-		self.store:dispatch(actions.round_advance())
+		local state = self.store:get_state()
+		if server_command.emit(state, "round.advance") then
+			return
+		end
+		local result = self.store:dispatch(actions.round_advance())
+		if result and result.ok then
+			server_command.emit(state, "round.advance")
+		end
 	end
 end
 

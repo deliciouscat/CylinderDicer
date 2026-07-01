@@ -50,6 +50,14 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index('by_user', ['userId']),
 
+  virtualOpponents: defineTable({
+    key: v.string(),
+    displayName: v.string(),
+    archetype: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_key', ['key']),
+
   matches: defineTable({
     mode: v.union(v.literal('dev'), v.literal('casual'), v.literal('ranked')),
     status: v.union(v.literal('ready'), v.literal('complete')),
@@ -57,11 +65,15 @@ export default defineSchema({
     hostUserId: v.optional(v.id('users')),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_status', ['status']),
+  })
+    .index('by_status', ['status'])
+    .index('by_mode_status', ['mode', 'status']),
 
   matchParticipants: defineTable({
     matchId: v.id('matches'),
-    userId: v.id('users'),
+    userId: v.optional(v.id('users')),
+    virtualOpponentId: v.optional(v.id('virtualOpponents')),
+    participantKind: v.optional(v.union(v.literal('human'), v.literal('virtual'))),
     playerId: v.string(),
     seatIndex: v.number(),
     status: v.union(v.literal('active'), v.literal('left'), v.literal('complete')),
@@ -69,22 +81,32 @@ export default defineSchema({
   })
     .index('by_match', ['matchId'])
     .index('by_user_status', ['userId', 'status'])
-    .index('by_match_user', ['matchId', 'userId']),
+    .index('by_match_user', ['matchId', 'userId'])
+    .index('by_virtual_opponent_status', ['virtualOpponentId', 'status'])
+    .index('by_match_virtual_opponent', ['matchId', 'virtualOpponentId'])
+    .index('by_match_player', ['matchId', 'playerId']),
 
   matchEvents: defineTable({
     matchId: v.id('matches'),
     revision: v.number(),
     type: v.string(),
     actorUserId: v.optional(v.id('users')),
+    actorVirtualOpponentId: v.optional(v.id('virtualOpponents')),
     payload: v.any(),
     createdAt: v.number(),
-  }).index('by_match_revision', ['matchId', 'revision']),
+    expiresAt: v.optional(v.number()),
+  })
+    .index('by_match_revision', ['matchId', 'revision'])
+    .index('by_match_expires', ['matchId', 'expiresAt']),
 
   matchCommands: defineTable({
     matchId: v.id('matches'),
     commandId: v.string(),
-    actorUserId: v.id('users'),
+    actorUserId: v.optional(v.id('users')),
+    actorVirtualOpponentId: v.optional(v.id('virtualOpponents')),
     actorPlayerId: v.optional(v.string()),
+    submittedByUserId: v.optional(v.id('users')),
+    source: v.optional(v.union(v.literal('player'), v.literal('admin'), v.literal('bot'))),
     type: v.string(),
     payload: v.any(),
     resultRevision: v.optional(v.number()),
@@ -92,7 +114,9 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
   })
     .index('by_match_command', ['matchId', 'commandId'])
-    .index('by_match_actor', ['matchId', 'actorUserId']),
+    .index('by_match_actor', ['matchId', 'actorUserId'])
+    .index('by_match_virtual_actor', ['matchId', 'actorVirtualOpponentId'])
+    .index('by_match_expires', ['matchId', 'expiresAt']),
 
   matchStates: defineTable({
     matchId: v.id('matches'),
@@ -112,4 +136,54 @@ export default defineSchema({
   })
     .index('by_match_kind', ['matchId', 'kind'])
     .index('by_match_user', ['matchId', 'userId']),
+
+  customGameRooms: defineTable({
+    hostUserId: v.id('users'),
+    status: v.union(v.literal('composing'), v.literal('started'), v.literal('cancelled')),
+    inviteCode: v.string(),
+    matchId: v.optional(v.id('matches')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_host_status', ['hostUserId', 'status'])
+    .index('by_status_updated', ['status', 'updatedAt'])
+    .index('by_invite_code', ['inviteCode']),
+
+  customGameParticipants: defineTable({
+    roomId: v.id('customGameRooms'),
+    userId: v.optional(v.id('users')),
+    virtualOpponentId: v.optional(v.id('virtualOpponents')),
+    participantKind: v.union(v.literal('human'), v.literal('virtual')),
+    playerId: v.string(),
+    displayName: v.string(),
+    archetype: v.optional(v.string()),
+    ready: v.boolean(),
+    seatIndex: v.number(),
+    status: v.union(v.literal('active'), v.literal('removed')),
+    updatedAt: v.number(),
+  })
+    .index('by_room', ['roomId'])
+    .index('by_room_player', ['roomId', 'playerId'])
+    .index('by_room_virtual_opponent', ['roomId', 'virtualOpponentId'])
+    .index('by_virtual_opponent_status', ['virtualOpponentId', 'status'])
+    .index('by_user_status', ['userId', 'status']),
+
+  adminAudit: defineTable({
+    adminUserId: v.id('users'),
+    matchId: v.optional(v.id('matches')),
+    customGameRoomId: v.optional(v.id('customGameRooms')),
+    targetUserId: v.optional(v.id('users')),
+    targetVirtualOpponentId: v.optional(v.id('virtualOpponents')),
+    targetPlayerId: v.optional(v.string()),
+    commandId: v.optional(v.string()),
+    commandType: v.optional(v.string()),
+    payload: v.optional(v.any()),
+    resultOk: v.boolean(),
+    resultCode: v.optional(v.string()),
+    resultRevision: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index('by_admin_created', ['adminUserId', 'createdAt'])
+    .index('by_match_created', ['matchId', 'createdAt'])
+    .index('by_match_target_created', ['matchId', 'targetPlayerId', 'createdAt']),
 })

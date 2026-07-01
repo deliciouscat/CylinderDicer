@@ -33,6 +33,7 @@ M.types = {
     DUEL_RESOLVE_CHOICE= "duel.resolve_choice",
     ROUND_ADVANCE      = "round.advance",
     MATCH_COMPLETE     = "match.complete",
+    SERVER_SNAPSHOT_APPLY = "server_snapshot.apply",
 }
 
 local function action(type_, payload) return { type = type_, payload = payload or {} } end
@@ -49,6 +50,7 @@ function M.bid_raise(bid)             return action(M.types.BID_RAISE, { bid = b
 function M.bid_challenge()            return action(M.types.BID_CHALLENGE) end
 function M.duel_resolve_choice(c)     return action(M.types.DUEL_RESOLVE_CHOICE, { choice = c }) end
 function M.round_advance()            return action(M.types.ROUND_ADVANCE) end
+function M.server_snapshot_apply(s)   return action(M.types.SERVER_SNAPSHOT_APPLY, s or {}) end
 
 return M
 ```

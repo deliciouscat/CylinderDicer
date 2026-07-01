@@ -41,7 +41,9 @@ export interface CylinderState {
 
 export interface PlayerState {
 	id: string
-	userId: string
+	userId?: string
+	virtualOpponentId?: string
+	participantKind?: 'human' | 'virtual'
 	name: string
 	hp: number
 	bullets: number
@@ -198,7 +200,9 @@ export interface CreateInitialStateInput {
 	rngSeed?: number
 	players: Array<{
 		id: string
-		userId: string
+		userId?: string
+		virtualOpponentId?: string
+		participantKind?: 'human' | 'virtual'
 		name: string
 		hp?: number
 		diceCount?: number
@@ -236,6 +240,8 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 		const normalized: PlayerState = {
 			id: player.id,
 			userId: player.userId,
+			virtualOpponentId: player.virtualOpponentId,
+			participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
 			name: player.name || player.id,
 			hp: player.hp ?? 3,
 			bullets: cylinder.slots.filter(Boolean).length,

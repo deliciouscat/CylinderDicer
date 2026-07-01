@@ -12,11 +12,15 @@ Vue bridge payload와 Defold store action 사이 adapter. 외부 message shape�
 - 입력:
   - `START_MATCH` payload.
   - `SET_COSMETICS` payload.
+  - `SERVER_SNAPSHOT` payload.
+  - `COMMAND_REJECTED` payload.
   - final state.
 - 출력:
   - `match.init` action.
   - `cosmetics.apply` action.
   - `MATCH_READY` payload.
+  - `SERVER_SNAPSHOT_RECEIVED` payload.
+  - `COMMAND_REJECTED_RECEIVED` payload.
   - `SUBMIT_MATCH_RESULT` payload: `{ matchId, winnerId, turnCount, eventsHash }`.
 
 # 의사코드
@@ -44,6 +48,23 @@ local HANDLERS = {
         self.store:dispatch(actions.cosmetics_apply(self.cosmetics.apply(payload)))
         self.bridge.emit("COSMETICS_APPLIED", { cosmetics = payload })
     end,
+    SERVER_SNAPSHOT = function(self, payload)
+        self.server_snapshot = payload
+        self.server_revision = payload.revision
+        self.store:dispatch(actions.server_snapshot_apply(payload))
+        self.bridge.emit("SERVER_SNAPSHOT_RECEIVED", {
+            matchId = payload.matchId,
+            revision = payload.revision,
+        })
+    end,
+    COMMAND_REJECTED = function(self, payload)
+        self.last_command_rejected = payload
+        self.bridge.emit("COMMAND_REJECTED_RECEIVED", {
+            matchId = payload.matchId,
+            commandId = payload.commandId,
+            code = payload.code,
+        })
+    end,
     PING = function(self) self.bridge.emit("PONG") end,
 }
 
@@ -64,4 +85,3 @@ end
 
 return M
 ```
-
