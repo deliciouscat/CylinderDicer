@@ -4,11 +4,17 @@
 /play/.internal
 /play/build
 /play/.deps/**
+/play/wasm-web/
 /web/node_modules
 /node_modules
 /web/dist
 /web/.vite
+/web/public/play/**
+!/web/public/play/.gitkeep
 /.tmp
+/log/.log
+/tools/defold/
+/.tools/defold/
 /opponent-controller/node_modules
 /opponent-controller/dist
 /opponent-controller/.vite

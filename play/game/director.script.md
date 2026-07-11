@@ -9,7 +9,7 @@
 - `game/core/anchors.lua`: cylinder 목표 anchor 계산.
 - `game/core/tween.lua`: 화면/anchor 이동 요청.
 - `game/core/audio.lua`: 턴/결투 사운드 요청.
-- `background/background.script`: 배경 위치 변경.
+- `background/background.gui_script`: 배경 위치 변경.
 - `ui/*`: 활성 UI block과 overlay 제어.
 
 # I/O

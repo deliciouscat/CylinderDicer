@@ -24,8 +24,26 @@ function toConvexValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
 }
 
-function inviteCodeFor(userId: string, now: number) {
-	return `${String(userId).slice(-4)}${String(now).slice(-4)}`.toLowerCase()
+function inviteCodeFor(userId: string, now: number, attempt = 0) {
+	const suffix = Math.floor(Math.random() * 1679616)
+		.toString(36)
+		.padStart(4, '0')
+		.slice(-4)
+	return `${String(userId).slice(-2)}${String(now + attempt).slice(-2)}${suffix}`.toLowerCase()
+}
+
+async function createInviteCode(ctx: GenericCtx, userId: string, now: number) {
+	for (let attempt = 0; attempt < 8; attempt += 1) {
+		const inviteCode = inviteCodeFor(userId, now, attempt)
+		const existing = await ctx.db
+			.query('customGameRooms')
+			.withIndex('by_invite_code', (q: any) => q.eq('inviteCode', inviteCode))
+			.first()
+		if (!existing) {
+			return inviteCode
+		}
+	}
+	return inviteCodeFor(userId, now, 8)
 }
 
 async function getActiveRoomForHost(ctx: GenericCtx, hostUserId: string) {
@@ -47,7 +65,6 @@ async function findRoomForUser(ctx: GenericCtx, userId: string) {
 		.withIndex('by_user_status', (q: any) => q.eq('userId', userId).eq('status', 'active'))
 		.take(8)
 
-	let latestStarted: any
 	for (const row of memberships) {
 		const room = await ctx.db.get(row.roomId)
 		if (!room) {
@@ -56,13 +73,8 @@ async function findRoomForUser(ctx: GenericCtx, userId: string) {
 		if (room.status === 'composing') {
 			return room
 		}
-		if (room.status === 'started' && room.matchId) {
-			if (!latestStarted || room.updatedAt > latestStarted.updatedAt) {
-				latestStarted = room
-			}
-		}
 	}
-	return latestStarted ?? null
+	return null
 }
 
 async function getHumanParticipantForUser(ctx: GenericCtx, roomId: string, userId: string) {
@@ -110,6 +122,29 @@ export async function getCustomGameRoomView(ctx: GenericCtx, roomId: string, vie
 	}
 }
 
+export async function completeLinkedCustomGameRoom(ctx: GenericCtx, matchId: string, now = Date.now()) {
+	const rooms = await ctx.db
+		.query('customGameRooms')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.take(8)
+	let updated = 0
+	const roomIds = []
+	for (const room of rooms) {
+		roomIds.push(room._id)
+		if (room.status === 'started') {
+			updated += 1
+			await ctx.db.patch(room._id, {
+				status: 'completed',
+				updatedAt: now,
+			})
+		}
+	}
+	return {
+		updated,
+		roomIds,
+	}
+}
+
 async function ensureRoom(ctx: GenericCtx, hostUser: any) {
 	const existing = await getActiveRoomForHost(ctx, hostUser._id)
 	if (existing) {
@@ -120,7 +155,7 @@ async function ensureRoom(ctx: GenericCtx, hostUser: any) {
 	const roomId = await ctx.db.insert('customGameRooms', {
 		hostUserId: hostUser._id,
 		status: 'composing',
-		inviteCode: inviteCodeFor(hostUser._id, now),
+		inviteCode: await createInviteCode(ctx, hostUser._id, now),
 		createdAt: now,
 		updatedAt: now,
 	})
@@ -141,11 +176,31 @@ async function upsertRoomParticipants(
 	const existingRows = await ctx.db
 		.query('customGameParticipants')
 		.withIndex('by_room', (q: any) => q.eq('roomId', room._id))
-		.take(8)
+		.take(16)
 	const existingByVirtualId = new Map<string, any>()
 	let existingHost: any
+	const activeHumanRows = existingRows.filter((row: any) => {
+		return row.status === 'active' && row.participantKind === 'human'
+	})
+	const availableVirtualSeats = Math.max(0, MAX_ROOM_PARTICIPANTS - Math.max(1, activeHumanRows.length))
+	if (requestedKeys.length > availableVirtualSeats) {
+		return {
+			ok: false as const,
+			code: 'CUSTOM_ROOM_FULL',
+			message: 'custom_room_full',
+			details: {
+				maxParticipants: MAX_ROOM_PARTICIPANTS,
+				activeHumans: Math.max(1, activeHumanRows.length),
+				maxVirtualOpponents: availableVirtualSeats,
+			},
+		}
+	}
 	for (const row of existingRows) {
-		if (row.participantKind === 'human') {
+		if (
+			row.participantKind === 'human' &&
+			row.status === 'active' &&
+			(row.userId === hostUser._id || row.playerId === 'local-player')
+		) {
 			existingHost = row
 		}
 		if (row.virtualOpponentId) {
@@ -247,6 +302,45 @@ export const getMyCustomGameRoom = queryGeneric({
 	},
 })
 
+export const listComposingCustomGameRooms = queryGeneric({
+	args: {
+		limit: v.optional(v.number()),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		await requireExistingCurrentUser(ctx)
+		const limit = Math.max(1, Math.min(25, Math.floor(Number(args.limit ?? 12))))
+		const rooms = await ctx.db
+			.query('customGameRooms')
+			.withIndex('by_status_updated', (q: any) => q.eq('status', 'composing'))
+			.order('desc')
+			.take(limit)
+		const rows = []
+		for (const room of rooms) {
+			const participants = await activeRoomParticipants(ctx, room._id)
+			const host = participants.find((participant: any) => participant.playerId === 'local-player')
+			const virtualParticipants = participants.filter((participant: any) => participant.participantKind === 'virtual')
+			const guestHumans = participants.filter(
+				(participant: any) => participant.participantKind === 'human' && participant.playerId !== 'local-player',
+			)
+			rows.push({
+				roomId: room._id,
+				hostUserId: room.hostUserId,
+				hostDisplayName: host?.displayName ?? 'Host',
+				inviteCode: room.inviteCode,
+				playerCount: participants.length,
+				maxPlayers: MAX_ROOM_PARTICIPANTS,
+				allReady:
+					virtualParticipants.length > 0 &&
+					virtualParticipants.every((participant: any) => participant.ready) &&
+					guestHumans.every((participant: any) => participant.ready),
+				updatedAt: room.updatedAt,
+			})
+		}
+		return rows
+	},
+})
+
 export const joinCustomGameRoomByInviteCode = mutationGeneric({
 	args: {
 		inviteCode: v.string(),
@@ -272,10 +366,11 @@ export const joinCustomGameRoomByInviteCode = mutationGeneric({
 			}
 		}
 
-		const room = await ctx.db
+		const matchingRooms = await ctx.db
 			.query('customGameRooms')
 			.withIndex('by_invite_code', (q: any) => q.eq('inviteCode', inviteCode))
-			.first()
+			.take(12)
+		const room = matchingRooms.find((candidate: any) => candidate.status === 'composing')
 		if (!room || room.status !== 'composing') {
 			return {
 				ok: false,

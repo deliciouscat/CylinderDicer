@@ -16,6 +16,30 @@ local function submit_result_once(self)
 	self.adapter:submit_result()
 end
 
+-- Dev-only QA harness: standalone 번들(local simulator)에서만 동작하는
+-- local reducer smoke tool. Convex server-authority 경로와 무관하다.
+-- 게이트(mode == "dev" and local_simulator)는 qa_cli.process_bridge_command가 검사한다.
+local function try_handle_qa_message(self, message)
+	if message.type ~= "QA_COMMAND" or not self.qa_cli then
+		return false
+	end
+
+	local snapshot = qa_cli.process_bridge_command(self.qa_cli, message.payload or {})
+	if snapshot then
+		bridge.emit("QA_STATUS", snapshot)
+	end
+	return true
+end
+
+local function try_handle_dom_pointer(message)
+	if message.type ~= "DOM_POINTER" then
+		return false
+	end
+
+	msg.post("/cylinder#cylinder", "pointer_input", message.payload or {})
+	return true
+end
+
 local function start_dev_match(self)
 	if bridge.is_web() then
 		return
@@ -85,7 +109,9 @@ function update(self, dt)
 			break
 		end
 
-		self.adapter:on_bridge_message(message)
+		if not try_handle_dom_pointer(message) and not try_handle_qa_message(self, message) then
+			self.adapter:on_bridge_message(message)
+		end
 	end
 end
 

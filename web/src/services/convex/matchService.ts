@@ -36,34 +36,17 @@
  * ```
  */
 import type { ConvexClient } from 'convex/browser'
+import type {
+  MatchPrivateView,
+  MatchPublicView,
+  MergedMatchView,
+  PlayerCommandType,
+} from '@shared/protocol/game-bridge'
 import { convexFunctions } from './functionReferences'
 
-export interface MatchPrivateDelta {
-  kind: 'private_delta'
-  matchId: string
-  revision: number
-  hud?: string
-  viewerPlayerId: string
-  dice?: number[]
-  cylinder?: unknown
-  availableActions?: unknown[]
-}
-
-export interface MatchPublicSnapshot {
-  kind: 'public'
-  matchId: string
-  revision: number
-  hud?: string
-  players?: unknown[]
-}
-
-export type MergedMatchSnapshot = MatchPublicSnapshot & {
-  private?: MatchPrivateDelta
-  viewerPlayerId?: string
-  dice?: number[]
-  cylinder?: unknown
-  availableActions?: unknown[]
-}
+export type MatchPrivateDelta = MatchPrivateView
+export type MatchPublicSnapshot = MatchPublicView
+export type MergedMatchSnapshot = MergedMatchView
 
 export interface CreateDevMatchOptions {
   localPlayerName?: string
@@ -91,7 +74,7 @@ export interface SubmitMatchCommandInput {
   matchId: string
   commandId: string
   revision: number
-  type: string
+  type: PlayerCommandType
   payload?: unknown
 }
 
@@ -145,6 +128,9 @@ export function createMatchService(client: ConvexClient) {
     },
     async submitCommand(command: SubmitMatchCommandInput): Promise<unknown> {
       return await client.mutation(convexFunctions.commands.submitMatchCommand, command as Record<string, any>)
+    },
+    async resumeMatchFlow(matchId: string): Promise<unknown> {
+      return await client.mutation(convexFunctions.commands.resumeMatchFlow, { matchId } as any)
     },
     async getPublicSnapshot(matchId: string): Promise<MatchPublicSnapshot | null> {
       return await client.query(convexFunctions.snapshots.getLatestPublicSnapshot, { matchId } as any)

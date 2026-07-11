@@ -1,23 +1,21 @@
 local i18n = require("game.core.i18n")
-local actions = require("game.model.actions")
-local server_command = require("game.net.server_command")
+local flow_contract = require("game.flow_contract")
 local store_mod = require("game.model.store")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local visual_status = require("game.dev.visual_status")
 
 local MAX_PLAYERS = 6
 local DICE_COUNT = 5
 local GRID_MAX = 30
-local REVEAL_INTERVAL = 0.16
-local REVEAL_DURATION = 0.34
-local REVEAL_HOLD_SECONDS = 3.0
+local REVEAL_INTERVAL = flow_contract.DUEL_REVEAL_INTERVAL_SECONDS
+local REVEAL_DURATION = flow_contract.DUEL_REVEAL_DURATION_SECONDS
 local CUP_WIDTH = 180.0
 local CUP_HEIGHT = 202.0
-local EXECUTE_INTRO_SECONDS = 0.45
-local ROULETTE_STEP_SECONDS = 0.66
-local PERFECT_DUEL_STEP_SECONDS = 1.18
+local EXECUTE_INTRO_SECONDS = flow_contract.DUEL_EXECUTE_INTRO_SECONDS
+local ROULETTE_STEP_SECONDS = flow_contract.DUEL_ROULETTE_STEP_SECONDS
+local PERFECT_DUEL_STEP_SECONDS = flow_contract.DUEL_PERFECT_STEP_SECONDS
 local HIT_APPLY_PROGRESS = 0.42
-local EXECUTE_COMPLETE_HOLD_SECONDS = 1.0
 
 local TEXTURE_BY_SKIN = {
 	["rosemund"] = "rosemund",
@@ -232,7 +230,7 @@ local function render_player_cup(index, seat, is_local, progress)
 end
 
 local function grid_face_matches(face, bid_face)
-	return face == 1 or face == bid_face
+	return face == bid_face or (bid_face ~= 1 and face == 1)
 end
 
 local function collect_grid_faces(self, state, order, players)
@@ -248,6 +246,7 @@ local function collect_grid_faces(self, state, order, players)
 			end
 		end
 	end
+	table.sort(faces)
 	return faces
 end
 
@@ -298,6 +297,7 @@ local function render_grid(self, state, order, players)
 			play_node_flipbook(node, dice_animation(face))
 		end
 	end
+	return #faces
 end
 
 local function render_local_tray(self, state, players)
@@ -449,19 +449,6 @@ local function render_combat(self, state)
 	gui_util.set_alpha("combat_shot", 1.0)
 	gui_util.set_alpha("combat_result", 1.0)
 
-	if sequence_complete and not self.advance_requested then
-		local elapsed = (self.execute_elapsed or 0.0) - EXECUTE_INTRO_SECONDS - total * step_seconds
-		if elapsed >= EXECUTE_COMPLETE_HOLD_SECONDS then
-			self.advance_requested = true
-			if server_command.emit(state, "round.advance") then
-				return
-			end
-			local result = self.store:dispatch(actions.round_advance())
-			if result and result.ok then
-				server_command.emit(state, "round.advance")
-			end
-		end
-	end
 end
 
 local function duel_key(state)
@@ -482,8 +469,6 @@ local function reset_reveal_if_needed(self, state)
 		self.duel_key = key
 		self.reveal_elapsed = 0.0
 		self.execute_elapsed = 0.0
-		self.execute_requested = false
-		self.advance_requested = false
 	end
 end
 
@@ -492,7 +477,6 @@ local function reset_execute_if_needed(self, state)
 	if self.execute_key ~= key then
 		self.execute_key = key
 		self.execute_elapsed = 0.0
-		self.advance_requested = false
 	end
 end
 
@@ -527,33 +511,44 @@ local function render_reveal(self, state)
 	end
 
 	hide_unused_players(self, #order)
-	render_grid(self, state, order, players)
+	local grid_count = render_grid(self, state, order, players)
 	render_local_tray(self, state, players)
-
-	if all_revealed(self, order)
-		and (self.reveal_elapsed or 0.0) >= reveal_complete_time(order) + REVEAL_HOLD_SECONDS
-		and not self.execute_requested then
-		self.execute_requested = true
-		if server_command.emit(state, "duel.execute") then
-			return
-		end
-		local result = self.store:dispatch(actions.duel_execute())
-		if result and result.ok then
-			server_command.emit(state, "duel.execute")
-		end
-	end
+	visual_status.set("duel", {
+		visible = true,
+		mode = "reveal",
+		player_count = #order,
+		grid_count = grid_count,
+		has_bid = state.duel and state.duel.bid ~= nil,
+		has_judge = state.duel and state.duel.judge ~= nil,
+		all_revealed = all_revealed(self, order),
+		progression_owner = state.match and state.match.local_simulator and "flow_coordinator" or "server",
+		active_player_id = state.turn and state.turn.active_player_id or nil,
+		local_player_id = state.match and state.match.local_player_id or nil,
+		is_local_active = state.turn and state.match and state.turn.active_player_id == state.match.local_player_id,
+	})
 end
 
 local function render(self, state)
 	local active = state.flow and state.flow.phase == "duel" and state.duel ~= nil
 	gui_util.set_enabled("root", active)
 	if not active then
+		visual_status.set("duel", {
+			visible = false,
+			phase = state.flow and state.flow.phase or nil,
+		})
 		return
 	end
 
 	reset_reveal_if_needed(self, state)
 	if state.duel.resolution then
 		reset_execute_if_needed(self, state)
+		visual_status.set("duel", {
+			visible = true,
+			mode = "combat",
+			has_resolution = true,
+			step_count = #(state.duel.resolution.steps or {}),
+			progression_owner = state.match and state.match.local_simulator and "flow_coordinator" or "server",
+		})
 		render_combat(self, state)
 	else
 		render_reveal(self, state)
@@ -564,22 +559,13 @@ local function request_render(self)
 	self.needs_render = true
 end
 
-function init(self)
+local function bind_store(self)
+	if self.store then
+		return true
+	end
 	self.store = store_mod.get()
-	self.subs = {}
-	self.needs_render = false
-	self.reveal_elapsed = 0.0
-	self.execute_elapsed = 0.0
-	self.duel_key = nil
-	self.execute_key = nil
-	self.execute_requested = false
-	self.advance_requested = false
-	gui.set_render_order(15)
-	build_runtime_nodes(self)
-	gui_util.set_enabled("root", false)
-
 	if not self.store then
-		return
+		return false
 	end
 
 	for _, topic in ipairs({ "duel", "turn", "players", "flow", "ui" }) do
@@ -589,11 +575,28 @@ function init(self)
 	end
 
 	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
+	self.subs = {}
+	self.needs_render = false
+	self.reveal_elapsed = 0.0
+	self.execute_elapsed = 0.0
+	self.duel_key = nil
+	self.execute_key = nil
+	gui.set_render_order(15)
+	build_runtime_nodes(self)
+	gui_util.set_enabled("root", false)
+
+	bind_store(self)
 end
 
 function update(self, dt)
 	self.reveal_elapsed = (self.reveal_elapsed or 0.0) + dt
 	self.execute_elapsed = (self.execute_elapsed or 0.0) + dt
+	bind_store(self)
 	if self.needs_render and self.store then
 		self.needs_render = false
 	end
@@ -603,6 +606,7 @@ function update(self, dt)
 end
 
 function on_message(self, message_id)
+	bind_store(self)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
 		request_render(self)

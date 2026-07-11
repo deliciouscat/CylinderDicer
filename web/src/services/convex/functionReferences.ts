@@ -38,14 +38,15 @@ export const convexFunctions = {
   },
   commands: {
     submitMatchCommand: api.commands.submitMatchCommand,
+    resumeMatchFlow: api.commands.resumeMatchFlow,
   },
   customGames: {
     ensureMyCustomGameRoom: api.customGames.ensureMyCustomGameRoom,
     getMyCustomGameRoom: api.customGames.getMyCustomGameRoom,
+    listComposingCustomGameRooms: api.customGames.listComposingCustomGameRooms,
     joinCustomGameRoomByInviteCode: api.customGames.joinCustomGameRoomByInviteCode,
     leaveMyCustomGameRoom: api.customGames.leaveMyCustomGameRoom,
     setMyCustomGameReady: api.customGames.setMyCustomGameReady,
-    setMyCustomGameOpponents: api.customGames.setMyCustomGameOpponents,
     startMyCustomGameRoom: api.customGames.startMyCustomGameRoom,
   },
   adminMatches: {
@@ -53,9 +54,13 @@ export const convexFunctions = {
     listAdminCustomGameRooms: api.adminMatches.listAdminCustomGameRooms,
     getAdminCustomGameRoom: api.adminMatches.getAdminCustomGameRoom,
     setCustomGameOpponentReady: api.adminMatches.setCustomGameOpponentReady,
+    closeStartedCustomGameRoom: api.adminMatches.closeStartedCustomGameRoom,
     listAdminDevMatches: api.adminMatches.listAdminDevMatches,
     getAdminMatchState: api.adminMatches.getAdminMatchState,
     submitOpponentCommand: api.adminMatches.submitOpponentCommand,
+    purgeCompletedDevMatchData: api.adminMatches.purgeCompletedDevMatchData,
+    probeAdminAccess: api.adminMatches.probeAdminAccess,
+    listRecentAdminAudit: api.adminMatches.listRecentAdminAudit,
   },
   virtualOpponents: {
     ensureDefaultVirtualOpponentsLoaded: api.virtualOpponents.ensureDefaultVirtualOpponentsLoaded,

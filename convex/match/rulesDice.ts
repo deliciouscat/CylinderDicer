@@ -25,7 +25,7 @@
  *
  * countFace:
  *   iterate alive players
- *   count dice equal to requested face
+ *   count dice equal to requested face, with skulls as wilds for non-skull bids
  *   return total
  * ```
  */
@@ -67,7 +67,7 @@ export function countFace(players: PlayerState[], face: number): number {
 		(total, player) =>
 			player.eliminated
 				? total
-				: total + player.dice.filter((value) => value === face).length,
+				: total + player.dice.filter((value) => value === face || (face !== SKULL_FACE && value === SKULL_FACE)).length,
 		0,
 	)
 }

@@ -32,7 +32,7 @@ export interface CustomGameRoomView {
   room: {
     _id: string
     hostUserId: string
-    status: 'composing' | 'started' | 'cancelled'
+    status: 'composing' | 'started' | 'completed' | 'cancelled'
     inviteCode: string
     matchId?: string
     createdAt: number
@@ -41,6 +41,17 @@ export interface CustomGameRoomView {
   participants: CustomGameParticipant[]
   allReady: boolean
   viewer?: CustomGameRoomViewer | null
+}
+
+export interface CustomGameRoomListRow {
+  roomId: string
+  hostUserId: string
+  hostDisplayName: string
+  inviteCode: string
+  playerCount: number
+  maxPlayers: number
+  allReady: boolean
+  updatedAt: number
 }
 
 export type CustomGameRoomUnsubscribe = (() => void) & {
@@ -56,6 +67,9 @@ export function createCustomGameService(client: ConvexClient) {
     async getMyCustomGameRoom(): Promise<CustomGameRoomView | null> {
       return await client.query(convexFunctions.customGames.getMyCustomGameRoom, {}) as CustomGameRoomView | null
     },
+    async listComposingCustomGameRooms(limit = 12): Promise<CustomGameRoomListRow[]> {
+      return await client.query(convexFunctions.customGames.listComposingCustomGameRooms, { limit }) as CustomGameRoomListRow[]
+    },
     async joinCustomGameRoomByInviteCode(inviteCode: string): Promise<CustomGameRoomView | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.joinCustomGameRoomByInviteCode, { inviteCode }) as CustomGameRoomView | Record<string, any>
     },
@@ -64,9 +78,6 @@ export function createCustomGameService(client: ConvexClient) {
     },
     async setMyCustomGameReady(input: { roomId: string; ready: boolean }): Promise<CustomGameRoomView | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.setMyCustomGameReady, input as any) as CustomGameRoomView | Record<string, any>
-    },
-    async setMyCustomGameOpponents(input: { roomId: string; virtualOpponentKeys: string[] }): Promise<CustomGameRoomView | Record<string, any> | null> {
-      return await client.mutation(convexFunctions.customGames.setMyCustomGameOpponents, input as any)
     },
     async startMyCustomGameRoom(roomId: string): Promise<CreatedMatch | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.startMyCustomGameRoom, { roomId } as any)

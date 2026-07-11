@@ -39,30 +39,38 @@ local function request_render(self)
 	self.needs_render = true
 end
 
-function init(self)
+local function bind_store(self)
+	if self.store then
+		return true
+	end
 	self.store = store_mod.get()
+	if not self.store then
+		return false
+	end
+
+	for _, topic in ipairs({ "turn", "players", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
+
+	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
 	self.subs = {}
 	self.needs_render = false
 	gui.set_render_order(6)
 
-	if not self.store then
-		return
-	end
-
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
-		request_render(self)
-	end)
-
-	render(self, self.store:get_state())
+	bind_store(self)
 end
 
 function update(self, dt)
+	if not self.store and not bind_store(self) then
+		return
+	end
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())
@@ -70,6 +78,7 @@ function update(self, dt)
 end
 
 function on_message(self, message_id)
+	bind_store(self)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
 		request_render(self)

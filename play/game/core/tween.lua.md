@@ -1,9 +1,8 @@
 # 개요
-반복 easing 계산 모듈. 배경 패닝, cylinder anchor 이동, UI 등장/퇴장에 공통 사용한다.
+반복 easing 계산 모듈. world object 이동, cylinder anchor 이동, UI 등장/퇴장에 공통 사용한다.
 
 # 의존성
 - `game/director.script`
-- `background/background.script`
 - `ui/cylinder_overlay/cylinder_overlay.script`
 - Defold `go.animate` 또는 직접 interpolation.
 
@@ -20,7 +19,7 @@
 # 의사코드
 ```lua
 -- Pattern: Facade over go.animate (+ 순수 lerp/ease helper).
--- director/background/cylinder가 동일한 이동 API를 쓰게 한다.
+-- director/cylinder 등 world object 이동 API를 통일한다.
 local M = {}
 
 function M.to(target, property, value, duration, easing, on_complete)
@@ -34,4 +33,3 @@ function M.ease(name, t) return EASINGS[name](t) end   -- 직접 보간이 필�
 
 return M
 ```
-

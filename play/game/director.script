@@ -1,48 +1,24 @@
 local store_mod = require("game.model.store")
-local selectors = require("game.model.selectors")
-local server_command = require("game.net.server_command")
+local presentation = require("game.presentation")
 
-local ALL_BLOCKS = {
-	"/ui#shake",
-	"/ui#player_carousel",
-	"/ui#rail",
-	"/ui#local_hud",
-	"/ui#bid_controls",
-	"/ui#duel",
-}
-
-local BLOCKS = {
-	revolver_reload = {
-		"/ui#player_carousel",
-	},
-	cup_shake = {
-		"/ui#shake",
-		"/ui#player_carousel",
-	},
-	bidding = {
-		"/ui#player_carousel",
-		"/ui#rail",
-		"/ui#local_hud",
-		"/ui#bid_controls",
-	},
-	duel = {
-		"/ui#player_carousel",
-		"/ui#duel",
-	},
-	complete = {
-		"/ui#duel",
-	},
-}
-
-local function set_block(self, kind)
-	if self.active_kind ~= kind then
-		for _, url in ipairs(ALL_BLOCKS) do
-			msg.post(url, "deactivate")
-		end
-		self.active_kind = kind
+local function sync_signature(state)
+	if not state then
+		return "none"
 	end
 
-	for _, url in ipairs(BLOCKS[kind] or {}) do
+	local view = presentation.describe(state)
+	return table.concat({ view.hud or "-", view.background or "-", view.cylinder_anchor or "-" }, "|")
+end
+
+local function set_block(self, view)
+	if self.active_kind ~= view.hud then
+		for _, url in ipairs(presentation.all_components()) do
+			msg.post(url, "deactivate")
+		end
+		self.active_kind = view.hud
+	end
+
+	for _, url in ipairs(view.components) do
 		msg.post(url, "activate")
 	end
 
@@ -50,15 +26,16 @@ local function set_block(self, kind)
 end
 
 local function sync_turn(self, state)
-	local kind = selectors.hud_kind(state)
-	set_block(self, kind)
+	local view = presentation.describe(state)
+	set_block(self, view)
+	self.sync_signature = sync_signature(state)
 
 	msg.post("/background#background", "pan_to", {
-		location = selectors.background_location(state),
+		location = view.background,
 	})
 
 	msg.post("/cylinder#cylinder", "set_target", {
-		anchor = selectors.cylinder_anchor(state),
+		anchor = view.cylinder_anchor,
 	})
 end
 
@@ -74,12 +51,11 @@ local function bind_store(self)
 		return false
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
-		request_turn_sync(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
-		request_turn_sync(self)
-	end)
+	for _, topic in ipairs({ "match", "players", "turn", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_turn_sync(self)
+		end)
+	end
 
 	sync_turn(self, self.store:get_state())
 	self.needs_turn_sync = false
@@ -91,14 +67,21 @@ function init(self)
 	self.subs = {}
 	self.active_kind = nil
 	self.needs_turn_sync = false
+	self.sync_signature = nil
 
 	bind_store(self)
 end
 
 function update(self, dt)
-	if self.needs_turn_sync and self.store then
+	if not self.store then
+		bind_store(self)
+		return
+	end
+
+	local state = self.store:get_state()
+	if self.needs_turn_sync or sync_signature(state) ~= self.sync_signature then
 		self.needs_turn_sync = false
-		sync_turn(self, self.store:get_state())
+		sync_turn(self, state)
 	end
 end
 
@@ -110,16 +93,6 @@ function on_message(self, message_id, message)
 		self.needs_turn_sync = false
 	elseif message_id == hash("background_pan_complete") then
 		self.last_background_location = message.location
-	elseif message_id == hash("duel_sequence_complete") and self.store then
-		local actions = require("game.model.actions")
-		local state = self.store:get_state()
-		if server_command.emit(state, "round.advance") then
-			return
-		end
-		local result = self.store:dispatch(actions.round_advance())
-		if result and result.ok then
-			server_command.emit(state, "round.advance")
-		end
 	end
 end
 

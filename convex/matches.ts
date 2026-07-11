@@ -412,6 +412,9 @@ export async function createCustomMatchFromRoomParticipants(
 			userId: participant.userId,
 			participantKind: 'human' as const,
 			name: participant.displayName,
+			initialLoadedSlots: participant.userId && participant.userId !== hostUser._id
+				? [1, 3, 5]
+				: undefined,
 		}
 	})
 

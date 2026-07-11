@@ -11,6 +11,7 @@ local tests = {
 	require("game.model.tests.shake_view_test"),
 	require("game.model.tests.cylinder_interaction_test"),
 	require("game.model.tests.local_permissions_test"),
+	require("game.model.tests.flow_contract_test"),
 }
 
 local total = 0

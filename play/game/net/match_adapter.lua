@@ -1,5 +1,6 @@
 local actions = require("game.model.actions")
 local selectors = require("game.model.selectors")
+local server_command = require("game.net.server_command")
 
 local M = {}
 M.__index = M
@@ -120,6 +121,9 @@ function HANDLERS.SERVER_SNAPSHOT(self, payload)
 	self.server_snapshot = payload
 	self.server_revision = payload.revision
 	local result = self.store:dispatch(actions.server_snapshot_apply(payload))
+	if result and result.ok then
+		server_command.resolve(payload.revision)
+	end
 	self.bridge.emit("SERVER_SNAPSHOT_RECEIVED", {
 		matchId = payload.matchId or payload.match_id,
 		revision = payload.revision,
@@ -131,6 +135,25 @@ end
 function HANDLERS.COMMAND_REJECTED(self, payload)
 	payload = payload or {}
 	self.last_command_rejected = payload
+	server_command.clear_pending()
+
+	local merged = payload.snapshot
+	if merged and type(merged) == "table" then
+		local private_delta = merged.private or {
+			viewer_player_id = merged.viewerPlayerId or merged.viewer_player_id,
+			dice = merged.dice,
+			cylinder = merged.cylinder,
+			available_actions = merged.availableActions or merged.available_actions,
+		}
+		self.store:dispatch(actions.server_snapshot_apply({
+			matchId = payload.matchId or payload.match_id,
+			revision = payload.revision or merged.revision,
+			publicSnapshot = merged,
+			privateDelta = private_delta,
+			snapshot = merged,
+		}))
+	end
+
 	self.bridge.emit("COMMAND_REJECTED_RECEIVED", {
 		matchId = payload.matchId or payload.match_id,
 		commandId = payload.commandId or payload.command_id,

@@ -22,13 +22,16 @@ import {
 	createDevMatchForUser,
 	getLatestMatchState,
 	getMatchParticipantByPlayerId,
+	writeStateAndPublicView,
 } from './matches'
-import { requireCurrentUser, type GenericCtx } from './users'
+import { requireCurrentUser, requireExistingCurrentUser, type GenericCtx } from './users'
 import type { MatchCommandType } from './protocol/commands'
 import type { MatchState } from './match/state'
 
 const DEFAULT_ADMIN_MATCH_LIMIT = 20
 const MAX_ADMIN_MATCH_LIMIT = 50
+const DEFAULT_PURGE_DELETE_LIMIT = 200
+const MAX_PURGE_DELETE_LIMIT = 500
 const MAX_AUDIT_PAYLOAD_JSON_LENGTH = 4096
 const ADMIN_ROLES = new Set(['admin', 'org:admin', 'cylinderdicer_admin', 'cylinder_dicer_admin'])
 const ROLE_KEYS = [
@@ -120,11 +123,23 @@ async function requireAdminUser(ctx: GenericCtx) {
 	return await requireCurrentUser(ctx)
 }
 
+async function getAdminExistingUser(ctx: GenericCtx) {
+	await requireAdminIdentity(ctx)
+	return await requireExistingCurrentUser(ctx).catch(() => null)
+}
+
 function boundedLimit(limit: unknown): number {
 	if (typeof limit !== 'number' || Number.isNaN(limit)) {
 		return DEFAULT_ADMIN_MATCH_LIMIT
 	}
 	return Math.max(1, Math.min(Math.floor(limit), MAX_ADMIN_MATCH_LIMIT))
+}
+
+function boundedPurgeLimit(limit: unknown): number {
+	if (typeof limit !== 'number' || Number.isNaN(limit)) {
+		return DEFAULT_PURGE_DELETE_LIMIT
+	}
+	return Math.max(1, Math.min(Math.floor(limit), MAX_PURGE_DELETE_LIMIT))
 }
 
 function safeAuditPayload(value: unknown) {
@@ -145,6 +160,120 @@ function safeAuditPayload(value: unknown) {
 			omitted: 'payload_not_serializable',
 		}
 	}
+}
+
+async function deleteDocs(ctx: GenericCtx, rows: any[], dryRun: boolean) {
+	if (!dryRun) {
+		for (const row of rows) {
+			await ctx.db.delete(row._id)
+		}
+	}
+	return rows.length
+}
+
+async function getLinkedCustomGameRooms(ctx: GenericCtx, matchId: string) {
+	return await ctx.db
+		.query('customGameRooms')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.take(8)
+}
+
+async function hasRemainingMatchRows(ctx: GenericCtx, matchId: string) {
+	const participant = await ctx.db
+		.query('matchParticipants')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.first()
+	if (participant) {
+		return true
+	}
+	const state = await ctx.db
+		.query('matchStates')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.first()
+	if (state) {
+		return true
+	}
+	const snapshot = await ctx.db
+		.query('matchSnapshots')
+		.withIndex('by_match_kind', (q: any) => q.eq('matchId', matchId))
+		.first()
+	if (snapshot) {
+		return true
+	}
+	const command = await ctx.db
+		.query('matchCommands')
+		.withIndex('by_match_command', (q: any) => q.eq('matchId', matchId))
+		.first()
+	if (command) {
+		return true
+	}
+	const event = await ctx.db
+		.query('matchEvents')
+		.withIndex('by_match_revision', (q: any) => q.eq('matchId', matchId))
+		.first()
+	return Boolean(event)
+}
+
+async function hasRemainingRoomParticipants(ctx: GenericCtx, roomId: string) {
+	const participant = await ctx.db
+		.query('customGameParticipants')
+		.withIndex('by_room', (q: any) => q.eq('roomId', roomId))
+		.first()
+	return Boolean(participant)
+}
+
+async function markMatchParticipantsComplete(ctx: GenericCtx, matchId: string, now: number) {
+	const participants = await ctx.db
+		.query('matchParticipants')
+		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
+		.take(8)
+	let updated = 0
+	for (const participant of participants) {
+		if (participant.status !== 'complete') {
+			updated += 1
+			await ctx.db.patch(participant._id, {
+				status: 'complete',
+				updatedAt: now,
+			})
+		}
+	}
+	return {
+		total: participants.length,
+		updated,
+	}
+}
+
+async function completeLatestMatchState(ctx: GenericCtx, state: MatchState, now: number) {
+	const nextRevision = state.revision + 1
+	const nextState: MatchState = {
+		...state,
+		revision: nextRevision,
+		match: {
+			...state.match,
+			status: 'complete',
+		},
+		flow: {
+			...state.flow,
+			phase: 'complete',
+		},
+		turn: {
+			...state.turn,
+			kind: 'complete',
+			activePlayerId: undefined,
+		},
+		pendingLoad: undefined,
+		ui: {
+			...state.ui,
+			hintKey: 'hud.hint.complete',
+		},
+	}
+	await writeStateAndPublicView(ctx, nextState)
+	await ctx.db.patch(state.matchId, {
+		status: 'complete',
+		revision: nextRevision,
+		updatedAt: now,
+	})
+	return nextState
 }
 
 async function requireDevMatch(ctx: GenericCtx, matchId: string) {
@@ -265,7 +394,7 @@ export const createDevMatchWithBots = mutationGeneric({
 
 export const listAdminCustomGameRooms = queryGeneric({
 	args: {
-		status: v.optional(v.union(v.literal('composing'), v.literal('started'), v.literal('cancelled'))),
+		status: v.optional(v.union(v.literal('composing'), v.literal('started'), v.literal('completed'), v.literal('cancelled'))),
 		limit: v.optional(v.number()),
 	},
 	returns: v.any(),
@@ -418,6 +547,122 @@ export const setCustomGameOpponentReady = mutationGeneric({
 			...result,
 			auditId,
 			room: view,
+		}
+	},
+})
+
+export const closeStartedCustomGameRoom = mutationGeneric({
+	args: {
+		roomId: v.id('customGameRooms'),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const adminUser = await requireAdminUser(ctx)
+		const room = await ctx.db.get(args.roomId)
+		if (!room) {
+			const result = {
+				ok: false,
+				roomId: args.roomId,
+				code: 'CUSTOM_ROOM_NOT_FOUND',
+				message: 'custom_room_not_found',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				customGameRoomId: args.roomId,
+				commandType: 'admin.close_started_custom_game_room',
+				result,
+			})
+			return result
+		}
+		if (room.status !== 'started') {
+			const result = {
+				ok: false,
+				roomId: args.roomId,
+				matchId: room.matchId,
+				code: 'CUSTOM_ROOM_NOT_STARTED',
+				message: 'custom_room_not_started',
+				status: room.status,
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: room.matchId,
+				customGameRoomId: args.roomId,
+				commandType: 'admin.close_started_custom_game_room',
+				payload: { status: room.status },
+				result,
+			})
+			return result
+		}
+		if (!room.matchId) {
+			const result = {
+				ok: false,
+				roomId: args.roomId,
+				code: 'CUSTOM_ROOM_MATCH_NOT_FOUND',
+				message: 'custom_room_match_not_found',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				customGameRoomId: args.roomId,
+				commandType: 'admin.close_started_custom_game_room',
+				result,
+			})
+			return result
+		}
+
+		const match = await ctx.db.get(room.matchId)
+		if (!match || match.mode !== 'dev') {
+			const result = {
+				ok: false,
+				roomId: args.roomId,
+				matchId: room.matchId,
+				code: 'LINKED_MATCH_NOT_CLOSABLE',
+				message: 'linked_match_not_closable',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: room.matchId,
+				customGameRoomId: args.roomId,
+				commandType: 'admin.close_started_custom_game_room',
+				result,
+			})
+			return result
+		}
+
+		const now = Date.now()
+		let nextRevision = match.revision
+		const state = await getLatestMatchState(ctx, room.matchId)
+		if (state && match.status !== 'complete') {
+			const nextState = await completeLatestMatchState(ctx, state, now)
+			nextRevision = nextState.revision
+		} else if (match.status !== 'complete') {
+			await ctx.db.patch(room.matchId, {
+				status: 'complete',
+				updatedAt: now,
+			})
+		}
+		const participantsCompleted = await markMatchParticipantsComplete(ctx, room.matchId, now)
+		await ctx.db.patch(args.roomId, {
+			status: 'completed',
+			updatedAt: now,
+		})
+
+		const result = {
+			ok: true,
+			roomId: args.roomId,
+			matchId: room.matchId,
+			revision: nextRevision,
+			participantsCompleted,
+		}
+		const auditId = await insertAdminAudit(ctx, {
+			adminUserId: adminUser._id,
+			matchId: room.matchId,
+			customGameRoomId: args.roomId,
+			commandType: 'admin.close_started_custom_game_room',
+			result,
+		})
+		return {
+			...result,
+			auditId,
 		}
 	},
 })
@@ -587,5 +832,248 @@ export const submitOpponentCommand = mutationGeneric({
 			...result,
 			auditId,
 		}
+	},
+})
+
+export const purgeCompletedDevMatchData = mutationGeneric({
+	args: {
+		matchId: v.id('matches'),
+		maxDelete: v.optional(v.number()),
+		dryRun: v.optional(v.boolean()),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const adminUser = await requireAdminUser(ctx)
+		const maxDelete = boundedPurgeLimit(args.maxDelete)
+		const dryRun = args.dryRun === true
+		const match = await ctx.db.get(args.matchId)
+		if (!match) {
+			const result = {
+				ok: false,
+				matchId: args.matchId,
+				code: 'MATCH_NOT_FOUND',
+				message: 'match_not_found',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: args.matchId,
+				commandType: 'admin.purge_completed_dev_match_data',
+				payload: { dryRun, maxDelete },
+				result,
+			})
+			return result
+		}
+		if (match.mode !== 'dev') {
+			const result = {
+				ok: false,
+				matchId: args.matchId,
+				code: 'MATCH_MODE_FORBIDDEN',
+				message: 'match_mode_forbidden',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: args.matchId,
+				commandType: 'admin.purge_completed_dev_match_data',
+				payload: { dryRun, maxDelete, mode: match.mode },
+				result,
+			})
+			return result
+		}
+		if (match.status !== 'complete') {
+			const result = {
+				ok: false,
+				matchId: args.matchId,
+				code: 'MATCH_NOT_COMPLETE',
+				message: 'match_not_complete',
+				status: match.status,
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: args.matchId,
+				commandType: 'admin.purge_completed_dev_match_data',
+				payload: { dryRun, maxDelete, status: match.status },
+				result,
+			})
+			return result
+		}
+
+		const rooms = await getLinkedCustomGameRooms(ctx, args.matchId)
+		let roomsCompleted = 0
+		if (!dryRun) {
+			const now = Date.now()
+			for (const room of rooms) {
+				if (room.status === 'started') {
+					roomsCompleted += 1
+					await ctx.db.patch(room._id, {
+						status: 'completed',
+						updatedAt: now,
+					})
+				}
+			}
+		}
+
+		const roomParticipantRows = []
+		for (const room of rooms) {
+			const participants = await ctx.db
+				.query('customGameParticipants')
+				.withIndex('by_room', (q: any) => q.eq('roomId', room._id))
+				.take(maxDelete)
+			roomParticipantRows.push(...participants)
+		}
+		const participantRows = await ctx.db
+			.query('matchParticipants')
+			.withIndex('by_match', (q: any) => q.eq('matchId', args.matchId))
+			.take(maxDelete)
+		const stateRows = await ctx.db
+			.query('matchStates')
+			.withIndex('by_match', (q: any) => q.eq('matchId', args.matchId))
+			.take(maxDelete)
+		const snapshotRows = await ctx.db
+			.query('matchSnapshots')
+			.withIndex('by_match_kind', (q: any) => q.eq('matchId', args.matchId))
+			.take(maxDelete)
+		const commandRows = await ctx.db
+			.query('matchCommands')
+			.withIndex('by_match_command', (q: any) => q.eq('matchId', args.matchId))
+			.take(maxDelete)
+		const eventRows = await ctx.db
+			.query('matchEvents')
+			.withIndex('by_match_revision', (q: any) => q.eq('matchId', args.matchId))
+			.take(maxDelete)
+
+		const deleted = {
+			customGameParticipants: await deleteDocs(ctx, roomParticipantRows, dryRun),
+			matchParticipants: await deleteDocs(ctx, participantRows, dryRun),
+			matchStates: await deleteDocs(ctx, stateRows, dryRun),
+			matchSnapshots: await deleteDocs(ctx, snapshotRows, dryRun),
+			matchCommands: await deleteDocs(ctx, commandRows, dryRun),
+			matchEvents: await deleteDocs(ctx, eventRows, dryRun),
+		}
+
+		const parentDeleted = {
+			customGameRooms: 0,
+			match: false,
+		}
+		const deletedRoomIds = []
+		if (!dryRun) {
+			for (const room of rooms) {
+				if (!(await hasRemainingRoomParticipants(ctx, room._id))) {
+					await ctx.db.delete(room._id)
+					parentDeleted.customGameRooms += 1
+					deletedRoomIds.push(room._id)
+				}
+			}
+			const remainingRooms = await getLinkedCustomGameRooms(ctx, args.matchId)
+			if (remainingRooms.length === 0 && !(await hasRemainingMatchRows(ctx, args.matchId))) {
+				await ctx.db.delete(args.matchId)
+				parentDeleted.match = true
+			}
+		}
+
+		const reachedDeleteLimit = Object.values(deleted).some((count) => count >= maxDelete)
+		const hasRemainingChildren = dryRun ? reachedDeleteLimit : await hasRemainingMatchRows(ctx, args.matchId)
+		const result = {
+			ok: true,
+			matchId: args.matchId,
+			dryRun,
+			maxDelete,
+			deleted,
+			parentDeleted,
+			deletedRoomIds,
+			roomsCompleted,
+			mayHaveMore: reachedDeleteLimit || hasRemainingChildren,
+			auditRetained: true,
+		}
+		const auditId = await insertAdminAudit(ctx, {
+			adminUserId: adminUser._id,
+			matchId: args.matchId,
+			commandType: 'admin.purge_completed_dev_match_data',
+			payload: { dryRun, maxDelete },
+			result,
+		})
+		return {
+			...result,
+			auditId,
+		}
+	},
+})
+
+export const probeAdminAccess = queryGeneric({
+	args: {},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx) => {
+		const identity = await ctx.auth.getUserIdentity()
+		if (!identity) {
+			return {
+				ok: false,
+				authorized: false,
+				code: 'UNAUTHENTICATED',
+				message: 'sign_in_required',
+			}
+		}
+		if (!identityHasAdmin(identity as unknown as IdentityRecord)) {
+			return {
+				ok: false,
+				authorized: false,
+				code: 'UNAUTHORIZED',
+				message: 'admin_claim_missing',
+				hint: 'Add {"role":"admin"} to the Clerk JWT template named "convex", then sign out and sign in again.',
+				templateExample: { role: 'admin' },
+			}
+		}
+
+		let user: any
+		try {
+			user = await requireExistingCurrentUser(ctx)
+		} catch {
+			user = null
+		}
+
+		return {
+			ok: true,
+			authorized: true,
+			code: 'AUTHORIZED',
+			clerkSubject: identity.subject,
+			userId: user?._id,
+		}
+	},
+})
+
+export const listRecentAdminAudit = queryGeneric({
+	args: {
+		limit: v.optional(v.number()),
+		matchId: v.optional(v.id('matches')),
+		customGameRoomId: v.optional(v.id('customGameRooms')),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const adminUser = await getAdminExistingUser(ctx)
+		const limit = boundedLimit(args.limit)
+
+		if (args.matchId) {
+			return await ctx.db
+				.query('adminAudit')
+				.withIndex('by_match_created', (q: any) => q.eq('matchId', args.matchId))
+				.order('desc')
+				.take(limit)
+		}
+
+		if (!adminUser) {
+			return []
+		}
+
+		const rows = await ctx.db
+			.query('adminAudit')
+			.withIndex('by_admin_created', (q: any) => q.eq('adminUserId', adminUser._id))
+			.order('desc')
+			.take(args.customGameRoomId ? limit * 4 : limit)
+
+		if (args.customGameRoomId) {
+			return rows
+				.filter((row: any) => row.customGameRoomId === args.customGameRoomId)
+				.slice(0, limit)
+		}
+
+		return rows
 	},
 })

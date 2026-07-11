@@ -31,28 +31,28 @@ nodes {
   type: TYPE_BOX
   id: "root"
   position { x: 640.0 y: 360.0 }
-  size { x: 1280.0 y: 720.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {
   type: TYPE_BOX
   id: "reveal_group"
   parent: "root"
-  size { x: 1280.0 y: 720.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {
   type: TYPE_BOX
   id: "combat_group"
   parent: "root"
-  size { x: 1280.0 y: 720.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {
   type: TYPE_BOX
   id: "template_group"
   parent: "root"
-  size { x: 1280.0 y: 720.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {
@@ -120,7 +120,7 @@ nodes {
   id: "grid_panel"
   parent: "reveal_group"
   position { y: -18.0 z: 0.55 }
-  size { x: 380.0 y: 288.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {
@@ -158,7 +158,7 @@ nodes {
   id: "tray"
   parent: "reveal_group"
   position { y: -286.0 z: 0.7 }
-  size { x: 650.0 y: 96.0 }
+  size { x: 0.0 y: 0.0 }
   color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
 }
 nodes {

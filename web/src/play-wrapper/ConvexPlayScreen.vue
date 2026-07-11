@@ -8,7 +8,7 @@ import type {
   StartMatchPayload,
 } from '@shared/protocol/game-bridge'
 import { useConvexClient } from 'convex-vue'
-import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import {
   createMatchService,
   mergeMatchSnapshots,
@@ -37,9 +37,17 @@ const errorMessage = ref('')
 const lastRejected = ref<CommandRejectedPayload | null>(null)
 const linkedMatchId = ref(new URLSearchParams(window.location.search).get('matchId') ?? '')
 const loadingMatch = ref(false)
+const commandInFlight = ref(false)
+const defoldCanvas = ref<InstanceType<typeof DefoldCanvas> | null>(null)
+const defoldSnapshotAckRevision = ref<number | null>(null)
+const pendingPlayerCommands: PlayerCommandPayload[] = []
+let drainingPlayerCommands = false
 
 let publicUnsubscribe: SnapshotUnsubscribe | undefined
 let commandCounter = 0
+let lastFlowResumeKey = ''
+
+const SNAPSHOT_ACK_RETRY_DELAYS_MS = [0, 100, 250, 500, 900, 1400, 2200]
 
 const isSignedIn = computed(() => auth.isSignedIn.value === true)
 const canStart = computed(() => auth.isLoaded.value && isSignedIn.value)
@@ -73,6 +81,44 @@ const serverSnapshotPayload = computed<ServerSnapshotPayload | null>(() => {
   }
 })
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+async function refreshMatchViewsUntil(matchId: string, revision: number | undefined) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await refreshMatchViews(matchId)
+    if (!revision || (serverSnapshotPayload.value?.revision ?? 0) >= revision) {
+      return
+    }
+    await sleep(100 + attempt * 150)
+  }
+}
+
+function sendCurrentServerSnapshotToDefold() {
+  const snapshot = serverSnapshotPayload.value
+  if (!snapshot) {
+    return
+  }
+  defoldCanvas.value?.send({
+    type: 'SERVER_SNAPSHOT',
+    payload: snapshot,
+  })
+}
+
+async function sendCurrentServerSnapshotToDefoldUntilAck(revision: number | undefined) {
+  for (const delay of SNAPSHOT_ACK_RETRY_DELAYS_MS) {
+    if (delay > 0) {
+      await sleep(delay)
+    }
+    if (revision && (defoldSnapshotAckRevision.value ?? 0) >= revision) {
+      return true
+    }
+    sendCurrentServerSnapshotToDefold()
+  }
+  return !revision || (defoldSnapshotAckRevision.value ?? 0) >= revision
+}
+
 function generateCommandId(type: string) {
   commandCounter += 1
   return `web-${Date.now()}-${commandCounter}-${type}`
@@ -82,17 +128,48 @@ function refreshMergedSnapshot() {
   mergedSnapshot.value = mergeMatchSnapshots(publicSnapshot.value, privateDelta.value)
 }
 
+function resumeAutomaticFlow(snapshot: MatchPublicSnapshot | null | undefined) {
+  if (!snapshot || !createdMatch.value) {
+    return
+  }
+  const duel = (snapshot as MatchPublicSnapshot & { duel?: { phase?: string } }).duel
+  const automatic = snapshot.phase === 'bidding_gap'
+    || (snapshot.phase === 'duel' && (duel?.phase === 'ready' || duel?.phase === 'executing'))
+  if (!automatic) {
+    return
+  }
+  const key = `${snapshot.matchId}:${snapshot.revision}:${snapshot.phase}:${duel?.phase ?? '-'}`
+  if (lastFlowResumeKey === key) {
+    return
+  }
+  lastFlowResumeKey = key
+  void matchService.resumeMatchFlow(snapshot.matchId).catch((error) => {
+    lastFlowResumeKey = ''
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  })
+}
+
 async function refreshPrivateDelta(matchId: string) {
   privateDelta.value = await matchService.getPrivateDelta(matchId)
   refreshMergedSnapshot()
 }
 
+async function refreshMatchViews(matchId: string) {
+  const [nextPublicSnapshot, nextPrivateDelta] = await Promise.all([
+    matchService.getPublicSnapshot(matchId),
+    matchService.getPrivateDelta(matchId),
+  ])
+  publicSnapshot.value = nextPublicSnapshot
+  privateDelta.value = nextPrivateDelta
+  refreshMergedSnapshot()
+  resumeAutomaticFlow(nextPublicSnapshot)
+}
+
 function subscribePublicSnapshot(matchId: string) {
   publicUnsubscribe?.unsubscribe()
   publicUnsubscribe = matchService.subscribePublicView(matchId, {
-    onSnapshot: (snapshot) => {
-      publicSnapshot.value = snapshot as MatchPublicSnapshot | null
-      void refreshPrivateDelta(matchId)
+    onSnapshot: () => {
+      void refreshMatchViews(matchId)
     },
     onError: (error) => {
       errorMessage.value = error.message
@@ -135,6 +212,7 @@ async function loadExistingMatch(matchId: string) {
     privateDelta.value = nextPrivateDelta
     refreshMergedSnapshot()
     subscribePublicSnapshot(matchId)
+    resumeAutomaticFlow(nextPublicSnapshot)
     status.value = `Opened linked Convex dev match ${matchId.slice(-6)}.`
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -170,6 +248,7 @@ async function createDevMatch() {
     privateDelta.value = match.privateDelta ?? await matchService.getPrivateDelta(match.matchId)
     refreshMergedSnapshot()
     subscribePublicSnapshot(match.matchId)
+    resumeAutomaticFlow(publicSnapshot.value)
     status.value = match.reused ? 'Reused active Convex dev match.' : 'Created Convex dev match.'
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -184,46 +263,116 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
     return
   }
 
-  const result = await matchService.submitCommand({
-    matchId: command.matchId ?? createdMatch.value.matchId,
-    commandId: command.commandId ?? generateCommandId(command.type),
-    revision: command.revision ?? mergedSnapshot.value.revision,
-    type: command.type,
-    payload: command.payload,
-  }) as { ok?: boolean; [key: string]: any }
+  commandInFlight.value = true
+  const targetMatchId = command.matchId ?? createdMatch.value.matchId
+  try {
+    const submittedCommandId = command.commandId ?? generateCommandId(command.type)
+    const result = await matchService.submitCommand({
+      matchId: targetMatchId,
+      commandId: submittedCommandId,
+      // Always use the freshest known revision. Queued clicks may still carry
+      // the pre-accept revision from Defold's emit-time snapshot.
+      revision: mergedSnapshot.value.revision,
+      type: command.type,
+      payload: command.payload,
+    }) as { ok?: boolean; [key: string]: any }
 
-  if (result.ok === false) {
-    const rejected: CommandRejectedPayload = {
-      matchId: result.matchId,
-      commandId: command.commandId,
-      code: result.code ?? 'COMMAND_REJECTED',
-      message: result.message ?? 'command_rejected',
-      details: result.details,
-      revision: result.revision,
-      snapshot: result.publicSnapshot
-        ? mergeMatchSnapshots(result.publicSnapshot, result.privateDelta)
-        : undefined,
+    if (result.ok === false) {
+      const rejectedPrivateDelta = result.privateDelta ?? privateDelta.value
+      if (result.publicSnapshot) {
+        publicSnapshot.value = result.publicSnapshot
+        privateDelta.value = rejectedPrivateDelta
+        refreshMergedSnapshot()
+      } else {
+        await refreshMatchViews(targetMatchId)
+      }
+      const rejected: CommandRejectedPayload = {
+        matchId: result.matchId,
+        commandId: submittedCommandId,
+        code: result.code ?? 'COMMAND_REJECTED',
+        message: result.message ?? 'command_rejected',
+        details: result.details,
+        revision: result.revision,
+			snapshot: result.publicSnapshot
+			  ? mergeMatchSnapshots(result.publicSnapshot, rejectedPrivateDelta) ?? undefined
+			  : mergedSnapshot.value ?? undefined,
+      }
+      lastRejected.value = rejected
+      errorMessage.value = `${rejected.code}: ${rejected.message}`
+      await nextTick()
+      defoldCanvas.value?.send({
+        type: 'COMMAND_REJECTED',
+        payload: rejected,
+      })
+      const acked = await sendCurrentServerSnapshotToDefoldUntilAck(Number(result.revision ?? 0) || undefined)
+      if (!acked) {
+        errorMessage.value = `SNAPSHOT_NOT_ACKED: revision ${result.revision ?? '?'}`
+      }
+      return rejected
     }
-    lastRejected.value = rejected
-    errorMessage.value = `${rejected.code}: ${rejected.message}`
-    return rejected
-  }
 
-  lastRejected.value = null
-  status.value = `Command accepted: ${command.type}`
-  await refreshPrivateDelta(createdMatch.value.matchId)
-  return undefined
+    lastRejected.value = null
+    errorMessage.value = ''
+    status.value = `Command accepted: ${command.type}`
+
+    // Prefer mutation-returned snapshots: they are authoritative and avoid
+    // racing Convex query read-your-writes lag after submitMatchCommand.
+    if (result.publicSnapshot) {
+      publicSnapshot.value = result.publicSnapshot
+      privateDelta.value = result.privateDelta ?? privateDelta.value
+      refreshMergedSnapshot()
+    } else {
+      await refreshMatchViewsUntil(targetMatchId, Number(result.revision ?? 0) || undefined)
+    }
+    await nextTick()
+    const acked = await sendCurrentServerSnapshotToDefoldUntilAck(Number(result.revision ?? 0) || undefined)
+    if (!acked) {
+      errorMessage.value = `SNAPSHOT_NOT_ACKED: revision ${result.revision ?? '?'}`
+    }
+    return undefined
+  } finally {
+    commandInFlight.value = false
+  }
+}
+
+async function drainPlayerCommandQueue() {
+  if (drainingPlayerCommands) {
+    return
+  }
+  drainingPlayerCommands = true
+  try {
+    while (pendingPlayerCommands.length > 0) {
+      const command = pendingPlayerCommands.shift()
+      if (!command) {
+        continue
+      }
+      const rejected = await submitPlayerCommand(command)
+      if (rejected) {
+        pendingPlayerCommands.length = 0
+        break
+      }
+    }
+  } finally {
+    drainingPlayerCommands = false
+  }
 }
 
 async function handleDefoldMessage(message: GameBridgeMessage) {
+  if (message.type === 'SERVER_SNAPSHOT_RECEIVED') {
+    const payload = (message.payload ?? {}) as Record<string, unknown>
+    const revision = Number(payload.revision ?? 0)
+    if (revision > 0 && payload.applied !== false) {
+      defoldSnapshotAckRevision.value = Math.max(defoldSnapshotAckRevision.value ?? 0, revision)
+    }
+    return
+  }
+
   if (message.type !== 'PLAYER_COMMAND') {
     return
   }
 
-  const rejected = await submitPlayerCommand(message.payload as PlayerCommandPayload)
-  if (rejected) {
-    errorMessage.value = `${rejected.code}: ${rejected.message}`
-  }
+  pendingPlayerCommands.push(message.payload as PlayerCommandPayload)
+  void drainPlayerCommandQueue()
 }
 
 watchEffect(() => {
@@ -290,6 +439,7 @@ onUnmounted(() => {
     </header>
 
     <DefoldCanvas
+      ref="defoldCanvas"
       :match="startMatchPayload"
       :server-snapshot="serverSnapshotPayload"
       :command-rejected="lastRejected"

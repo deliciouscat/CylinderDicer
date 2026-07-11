@@ -47,6 +47,21 @@ export interface PublicPlayerSnapshot {
   isLocal?: boolean
 }
 
+export type AvailableAction =
+  | { type: 'load'; slots: number[]; remaining: number }
+  | { type: 'load_all'; remaining: number }
+  | { type: 'shake_complete'; command: 'shake.complete'; remaining: number }
+  | { type: 'check' }
+  | {
+      type: 'bid'
+      min_count: number
+      max_count: number
+      min_face: number
+      max_face: number
+      suggested: { count: number; face: number }
+    }
+  | { type: 'challenge' }
+
 export interface MatchSnapshotBase {
   kind: SnapshotKind
   matchId: string
@@ -83,8 +98,16 @@ export interface MatchSnapshotBase {
     }
   }
   pendingLoad?: unknown
-  shake?: unknown
-  duel?: unknown
+	shake?: MatchShakeSnapshot
+	duel?: unknown
+}
+
+export interface MatchShakeSnapshot {
+	requiredCount: number
+	counts: Record<string, number>
+	checked: Record<string, boolean>
+	reloadPlayerId?: string
+	reloadSource?: string
 }
 
 export interface MatchPublicSnapshot extends MatchSnapshotBase {
@@ -102,7 +125,7 @@ export interface MatchPrivateDelta {
     chamberIndex: number
     slots: boolean[]
   }
-  availableActions?: unknown[]
+  availableActions: AvailableAction[]
 }
 
 export type MatchSnapshot = MatchPublicSnapshot | MatchPrivateDelta

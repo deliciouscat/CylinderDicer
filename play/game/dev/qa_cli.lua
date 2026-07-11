@@ -1,5 +1,7 @@
 local actions = require("game.model.actions")
 local selectors = require("game.model.selectors")
+local server_command = require("game.net.server_command")
+local visual_status = require("game.dev.visual_status")
 
 local M = {}
 
@@ -77,6 +79,10 @@ local function current_player(state)
 	return state.players.by_id[state.turn.active_player_id]
 end
 
+local function is_alive(player)
+	return player and not player.eliminated and (player.hp or 0) > 0
+end
+
 local function first_empty_slot(player)
 	for index, slot in ipairs((player and player.cylinder and player.cylinder.slots) or {}) do
 		if not slot.loaded then
@@ -136,9 +142,9 @@ end
 
 local function qa_shake(self, count, actor_id)
 	local state = self.store:get_state()
-	local player_id = state.turn.active_player_id
-	if actor_id and actor_id ~= player_id then
-		return false, "wrong_active_player"
+	local player_id = actor_id or state.match.local_player_id or state.turn.active_player_id
+	if not is_alive(state.players.by_id[player_id]) then
+		return false, "unknown_player"
 	end
 	local current = ((state.shake and state.shake.counts) or {})[player_id] or 0
 	local required = (state.shake and state.shake.required_count) or 6
@@ -153,10 +159,41 @@ local function qa_shake(self, count, actor_id)
 	return true, nil
 end
 
+local function qa_shake_all(self)
+	local order = self.store:get_state().players.order or {}
+	for _, player_id in ipairs(order) do
+		local state = self.store:get_state()
+		local player = state.players.by_id[player_id]
+		local shake = selectors.shake_status(state, player_id)
+		if is_alive(player) and not shake.complete then
+			local ok, err = qa_shake(self, nil, player_id)
+			if not ok then
+				return false, err
+			end
+		end
+	end
+	return true, nil
+end
+
 local function qa_check(self, player_id)
 	local state = self.store:get_state()
 	local id = player_id or state.match.local_player_id or state.turn.active_player_id
 	return dispatch(self, actions.dice_check(id))
+end
+
+local function qa_check_all(self)
+	local order = self.store:get_state().players.order or {}
+	for _, player_id in ipairs(order) do
+		local state = self.store:get_state()
+		local player = state.players.by_id[player_id]
+		if is_alive(player) and not state.shake.checked[player_id] then
+			local ok, err = qa_check(self, player_id)
+			if not ok then
+				return false, err
+			end
+		end
+	end
+	return true, nil
 end
 
 local function qa_bid(self, count, face, actor_id)
@@ -180,10 +217,10 @@ local function qa_advance(self)
 		return qa_load_all(self)
 	end
 	if phase == "cup_shake" then
-		return qa_shake(self)
+		return qa_shake_all(self)
 	end
 	if phase == "dice_check" then
-		return qa_check(self)
+		return qa_check_all(self)
 	end
 	if phase == "bidding_gap" then
 		return dispatch(self, actions.bidding_open())
@@ -253,22 +290,22 @@ local function available_actions(state, player_id)
 		return result
 	end
 
-	if player_id ~= state.turn.active_player_id then
-		return result
-	end
-
 	if phase == "cup_shake" then
+		local player = state.players.by_id[player_id]
 		local shake = selectors.shake_status(state, player_id)
-		if not shake.complete then
+		if is_alive(player) and not shake.complete then
 			result[#result + 1] = {
 				type = "shake",
 				remaining = math.max(0, shake.required - shake.count),
 			}
 		end
 	elseif phase == "dice_check" then
-		if not state.shake.checked[player_id] then
+		local player = state.players.by_id[player_id]
+		if is_alive(player) and not state.shake.checked[player_id] then
 			result[#result + 1] = { type = "check" }
 		end
+	elseif player_id ~= state.turn.active_player_id then
+		return result
 	elseif phase == "bidding_gap" then
 		result[#result + 1] = { type = "open" }
 	elseif phase == "bidding" then
@@ -345,9 +382,11 @@ function M.status_snapshot(state)
 		shake = state.shake,
 		duel = state.duel and {
 			phase = state.duel.phase,
+			bid = state.duel.bid,
 			judge = state.duel.judge,
 			challenger_id = state.duel.challenger_id,
 			previous_bidder_id = state.duel.previous_bidder_id,
+			players = state.duel.players,
 			resolution = state.duel.resolution and {
 				kind = state.duel.resolution.kind,
 				verdict = state.duel.resolution.verdict,
@@ -358,6 +397,10 @@ function M.status_snapshot(state)
 				hp_changes = state.duel.resolution.hp_changes,
 			} or nil,
 		} or nil,
+		net = {
+			server_command = server_command.snapshot(state),
+		},
+		visual = visual_status.snapshot(),
 		players = players,
 	}
 end
@@ -407,6 +450,10 @@ local function process_json_command(self, command)
 	local actor_id = command.actor_id
 	local action = lower(command.action)
 	local payload = command.payload or {}
+	if action == "status" then
+		return true, nil
+	end
+
 	local actor_ok, actor_err = validate_actor(state, actor_id)
 	if not actor_ok then
 		return false, actor_err
@@ -587,6 +634,39 @@ function M.new(store)
 			last_command = nil,
 			revision = 0,
 		}
+end
+
+-- Web QA path: standalone 번들 전용 local reducer smoke tool.
+-- GameBridge의 QA_COMMAND 메시지로 도착한 명령을 처리하고, 파일 대신 상태
+-- 스냅샷을 반환한다 (호출측이 QA_STATUS로 emit).
+-- Convex 경유 dev match(/play/dev?matchId=...)도 mode == "dev"이므로,
+-- 서버 권위 경로의 render cache 오염을 막기 위해 local_simulator까지 요구한다.
+function M.process_bridge_command(self, command)
+	local state = self.store:get_state()
+	if not state.match or state.match.mode ~= "dev" then
+		return nil
+	end
+
+	local action = lower(command.action)
+	if action ~= "status" and state.match.local_simulator ~= true then
+		return nil
+	end
+
+	local command_ok, command_err = process_json_command(self, command)
+	self.last_command = {
+		id = command.id or "anonymous",
+		actor_id = command.actor_id,
+		action = command.action,
+		ok = command_ok == true,
+		error = command_err,
+	}
+
+	local snapshot = M.status_snapshot(self.store:get_state())
+	self.revision = self.revision + 1
+	snapshot.revision = self.revision
+	snapshot.generated_at = os.time()
+	snapshot.last_command = self.last_command
+	return snapshot
 end
 
 function M.poll(self)

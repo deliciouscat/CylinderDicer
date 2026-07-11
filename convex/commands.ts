@@ -33,10 +33,14 @@
  */
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import { internal } from './_generated/api.js'
 import { commandToAction } from './match/actions'
+import { automaticTransitionFor, automaticTransitionScheduleArgs } from './match/flow'
 import { reduceMatchState } from './match/reducer'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
+import type { MatchState } from './match/state'
 import type { MatchCommand, MatchCommandType } from './protocol/commands'
+import { completeLinkedCustomGameRoom } from './customGames'
 import { getLatestMatchState, getMatchParticipant, writeStateAndPublicView } from './matches'
 import { requireCurrentUser, type GenericCtx } from './users'
 
@@ -67,10 +71,13 @@ export const matchCommandTypeValidator = v.union(
 	v.literal('setup.load_initial'),
 	v.literal('shake.complete'),
 	v.literal('dice.check'),
-	v.literal('bidding.open'),
 	v.literal('bullet.load'),
 	v.literal('bid.raise'),
 	v.literal('bid.challenge'),
+	)
+
+export const automaticMatchCommandTypeValidator = v.union(
+	v.literal('bidding.open'),
 	v.literal('duel.execute'),
 	v.literal('round.advance'),
 )
@@ -84,7 +91,7 @@ export interface ApplyMatchCommandInput {
 	actorUserId?: string
 	actorVirtualOpponentId?: string
 	actorPlayerId: string
-	source?: 'player' | 'admin' | 'bot'
+	source?: 'player' | 'admin' | 'bot' | 'system'
 	submittedByUserId?: string
 	stalePrivateDeltaPlayerId?: string
 }
@@ -152,7 +159,7 @@ export async function applyMatchCommand(
 			},
 		}
 	}
-	if (!args.actorUserId && !args.actorVirtualOpponentId) {
+	if (args.source !== 'system' && !args.actorUserId && !args.actorVirtualOpponentId) {
 		return {
 			ok: false,
 			matchId: args.matchId,
@@ -269,17 +276,44 @@ export async function applyMatchCommand(
 		updatedAt: now,
 	})
 	let participantsCompleted
+	let linkedCustomGameRoomCompleted
 	if (result.state.match.status === 'complete') {
 		participantsCompleted = await markParticipantsComplete(ctx, args.matchId, now)
+		linkedCustomGameRoomCompleted = await completeLinkedCustomGameRoom(ctx, args.matchId, now)
 	}
 	await writeStateAndPublicView(ctx, result.state)
+	await scheduleAutomaticTransition(ctx, result.state)
+
+	const publicSnapshot = buildPublicSnapshot(result.state)
+	const privateDelta = buildPrivateDelta(result.state, args.actorPlayerId)
 
 	return {
 		ok: true,
 		matchId: args.matchId,
 		revision: result.state.revision,
 		events: result.events,
+		publicSnapshot,
+		privateDelta,
 		participantsCompleted,
+		linkedCustomGameRoomCompleted,
+	}
+}
+
+export async function scheduleAutomaticTransition(ctx: GenericCtx, state: MatchState) {
+	const automaticTransition = automaticTransitionFor(state)
+	if (!automaticTransition || !ctx.scheduler) {
+		return { scheduled: false }
+	}
+	await ctx.scheduler.runAfter(
+		automaticTransition.delayMs,
+		internal.matchFlow.advanceMatchFlow,
+		automaticTransitionScheduleArgs(state.matchId, automaticTransition),
+	)
+	return {
+		scheduled: true,
+		type: automaticTransition.type,
+		revision: automaticTransition.expectedRevision,
+		epoch: automaticTransition.expectedEpoch,
 	}
 }
 
@@ -335,5 +369,37 @@ export const submitMatchCommand = mutationGeneric({
 			actorPlayerId,
 			source: 'player',
 		})
+	},
+})
+
+export const resumeMatchFlow = mutationGeneric({
+	args: {
+		matchId: v.id('matches'),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const currentUser = await requireCurrentUser(ctx)
+		const participant = await getMatchParticipant(ctx, args.matchId, currentUser._id)
+		if (!participant || participant.status !== 'active') {
+			return {
+				ok: false,
+				code: 'NOT_A_PARTICIPANT',
+				message: 'not_a_participant',
+			}
+		}
+		const state = await getLatestMatchState(ctx, args.matchId)
+		if (!state) {
+			return {
+				ok: false,
+				code: 'MATCH_NOT_FOUND',
+				message: 'match_state_not_found',
+			}
+		}
+		return {
+			ok: true,
+			matchId: args.matchId,
+			revision: state.revision,
+			...(await scheduleAutomaticTransition(ctx, state)),
+		}
 	},
 })

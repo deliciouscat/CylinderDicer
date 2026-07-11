@@ -12,9 +12,12 @@ export type GameBridgeMessageType =
   | 'COSMETICS_APPLIED'
   | 'SUBMIT_MATCH_RESULT'
   | 'INPUT_POINTER'
+  | 'DOM_POINTER'
   | 'INPUT_SHAKE'
   | 'PING'
   | 'PONG'
+  | 'QA_COMMAND'
+  | 'QA_STATUS'
   | 'UNKNOWN_MESSAGE'
 
 export interface GameBridgeMessage<TPayload = unknown> {
@@ -31,20 +34,107 @@ export interface StartMatchPayload {
   localSimulator?: boolean
 }
 
+export type PlayerCommandType =
+  | 'setup.load_initial'
+  | 'shake.complete'
+  | 'dice.check'
+  | 'bullet.load'
+  | 'bid.raise'
+  | 'bid.challenge'
+
 export interface PlayerCommandPayload<TPayload = unknown> {
   commandId?: string
   matchId?: string
   revision?: number
-  type: string
+  type: PlayerCommandType
   payload?: TPayload
+}
+
+export type AvailableAction =
+  | { type: 'load'; slots: number[]; remaining: number }
+  | { type: 'load_all'; remaining: number }
+  | { type: 'shake_complete'; command: 'shake.complete'; remaining: number }
+  | { type: 'check' }
+  | {
+      type: 'bid'
+      min_count: number
+      max_count: number
+      min_face: number
+      max_face: number
+      suggested: { count: number; face: number }
+    }
+  | { type: 'challenge' }
+
+export type MatchPhase =
+  | 'waiting'
+  | 'revolver_reload'
+  | 'cup_shake'
+  | 'dice_check'
+  | 'bidding_gap'
+  | 'bidding'
+  | 'duel'
+  | 'complete'
+
+export interface MatchShakeView {
+  requiredCount: number
+  counts: Record<string, number>
+  checked: Record<string, boolean>
+  reloadPlayerId?: string
+  reloadSource?: string
+}
+
+export interface MatchPublicView {
+  kind: 'public'
+  matchId: string
+  revision: number
+  phase: MatchPhase
+  hud: string
+  players: Array<{
+    id: string
+    name: string
+    hp: number
+    bullets: number
+    eliminated: boolean
+    isActive: boolean
+    isLocal?: boolean
+  }>
+  shake?: MatchShakeView
+}
+
+export interface MatchPrivateView {
+  kind: 'private_delta'
+  matchId: string
+  revision: number
+  hud: string
+  viewerPlayerId: string
+  dice?: number[]
+  cylinder?: {
+    chamberIndex: number
+    slots: boolean[]
+  }
+  availableActions: AvailableAction[]
+}
+
+export type MergedMatchView = MatchPublicView & {
+  private?: MatchPrivateView
+  viewerPlayerId?: string
+  dice?: number[]
+  cylinder?: MatchPrivateView['cylinder']
+  availableActions?: AvailableAction[]
+}
+
+export interface DomPointerPayload {
+  x: number
+  y: number
+  pressed?: boolean
 }
 
 export interface ServerSnapshotPayload {
   matchId: string
   revision: number
-  snapshot: unknown
-  publicSnapshot?: unknown
-  privateDelta?: unknown
+  snapshot: MergedMatchView
+  publicSnapshot?: MatchPublicView | null
+  privateDelta?: MatchPrivateView | null
 }
 
 export interface CommandRejectedPayload {
@@ -54,12 +144,56 @@ export interface CommandRejectedPayload {
   message: string
   details?: unknown
   revision?: number
-  snapshot?: unknown
+  snapshot?: MergedMatchView
 }
 
 export interface CosmeticsPayload {
   diceSkin?: string
   cupSkin?: string
+}
+
+/**
+ * Dev-only QA harness for the standalone HTML5 bundle.
+ * Defold accepts QA_COMMAND only when `match.mode === 'dev'` AND
+ * `match.local_simulator === true` — it drives the local reducer directly and
+ * never touches the Convex server-authority path.
+ */
+export interface QaCommandPayload {
+  id?: string
+  actor_id?: string
+  action:
+    | 'status'
+    | 'load'
+    | 'load_all'
+    | 'shake'
+    | 'check'
+    | 'open'
+    | 'bid'
+    | 'challenge'
+    | 'resolve'
+    | 'advance'
+  payload?: {
+    slot_index?: number
+    count?: number
+    face?: number
+  }
+}
+
+/** QA_STATUS payload is qa_cli.status_snapshot (see play/game/dev/qa_cli.lua). */
+export interface QaStatusPayload {
+  protocol_version: number
+  phase: string
+  hud: string
+  revision?: number
+  generated_at?: number
+  last_command?: {
+    id: string
+    actor_id?: string
+    action?: string
+    ok: boolean
+    error?: string
+  }
+  [key: string]: unknown
 }
 
 export interface SubmitMatchResultPayload {

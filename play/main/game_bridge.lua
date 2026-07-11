@@ -35,6 +35,36 @@ function M.install()
 					window.CylinderDicerToDefoldQueue.push(message);
 				};
 
+				window.CylinderDicerQueuePointer = function (event) {
+					var canvas = document.getElementById('canvas') || document.querySelector('canvas');
+					if (!canvas) {
+						return;
+					}
+					var rect = canvas.getBoundingClientRect();
+					if (!rect.width || !rect.height) {
+						return;
+					}
+					window.CylinderDicerToDefoldQueue.push({
+						type: 'DOM_POINTER',
+						payload: {
+							x: (event.clientX - rect.left) * 1280 / rect.width,
+							y: (rect.bottom - event.clientY) * 720 / rect.height,
+							pressed: true
+						}
+					});
+				};
+
+				window.CylinderDicerInstallPointerForwarder = function () {
+					var canvas = document.getElementById('canvas') || document.querySelector('canvas');
+					if (!canvas || canvas.CylinderDicerPointerForwarderInstalled) {
+						return;
+					}
+					canvas.CylinderDicerPointerForwarderInstalled = true;
+					canvas.addEventListener('pointerdown', window.CylinderDicerQueuePointer);
+				};
+
+				window.CylinderDicerInstallPointerForwarder();
+
 				window.addEventListener("message", function (event) {
 					var data = event.data;
 
@@ -43,6 +73,11 @@ function M.install()
 					}
 				});
 			}
+
+			window.CylinderDicerInstallPointerForwarder && window.CylinderDicerInstallPointerForwarder();
+			setInterval(function () {
+				window.CylinderDicerInstallPointerForwarder && window.CylinderDicerInstallPointerForwarder();
+			}, 2000);
 		})();
 	]])
 
@@ -61,7 +96,16 @@ function M.emit(message_type, payload)
 	end
 
 	local detail = json.encode(message)
-	run_javascript("window.dispatchEvent(new CustomEvent('" .. FROM_DEFOLD_EVENT .. "', { detail: " .. detail .. " }));")
+	run_javascript([[
+		(function () {
+			var message = ]] .. detail .. [[;
+			window.dispatchEvent(new CustomEvent(']] .. FROM_DEFOLD_EVENT .. [[', { detail: message }));
+			if (window.parent && window.parent !== window) {
+				var parentMessage = Object.assign({ source: 'CylinderDicerDefold' }, message);
+				window.parent.postMessage(parentMessage, '*');
+			}
+		})();
+	]])
 
 	return true
 end

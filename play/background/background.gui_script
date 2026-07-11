@@ -1,0 +1,67 @@
+local visual_status = require("game.dev.visual_status")
+local game_bridge = require("main.game_bridge")
+
+local LOCATION_Y = {
+	bidding = -410,
+	setup = -410,
+	shaking = 720,
+	dualing = 720,
+}
+
+local PAN_TIME = 0.6
+local CENTER_X = 640.0
+local INITIAL_LOCATION = "bidding"
+
+local function target_y_for(location)
+	return LOCATION_Y[location] or LOCATION_Y.shaking
+end
+
+local function set_position(self, screen_y)
+	gui.set_position(self.backdrop, vmath.vector3(CENTER_X, screen_y, 0.1))
+end
+
+local function report_background(self, target_y)
+	local pos = gui.get_position(self.backdrop)
+	visual_status.set("background", {
+		location = self.location,
+		target_y = target_y,
+		position_y = pos.y,
+	})
+end
+
+local function reply(sender, location)
+	msg.post(sender, "background_pan_complete", {
+		location = location,
+	})
+end
+
+function init(self)
+	self.backdrop = gui.get_node("backdrop")
+	self.location = INITIAL_LOCATION
+
+	gui.set_render_order(2)
+	report_background(self, target_y_for(self.location))
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id ~= hash("pan_to") then
+		return
+	end
+
+	local location = (message and message.location) or "shaking"
+	local y = target_y_for(location)
+	self.location = location
+	report_background(self, y)
+
+	if game_bridge.is_web() then
+		set_position(self, y)
+		report_background(self, y)
+		reply(sender, location)
+		return
+	end
+
+	gui.animate(self.backdrop, "position.y", y, gui.EASING_INOUTQUAD, PAN_TIME, 0.0, function()
+		report_background(self, y)
+		reply(sender, location)
+	end)
+end

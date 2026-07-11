@@ -1,0 +1,3 @@
+# Debug log directory. Contents of `.log` are gitignored; use:
+#   npm run debug:log -- append "note"
+#   npm run debug:log -- tail

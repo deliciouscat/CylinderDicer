@@ -1,8 +1,10 @@
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local gui_util = require("ui.common.gui_util")
+local visual_status = require("game.dev.visual_status")
 
 local SLOT_COUNT = 6
+local RELOAD_SHADE_ALPHA = 0.18
 
 local function color(r, g, b, a)
 	return vmath.vector4(r, g, b, a)
@@ -29,6 +31,7 @@ end
 
 local function set_reload_enabled(enabled)
 	gui_util.set_enabled("shade", enabled)
+	gui_util.set_alpha("shade", enabled and RELOAD_SHADE_ALPHA or 0.0)
 	gui_util.set_enabled("bullet_group", enabled)
 	gui_util.set_enabled("reload_title_box", enabled)
 	gui_util.set_enabled("reload_title", enabled)
@@ -182,14 +185,28 @@ local function render(self, state)
 	local player = visual_player(state)
 
 	local visible = hud == "revolver_reload" or hud == "bidding"
+	local next_mode = "offscreen"
 	local animating = false
 	if hud == "revolver_reload" then
+		next_mode = "reload"
 		animating = set_mode_layout(self, "reload")
 	elseif hud == "bidding" then
+		next_mode = "hud"
 		animating = set_mode_layout(self, "hud")
 	else
 		animating = set_mode_layout(self, "offscreen")
 	end
+	visual_status.set("cylinder_overlay", {
+		hud = hud,
+		mode = next_mode,
+		visible = visible,
+		animating = animating,
+		shade = hud == "revolver_reload",
+		shade_alpha = hud == "revolver_reload" and RELOAD_SHADE_ALPHA or 0.0,
+		pending_player_id = pending and pending.player_id or nil,
+		pending_count = pending and pending.count or 0,
+		player_bullets = player and selectors.player_bullets(player) or 0,
+	})
 
 	if animating then
 		return

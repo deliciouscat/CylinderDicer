@@ -2,27 +2,9 @@ local bidding = require("game.model.rules.bidding")
 local dice = require("game.model.rules.dice")
 local cylinder = require("game.model.rules.cylinder")
 local turn_machine = require("game.model.turn_machine")
+local presentation = require("game.presentation")
 
 local M = {}
-
-local HUD_BY_PHASE = {
-	revolver_reload = "revolver_reload",
-	cup_shake = "cup_shake",
-	dice_check = "cup_shake",
-	bidding_gap = "cup_shake",
-	bidding = "bidding",
-	duel = "duel",
-	complete = "complete",
-}
-
-local BG_BY_HUD = {
-	revolver_reload = "bidding",
-	loading = "shaking",
-	cup_shake = "shaking",
-	bidding = "bidding",
-	duel = "dualing",
-	complete = "dualing",
-}
 
 function M.is_my_turn(state)
 	return state.turn.active_player_id == state.match.local_player_id
@@ -71,11 +53,7 @@ function M.is_local_pending_load(state)
 end
 
 function M.hud_kind(state)
-	local phase = M.phase(state)
-	if phase == "revolver_reload" and state.pending_load and not M.is_local_pending_load(state) then
-		return "loading"
-	end
-	return HUD_BY_PHASE[phase] or state.turn.kind
+	return presentation.describe(state).hud
 end
 
 function M.is_hud(state, hud)
@@ -83,7 +61,7 @@ function M.is_hud(state, hud)
 end
 
 function M.background_location(state)
-	return BG_BY_HUD[M.hud_kind(state)] or "shaking"
+	return presentation.describe(state).background
 end
 
 function M.last_alive_player(state)
@@ -101,19 +79,18 @@ function M.match_result_payload(state)
 end
 
 function M.player_bullets(player)
-	return cylinder.loaded_count(player.cylinder)
+	if not player then
+		return 0
+	end
+	local from_cylinder = cylinder.loaded_count(player.cylinder)
+	if from_cylinder > 0 then
+		return from_cylinder
+	end
+	return player.bullets or 0
 end
 
 function M.cylinder_anchor(state)
-	if state.pending_load and M.is_hud(state, "revolver_reload") then
-		return "focal"
-	end
-
-	if M.is_hud(state, "bidding") then
-		return "hud"
-	end
-
-	return "offscreen"
+	return presentation.describe(state).cylinder_anchor
 end
 
 function M.reload_summary(state)

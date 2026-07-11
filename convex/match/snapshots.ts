@@ -25,7 +25,8 @@
  * ```
  */
 import type { MatchPrivateDelta, MatchPublicSnapshot } from '../protocol/snapshots'
-import type { MatchState, PlayerState } from './state'
+import type { MatchState } from './state'
+import { deriveAvailableActions } from './capabilities'
 import { suggestedBid } from './rulesBidding'
 
 const HUD_BY_PHASE: Record<string, string> = {
@@ -38,87 +39,18 @@ const HUD_BY_PHASE: Record<string, string> = {
 	complete: 'complete',
 }
 
-function emptySlots(player: PlayerState | undefined): number[] {
-	if (!player) {
-		return []
+function publicDuelPlayers(state: MatchState) {
+	if (state.duel?.players && state.duel.players.length > 0) {
+		return state.duel.players
 	}
-	const slots: number[] = []
-	player.cylinder.slots.forEach((loaded, index) => {
-		if (!loaded) {
-			slots.push(index + 1)
+
+	return state.players.order.map((id) => {
+		const { cylinder: _cylinder, ...player } = state.players.byId[id]
+		return {
+			...player,
+			dice: [...player.dice],
 		}
 	})
-	return slots
-}
-
-function shakeStatus(state: MatchState, playerId: string) {
-	const required = Math.max(1, state.shake.requiredCount || 1)
-	const count = Math.max(0, state.shake.counts[playerId] ?? 0)
-	return {
-		count,
-		required,
-		ratio: Math.min(1, count / required),
-		complete: count >= required,
-	}
-}
-
-function availableActions(state: MatchState, playerId: string) {
-	const result: unknown[] = []
-	const pending = state.pendingLoad
-
-	if (pending && pending.playerId === playerId) {
-		const player = state.players.byId[playerId]
-		result.push({
-			type: 'load',
-			slots: emptySlots(player),
-			remaining: pending.count,
-		})
-		result.push({
-			type: 'load_all',
-			remaining: pending.count,
-		})
-		return result
-	}
-
-	if (playerId !== state.turn.activePlayerId) {
-		return result
-	}
-
-	if (state.flow.phase === 'cup_shake') {
-		const shake = shakeStatus(state, playerId)
-		if (!shake.complete) {
-			result.push({
-				type: 'shake_complete',
-				command: 'shake.complete',
-				remaining: Math.max(0, shake.required - shake.count),
-			})
-		}
-	} else if (state.flow.phase === 'dice_check') {
-		if (!state.shake.checked[playerId]) {
-			result.push({ type: 'check' })
-		}
-	} else if (state.flow.phase === 'bidding_gap') {
-		result.push({ type: 'open' })
-	} else if (state.flow.phase === 'bidding') {
-		result.push({
-			type: 'bid',
-			min_count: 1,
-			max_count: 36,
-			min_face: 1,
-			max_face: 6,
-			suggested: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
-		})
-		if (state.bidding.currentBid) {
-			result.push({ type: 'challenge' })
-		}
-	} else if (state.flow.phase === 'duel') {
-		result.push({
-			type: 'resolve',
-			stage: state.duel?.resolution ? 'advance' : 'execute',
-		})
-	}
-
-	return result
 }
 
 export function hudKind(state: MatchState, viewerPlayerId?: string): string {
@@ -184,9 +116,12 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 		duel: state.duel
 			? {
 					phase: state.duel.phase,
+					bid: state.duel.bid,
 					judge: state.duel.judge,
 					challengerId: state.duel.challengerId,
 					previousBidderId: state.duel.previousBidderId,
+					players: publicDuelPlayers(state),
+					revolverSpin: state.duel.revolverSpin,
 					resolution: state.duel.resolution,
 				}
 			: undefined,
@@ -207,6 +142,6 @@ export function buildPrivateDelta(
 		viewerPlayerId,
 		dice: viewer?.dice,
 		cylinder: viewer?.cylinder,
-		availableActions: availableActions(state, viewerPlayerId),
+			availableActions: deriveAvailableActions(state, viewerPlayerId),
 	}
 }

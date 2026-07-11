@@ -42,6 +42,7 @@ flowchart LR
     Vue -->|"SERVER_SNAPSHOT / SERVER_EVENT"| Defold["Defold canvas"]
     Defold -->|"PLAYER_COMMAND via GameBridge"| Vue
     QA["opponent-controller / bot"] -->|"same command protocol"| Convex
+    Convex -->|"scheduled internal transition"| Convex
 ```
 
 Primary runtime path:
@@ -66,6 +67,7 @@ High-frequency examples:
 - Cup shake gesture: Defold/Vue count local shake motion and send one `shake.complete` command, not six `shake.roll` mutations.
 - Count/face spinner repeat: client keeps local draft value and sends only final `bid.raise`.
 - Duel animation: server returns ordered resolution steps once; Defold plays timing, easing, hit flashes, vibration, and camera effects locally.
+- Delayed phase progression: Convex schedules `bidding.open`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
 - Pointer hover/drag, HUD open/close, disabled-button feedback: local only.
 
 ## Responsibility split
@@ -77,6 +79,7 @@ Convex owns:
 - match creation and participants
 - seat/order
 - turn/phase FSM
+- delayed automatic progression with phase/revision/epoch guards
 - dice roll RNG
 - cylinder load/spin/trigger legality
 - bid validation
@@ -136,6 +139,8 @@ Defold owns:
 
 Defold does not own final state. It sends intent and renders server state.
 
+HUD scripts also do not own phase progression. Convex-backed play advances through internal scheduled mutations. The standalone local simulator mirrors that contract in `play/game/flow_coordinator.script`; `director.script` consumes only the descriptor returned by `play/game/presentation.lua`.
+
 ## Cost-safe client/server split
 
 Convex cost risk mostly comes from repeated function calls, DB I/O, storage growth, and subscription fan-out. The design therefore treats Convex as the authoritative referee, not as the animation loop.
@@ -151,7 +156,7 @@ Send one server command per rule checkpoint:
 | Count/face up/down | Maintain local draft bid | `bid.raise` only on submit |
 | Bullet slot hover/click | Show local targeting feedback | `bullet.load` on chosen slot |
 | Duel request | Button feedback and local pending state | `bid.challenge` |
-| Duel animation | Play returned steps locally | `duel.execute`, then `round.advance` |
+| Duel animation | Play returned steps locally | none; server schedules execute/advance |
 
 Legacy/local simulator code may still expose `shake.roll` for Defold tests, but Convex production flow should not send one mutation per shake tick.
 
@@ -399,6 +404,8 @@ The exact dashboard path can differ by Clerk UI version. Look for API keys, Fron
 
 ### Clerk admin claim for opponent controller
 
+For the operator-facing `/admin/opponents` usage guide, see [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md).
+
 The Phase 4 admin opponent controller checks custom claims on the Clerk JWT identity returned by `ctx.auth.getUserIdentity()`. For the current implementation in `convex/adminMatches.ts`, the simplest Convex JWT template claim is:
 
 ```json
@@ -442,7 +449,21 @@ Boolean admin flags are also accepted:
 - `cylinderdicerAdmin`
 - `cylinderdicer_admin`
 
-After editing the Clerk JWT template, sign out and sign back in so Clerk issues a fresh token. To verify the claim reaches Convex, temporarily inspect `await ctx.auth.getUserIdentity()` in a protected Convex function or run a small dev-only query that returns the identity shape. Remove any identity-dump helper before production use.
+After editing the Clerk JWT template, sign out and sign back in so Clerk issues a fresh token. To verify the claim reaches Convex:
+
+1. Sign in to the web app.
+2. Open `/admin/opponents`.
+3. Confirm the header shows **Admin access granted** (backed by `adminMatches.probeAdminAccess`).
+4. If access is denied, the UI shows the missing-claim hint and the Convex query returns `UNAUTHORIZED`.
+
+CLI verification:
+
+```bash
+npm run phase4:deploy   # push schema/functions: npx convex dev --once
+npm run phase4:check    # local + live deployment admin function preflight
+```
+
+Do not leave a permanent identity-dump query in production. `probeAdminAccess` only returns authorization status, not the full JWT payload.
 
 ## Convex auth config
 
@@ -580,17 +601,18 @@ type MatchCommand = {
     | "setup.load_initial"
     | "shake.complete"
     | "dice.check"
-    | "bidding.open"
     | "bullet.load"
     | "bid.raise"
-    | "bid.challenge"
-    | "duel.execute"
-    | "round.advance";
+    | "bid.challenge";
   payload?: unknown;
 };
 ```
 
 `shake.roll` may remain in the local Defold simulator and Lua tests, but Convex production protocol should use `shake.complete`.
+
+`bidding.open`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions.
+
+Scheduler payloads contain only `matchId`, transition type, expected phase, expected revision, and expected epoch. Timing metadata such as `delayMs` is used by `runAfter` but is not passed to the internal mutation validator. The web reconnect path calls `resumeMatchFlow`, which only re-schedules the guarded internal transition; it never applies phase changes directly.
 
 Clients never submit:
 
@@ -617,6 +639,9 @@ convex/matches.ts
 
 convex/commands.ts
   submitMatchCommand
+
+convex/matchFlow.ts
+  advanceMatchFlow (internal scheduled mutation)
 ```
 
 `submitMatchCommand` is the heart of the authoritative path:
@@ -728,7 +753,24 @@ opponent-controller / bot
 
 `submitOpponentCommand` must only be used after admin auth resolves the submitting user and target bot actor. Normal players still use `submitMatchCommand`; both paths share the reducer/write helper only after actor identity is established.
 
-Current Phase 4 admin UI is manual refresh based. It calls `listAdminDevMatches`, `getAdminMatchState`, and `submitOpponentCommand`, then reloads match detail after submit. The play client receives snapshot subscription updates, but `/admin/opponents` does not yet live-subscribe to admin state.
+Current Phase 4/5 admin UI uses explicit list refresh for sidebars, plus live subscriptions for the selected match or custom room. `/admin/opponents` subscribes to `getAdminMatchState` or `getAdminCustomGameRoom`, submits opponent commands through `submitOpponentCommand`, and reloads audit/list context after mutations.
+
+For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-player turns. Each alive player must complete their own `shake.complete` and `dice.check`; virtual opponent actions are submitted through the opponent controller and human actions through each player's play client. `turn.activePlayerId` remains the next bidding starter and must not gate these checkpoint capabilities.
+
+Each accepted `shake.complete` rolls only the actor's private dice. The phase remains `cup_shake` until every alive player has completed it, then enters reload/dice check once. Tests must assert the intermediate one-player-complete state so a regression where one actor rolls the whole table cannot pass a final-phase-only test.
+
+Convex snapshot keys are camelCase and the Defold model is snake_case. `play/game/model/reducers.lua` normalizes nested keys through `KEY_MAP`; structured fields such as `shake.requiredCount` must have explicit protocol types and adapter assertions. Otherwise a missing map entry can silently activate a Lua fallback while server state remains correct.
+
+## Data lifecycle
+
+Completed match data is cleaned up in two layers:
+
+- `compactMatchLogs` remains the lightweight log retention path for `matchCommands` and `matchEvents`.
+- `purgeCompletedDevMatchData` is an admin-only hard purge for completed dev QA matches.
+
+When `applyMatchCommand` reduces a match to `status: "complete"`, all match participants are marked complete and any linked `customGameRooms` row moves from `started` to `completed`. This keeps the room browser and admin controller from treating a finished custom game as an active started room.
+
+`purgeCompletedDevMatchData` only accepts `mode: "dev"` and `status: "complete"` matches. It deletes child rows first (`matchEvents`, `matchCommands`, `matchSnapshots`, `matchStates`, `matchParticipants`, linked `customGameParticipants`) and deletes linked custom rooms and the match parent only after no child rows remain. Run it repeatedly if `mayHaveMore` is true. `adminAudit` rows are intentionally retained as operational evidence, including rejected purge attempts.
 
 Keep `vertual-server/` as legacy fallback until the Convex dev match flow can drive all opponent actions and the play/admin screens can reliably select the same match.
 
@@ -754,6 +796,7 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 - User can create dev match.
 - Legal command appends event and updates snapshot.
 - `shake.complete` is one mutation per completed shake, not one mutation per shake tick.
+- Every alive player has an independent shake/check capability; one player's completion cannot advance the phase or roll another player's dice.
 - Illegal command returns structured rejection.
 - Duplicate `commandId` is idempotent.
 - Private snapshot hides opponent dice/cylinder.

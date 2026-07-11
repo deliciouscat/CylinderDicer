@@ -7,7 +7,7 @@ import type {
   StartMatchPayload,
 } from '@shared/protocol/game-bridge'
 import { t } from '../i18n'
-import { listenFromDefold, sendToDefold } from './gameBridge'
+import { listenFromDefold, listenFromDefoldFrame, sendToDefold } from './gameBridge'
 
 const props = defineProps<{
   buildUrl?: string
@@ -24,6 +24,12 @@ const emit = defineEmits<{
 const frame = ref<HTMLIFrameElement | null>(null)
 const isDefoldReady = ref(false)
 let stopListening: (() => void) | undefined
+let stopFrameListening: (() => void) | undefined
+let readyRetryTimer: number | undefined
+let readyRetryCount = 0
+
+const READY_RETRY_LIMIT = 40
+const READY_RETRY_INTERVAL_MS = 250
 
 function send(message: GameBridgeMessage) {
   if (!frame.value) {
@@ -32,8 +38,8 @@ function send(message: GameBridgeMessage) {
   sendToDefold(frame.value, message)
 }
 
-function sendStartMatch() {
-  if (!isDefoldReady.value || !props.match) {
+function sendStartMatch(force = false) {
+  if ((!force && !isDefoldReady.value) || !props.match) {
     return
   }
   send({
@@ -42,8 +48,8 @@ function sendStartMatch() {
   })
 }
 
-function sendServerSnapshot(snapshot: ServerSnapshotPayload | null | undefined) {
-  if (!isDefoldReady.value || !snapshot) {
+function sendServerSnapshot(snapshot: ServerSnapshotPayload | null | undefined, force = false) {
+  if ((!force && !isDefoldReady.value) || !snapshot) {
     return
   }
   send({
@@ -52,8 +58,8 @@ function sendServerSnapshot(snapshot: ServerSnapshotPayload | null | undefined) 
   })
 }
 
-function sendCommandRejected(rejected: CommandRejectedPayload | null | undefined) {
-  if (!isDefoldReady.value || !rejected) {
+function sendCommandRejected(rejected: CommandRejectedPayload | null | undefined, force = false) {
+  if ((!force && !isDefoldReady.value) || !rejected) {
     return
   }
   send({
@@ -62,24 +68,85 @@ function sendCommandRejected(rejected: CommandRejectedPayload | null | undefined
   })
 }
 
+function sendInitialState(force = false) {
+  sendStartMatch(force)
+  sendServerSnapshot(props.serverSnapshot, force)
+  sendCommandRejected(props.commandRejected, force)
+}
+
+function stopReadyRetry() {
+  if (readyRetryTimer !== undefined) {
+    window.clearInterval(readyRetryTimer)
+    readyRetryTimer = undefined
+  }
+}
+
+function markDefoldReady(message: GameBridgeMessage) {
+  if (!isDefoldReady.value) {
+    isDefoldReady.value = true
+    emit('ready', message)
+    stopReadyRetry()
+  }
+}
+
+function installFrameListener() {
+  const target = frame.value?.contentWindow
+  if (!target) {
+    return
+  }
+
+  stopFrameListening?.()
+  stopFrameListening = listenFromDefoldFrame(target, handleMessage)
+}
+
+function startReadyRetry() {
+  stopReadyRetry()
+  readyRetryCount = 0
+  readyRetryTimer = window.setInterval(() => {
+    if (isDefoldReady.value) {
+      stopReadyRetry()
+      return
+    }
+    readyRetryCount += 1
+    installFrameListener()
+    sendInitialState(true)
+    if (readyRetryCount >= READY_RETRY_LIMIT) {
+      stopReadyRetry()
+    }
+  }, READY_RETRY_INTERVAL_MS)
+}
+
+function handleFrameLoad() {
+  isDefoldReady.value = false
+  installFrameListener()
+  startReadyRetry()
+}
+
 function handleMessage(message: GameBridgeMessage) {
   emit('message', message)
 
   if (message.type === 'DEFOLD_READY') {
-    isDefoldReady.value = true
-    emit('ready', message)
-    sendStartMatch()
-    sendServerSnapshot(props.serverSnapshot)
-    sendCommandRejected(props.commandRejected)
+    markDefoldReady(message)
+    sendInitialState()
+  } else if (
+    message.type === 'MATCH_READY' ||
+    message.type === 'SERVER_SNAPSHOT_RECEIVED' ||
+    message.type === 'PLAYER_COMMAND'
+  ) {
+    markDefoldReady(message)
   }
 }
 
 onMounted(() => {
   stopListening = listenFromDefold(handleMessage)
+  installFrameListener()
+  startReadyRetry()
 })
 
 onUnmounted(() => {
   stopListening?.()
+  stopFrameListening?.()
+  stopReadyRetry()
 })
 
 watch(
@@ -109,6 +176,7 @@ defineExpose({
     :src="buildUrl ?? '/play/index.html'"
     :title="t('playWrapper.canvasTitle')"
     allow="fullscreen; gamepad"
+    @load="handleFrameLoad"
   />
 </template>
 

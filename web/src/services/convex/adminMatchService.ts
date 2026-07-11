@@ -96,6 +96,49 @@ export interface SubmitOpponentCommandInput {
   payload?: unknown
 }
 
+export interface AdminAccessProbe {
+  ok: boolean
+  authorized: boolean
+  code: string
+  message?: string
+  hint?: string
+  templateExample?: Record<string, unknown>
+  clerkSubject?: string
+  userId?: string
+}
+
+export interface AdminAuditRow {
+  _id: string
+  adminUserId: string
+  matchId?: string
+  customGameRoomId?: string
+  targetPlayerId?: string
+  commandType?: string
+  resultOk: boolean
+  resultCode?: string
+  resultRevision?: number
+  createdAt: number
+}
+
+export interface AdminPurgeCompletedDevMatchResult {
+  ok: boolean
+  matchId: string
+  code?: string
+  message?: string
+  dryRun?: boolean
+  maxDelete?: number
+  deleted?: Record<string, number>
+  parentDeleted?: {
+    customGameRooms: number
+    match: boolean
+  }
+  deletedRoomIds?: string[]
+  roomsCompleted?: number
+  mayHaveMore?: boolean
+  auditRetained?: boolean
+  auditId?: string
+}
+
 export function createAdminMatchService(client: ConvexClient) {
   return {
     async createDevMatchWithBots(options: {
@@ -106,7 +149,7 @@ export function createAdminMatchService(client: ConvexClient) {
     } = {}) {
       return await client.mutation(convexFunctions.adminMatches.createDevMatchWithBots, options)
     },
-    async listAdminCustomGameRooms(options: { status?: 'composing' | 'started' | 'cancelled'; limit?: number } = {}): Promise<AdminCustomGameRoomView[]> {
+    async listAdminCustomGameRooms(options: { status?: 'composing' | 'started' | 'completed' | 'cancelled'; limit?: number } = {}): Promise<AdminCustomGameRoomView[]> {
       return await client.query(convexFunctions.adminMatches.listAdminCustomGameRooms, options) as AdminCustomGameRoomView[]
     },
     async getAdminCustomGameRoom(roomId: string): Promise<AdminCustomGameRoomView> {
@@ -114,6 +157,9 @@ export function createAdminMatchService(client: ConvexClient) {
     },
     async setCustomGameOpponentReady(input: { roomId: string; targetPlayerId: string; ready: boolean }): Promise<Record<string, any>> {
       return await client.mutation(convexFunctions.adminMatches.setCustomGameOpponentReady, input as any)
+    },
+    async closeStartedCustomGameRoom(roomId: string): Promise<Record<string, any>> {
+      return await client.mutation(convexFunctions.adminMatches.closeStartedCustomGameRoom, { roomId } as any)
     },
     async listAdminDevMatches(options: { status?: 'ready' | 'complete'; limit?: number } = {}): Promise<AdminDevMatchRow[]> {
       return await client.query(convexFunctions.adminMatches.listAdminDevMatches, options)
@@ -123,6 +169,43 @@ export function createAdminMatchService(client: ConvexClient) {
     },
     async submitOpponentCommand(command: SubmitOpponentCommandInput): Promise<Record<string, any>> {
       return await client.mutation(convexFunctions.adminMatches.submitOpponentCommand, command as Record<string, any>)
+    },
+    async purgeCompletedDevMatchData(input: { matchId: string; maxDelete?: number; dryRun?: boolean }): Promise<AdminPurgeCompletedDevMatchResult> {
+      return await client.mutation(convexFunctions.adminMatches.purgeCompletedDevMatchData, input as any) as AdminPurgeCompletedDevMatchResult
+    },
+    async probeAdminAccess(): Promise<AdminAccessProbe> {
+      return await client.query(convexFunctions.adminMatches.probeAdminAccess, {}) as AdminAccessProbe
+    },
+    async listRecentAdminAudit(options: {
+      limit?: number
+      matchId?: string
+      customGameRoomId?: string
+    } = {}): Promise<AdminAuditRow[]> {
+      return await client.query(convexFunctions.adminMatches.listRecentAdminAudit, options as any) as AdminAuditRow[]
+    },
+    subscribeAdminMatchState(
+      matchId: string,
+      onState: (state: AdminMatchState) => void,
+      onError?: (error: Error) => void,
+    ) {
+      return client.onUpdate(
+        convexFunctions.adminMatches.getAdminMatchState,
+        { matchId } as any,
+        (state) => onState(state as AdminMatchState),
+        onError,
+      )
+    },
+    subscribeAdminCustomGameRoom(
+      roomId: string,
+      onRoom: (room: AdminCustomGameRoomView) => void,
+      onError?: (error: Error) => void,
+    ) {
+      return client.onUpdate(
+        convexFunctions.adminMatches.getAdminCustomGameRoom,
+        { roomId } as any,
+        (room) => onRoom(room as AdminCustomGameRoomView),
+        onError,
+      )
     },
   }
 }

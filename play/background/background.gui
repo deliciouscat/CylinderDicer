@@ -1,0 +1,33 @@
+script: "/background/background.gui_script"
+textures {
+  name: "main"
+  texture: "/main/main.atlas"
+}
+nodes {
+  position {
+    x: 640.0
+    y: -410.0
+    z: 0.1
+  }
+  scale {
+    x: 1.36
+    y: 1.36
+    z: 1.0
+    w: 1.0
+  }
+  size {
+    x: 941.0
+    y: 1672.0
+  }
+  color {
+    x: 1.0
+    y: 1.0
+    z: 1.0
+    w: 1.0
+  }
+  type: TYPE_BOX
+  texture: "main/background"
+  id: "backdrop"
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT

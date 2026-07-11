@@ -106,7 +106,7 @@ export default defineSchema({
     actorVirtualOpponentId: v.optional(v.id('virtualOpponents')),
     actorPlayerId: v.optional(v.string()),
     submittedByUserId: v.optional(v.id('users')),
-    source: v.optional(v.union(v.literal('player'), v.literal('admin'), v.literal('bot'))),
+	    source: v.optional(v.union(v.literal('player'), v.literal('admin'), v.literal('bot'), v.literal('system'))),
     type: v.string(),
     payload: v.any(),
     resultRevision: v.optional(v.number()),
@@ -139,7 +139,7 @@ export default defineSchema({
 
   customGameRooms: defineTable({
     hostUserId: v.id('users'),
-    status: v.union(v.literal('composing'), v.literal('started'), v.literal('cancelled')),
+    status: v.union(v.literal('composing'), v.literal('started'), v.literal('completed'), v.literal('cancelled')),
     inviteCode: v.string(),
     matchId: v.optional(v.id('matches')),
     createdAt: v.number(),
@@ -147,7 +147,8 @@ export default defineSchema({
   })
     .index('by_host_status', ['hostUserId', 'status'])
     .index('by_status_updated', ['status', 'updatedAt'])
-    .index('by_invite_code', ['inviteCode']),
+    .index('by_invite_code', ['inviteCode'])
+    .index('by_match', ['matchId']),
 
   customGameParticipants: defineTable({
     roomId: v.id('customGameRooms'),

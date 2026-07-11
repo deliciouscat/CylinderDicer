@@ -435,7 +435,6 @@ button {
 .texture-button:focus-visible,
 .room-list-row:focus-visible,
 .room-player-row:focus-visible,
-.virtual-opponent-tile:focus-visible,
 .custom-game-input:focus-visible {
   outline: 2px solid var(--color-border);
   outline-offset: 4px;
@@ -649,58 +648,6 @@ button {
   line-height: 1.25;
 }
 
-.virtual-opponent-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(8px, 0.8vw, 14px);
-}
-
-.virtual-opponent-tile {
-  min-height: clamp(58px, 4vw, 78px);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: 4px 12px;
-  border: 0;
-  border-radius: 7px;
-  padding: 10px clamp(14px, 1.2vw, 22px);
-  color: var(--color-text);
-  background: rgb(from var(--color-textbox-bg) r g b / 54%);
-  text-align: left;
-  text-shadow: 0 2px 3px rgb(0 0 0 / 76%);
-}
-
-.virtual-opponent-tile.is-selected {
-  box-shadow: inset 0 0 0 2px var(--color-border);
-  background: rgb(from var(--color-textbox-bg) r g b / 78%);
-}
-
-.virtual-opponent-tile span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: clamp(18px, 1.12vw, 24px);
-}
-
-.virtual-opponent-tile small {
-  grid-column: 1;
-  min-width: 0;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.virtual-opponent-tile strong {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  color: var(--color-text-status-ready);
-  font-size: clamp(14px, 0.95vw, 18px);
-  font-weight: 400;
-}
-
 .room-action-bar {
   position: relative;
   z-index: auto;
@@ -774,10 +721,6 @@ button {
     max-height: 350px;
   }
 
-  .virtual-opponent-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .texture-button--large {
     width: 230px;
   }
@@ -841,11 +784,6 @@ button {
     grid-auto-rows: 46px;
     row-gap: 8px;
     padding-bottom: 0;
-  }
-
-  .virtual-opponent-tile {
-    min-height: 52px;
-    padding: 8px 14px;
   }
 
   .room-list-join {
@@ -939,14 +877,6 @@ button {
     grid-auto-rows: 50px;
     row-gap: 8px;
     padding-bottom: 0;
-  }
-
-  .virtual-opponent-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .virtual-opponent-tile {
-    min-height: 54px;
   }
 
   .room-invite-panel {

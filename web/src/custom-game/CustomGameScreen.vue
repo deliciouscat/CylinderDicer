@@ -9,13 +9,10 @@ import {
 } from '../services/convex/matchService'
 import {
   createCustomGameService,
+  type CustomGameRoomListRow,
   type CustomGameRoomUnsubscribe,
   type CustomGameRoomView,
 } from '../services/convex/customGameService'
-import {
-  createVirtualOpponentService,
-  type VirtualOpponentProfile,
-} from '../services/convex/virtualOpponentService'
 
 type RoomPlayer = {
   id: string
@@ -24,7 +21,6 @@ type RoomPlayer = {
   isReady: boolean
   kind: 'human' | 'virtual'
   archetype?: string
-  virtualOpponentKey?: string
 }
 
 const emit = defineEmits<{
@@ -34,7 +30,6 @@ const emit = defineEmits<{
 const convex = useConvexClient()
 const auth = useAuth()
 const customGameService = createCustomGameService(convex)
-const virtualOpponentService = createVirtualOpponentService(convex)
 
 const backgroundAsset = assetLoader('background-custom-game')
 const boardAsset = assetLoader('board')
@@ -43,16 +38,22 @@ const woodButtonAsset = assetLoader('menu-panel')
 const redButtonAsset = assetLoader('menu-pannel-red')
 const titleAsset = assetLoader('title')
 
-const virtualOpponents = ref<VirtualOpponentProfile[]>([])
 const roomView = ref<CustomGameRoomView | null>(null)
+const publicRooms = ref<CustomGameRoomListRow[]>([])
+const selectedBrowserRoomId = ref('')
 const selectedPlayerId = ref('local-player')
 const inviteCodeInput = ref('')
-const statusMessage = ref(t('customGame.loadingOpponents'))
+const inviteNameInput = ref('')
+const statusMessage = ref(t('customGame.loadingRoom'))
 const errorMessage = ref('')
 const busy = ref(false)
+const convexAuthReady = ref(false)
 const loadedOnce = ref(false)
 
 let roomUnsubscribe: CustomGameRoomUnsubscribe | undefined
+let authSetupGeneration = 0
+const CONVEX_REQUEST_TIMEOUT_MS = 10000
+const CONVEX_AUTH_TIMEOUT_MS = 8000
 
 const customGameStyles = {
   '--custom-bg': `url(${backgroundAsset.url})`,
@@ -73,28 +74,17 @@ const customGameStyles = {
 }
 
 const isSignedIn = computed(() => auth.isSignedIn.value === true)
-const canUseConvex = computed(() => auth.isLoaded.value && isSignedIn.value)
+const canUseConvex = computed(() => auth.isLoaded.value && isSignedIn.value && convexAuthReady.value)
 const isHost = computed(() => roomView.value?.viewer?.isHost === true)
 const isGuest = computed(() => Boolean(roomView.value?.viewer && !roomView.value.viewer.isHost))
 const roomStarted = computed(() => roomView.value?.room.status === 'started')
-const startedMatchId = computed(() => roomView.value?.room.matchId ?? '')
-const canToggleOpponents = computed(() => isHost.value && !roomStarted.value && !busy.value)
 const canStartMatch = computed(() => isHost.value && !roomStarted.value && allOpponentsReady.value)
-const selectedOpponentKeys = computed(() => {
-  return roomView.value?.participants
-    ?.filter((participant) => participant.participantKind === 'virtual' && participant.status === 'active')
-    ?.map((participant) => {
-      const opponent = virtualOpponents.value.find((candidate) => candidate._id === participant.virtualOpponentId)
-      return opponent?.key ?? ''
-    })
-    ?.filter(Boolean) ?? []
-})
+const hasVirtualOpponents = computed(() => roomPlayers.value.some((player) => player.kind === 'virtual'))
 const roomPlayers = computed<RoomPlayer[]>(() => [
   ...(roomView.value?.participants ?? [])
     .slice()
     .sort((left, right) => left.seatIndex - right.seatIndex)
     .map((participant) => {
-      const opponent = virtualOpponents.value.find((candidate) => candidate._id === participant.virtualOpponentId)
       return {
         id: participant.playerId,
         nickname: participant.displayName,
@@ -102,7 +92,6 @@ const roomPlayers = computed<RoomPlayer[]>(() => [
         isReady: participant.ready,
         kind: participant.participantKind,
         archetype: participant.archetype,
-        virtualOpponentKey: opponent?.key,
       }
     }),
 ])
@@ -115,61 +104,99 @@ const selectedCountLabel = computed(() => {
 const allOpponentsReady = computed(() => {
   return roomView.value?.allReady === true
 })
-
-function isOpponentSelected(key: string) {
-  return selectedOpponentKeys.value.includes(key)
-}
-
-function toggleOpponent(key: string) {
-  if (!canToggleOpponents.value || !roomView.value) {
-    return
+const canShowStart = computed(() => isHost.value && !roomStarted.value)
+const createDisabled = computed(() => !canUseConvex.value || busy.value)
+const joinDisabled = computed(() => !canUseConvex.value || busy.value)
+const toolbarActionDisabled = computed(() => {
+  if (!roomView.value) {
+    return joinDisabled.value
   }
-  void setSelectedOpponents(
-    isOpponentSelected(key)
-      ? selectedOpponentKeys.value.filter((selectedKey) => selectedKey !== key)
-      : [...selectedOpponentKeys.value, key],
-    key,
-  )
-}
-
-async function setSelectedOpponents(nextKeys: string[], focusKey?: string) {
-  if (!roomView.value || busy.value) {
-    return
-  }
-  busy.value = true
-  errorMessage.value = ''
-  try {
-    const updated = await customGameService.setMyCustomGameOpponents({
-      roomId: roomView.value.room._id,
-      virtualOpponentKeys: nextKeys,
-    })
-    if (!isRoomView(updated)) {
-      throw new Error((updated as any)?.message ?? 'custom_room_update_failed')
-    }
-    roomView.value = updated
-    selectedPlayerId.value = focusKey && selectedOpponentKeys.value.includes(focusKey)
-      ? `opponent-${selectedOpponentKeys.value.indexOf(focusKey) + 1}`
-      : roomPlayers.value[1]?.id ?? 'local-player'
-    statusMessage.value = roomView.value.allReady
-      ? t('customGame.allReady')
-      : t('customGame.waitingForReady')
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    busy.value = false
-  }
-}
-
-function defaultOpponentKeys() {
-  return virtualOpponents.value.slice(0, 3).map((opponent) => opponent.key)
-}
+  return !canUseConvex.value || busy.value
+})
+const roomBrowserRows = computed(() => {
+  return roomView.value
+    ? []
+    : publicRooms.value
+})
 
 function isRoomView(value: unknown): value is CustomGameRoomView {
   return Boolean(value && typeof value === 'object' && 'room' in value && 'participants' in value)
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), timeoutMs)
+    promise
+      .then(resolve, reject)
+      .finally(() => window.clearTimeout(timeout))
+  })
+}
+
+async function fetchConvexAuthToken(forceRefreshToken = false) {
+  const token = await withTimeout(
+    auth.getToken.value({
+      template: 'convex',
+      skipCache: forceRefreshToken,
+    }),
+    CONVEX_AUTH_TIMEOUT_MS,
+    'convex_auth_token_timeout',
+  )
+  if (!token) {
+    throw new Error('convex_auth_token_missing')
+  }
+  return token
+}
+
+function installConvexAuthProvider() {
+  convex.setAuth(
+    async ({ forceRefreshToken }) => {
+      try {
+        return await fetchConvexAuthToken(forceRefreshToken)
+      } catch (error) {
+        statusMessage.value = t('customGame.authTokenError')
+        errorMessage.value = error instanceof Error ? error.message : String(error)
+        return null
+      }
+    },
+    () => {},
+  )
+}
+
+async function prepareConvexAuth(generation: number) {
+  installConvexAuthProvider()
+  try {
+    await fetchConvexAuthToken(false)
+    if (generation !== authSetupGeneration) {
+      return
+    }
+    convexAuthReady.value = true
+    if (errorMessage.value === 'convex_auth_token_missing' || errorMessage.value === 'convex_auth_token_timeout') {
+      errorMessage.value = ''
+    }
+  } catch (error) {
+    if (generation !== authSetupGeneration) {
+      return
+    }
+    convexAuthReady.value = false
+    statusMessage.value = t('customGame.authTokenError')
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
 async function loadRoom() {
-  roomView.value = await customGameService.getMyCustomGameRoom()
+  roomView.value = await withTimeout(
+    customGameService.getMyCustomGameRoom(),
+    CONVEX_REQUEST_TIMEOUT_MS,
+    'custom_room_load_timeout',
+  )
+}
+
+async function loadPublicRooms() {
+  publicRooms.value = await withTimeout(
+    customGameService.listComposingCustomGameRooms(12),
+    CONVEX_REQUEST_TIMEOUT_MS,
+    'custom_room_list_timeout',
+  )
 }
 
 async function createRoom() {
@@ -178,19 +205,24 @@ async function createRoom() {
   }
   busy.value = true
   errorMessage.value = ''
+  statusMessage.value = t('customGame.createQueued')
   try {
-    const created = await customGameService.ensureMyCustomGameRoom({
-      virtualOpponentKeys: defaultOpponentKeys(),
-    })
+    const created = await withTimeout(
+      customGameService.ensureMyCustomGameRoom(),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_create_timeout',
+    )
     if (!isRoomView(created)) {
       throw new Error((created as any)?.message ?? 'custom_room_not_available')
     }
     roomView.value = created
+    publicRooms.value = []
     subscribeRoomUpdates()
     selectedPlayerId.value = roomPlayers.value[1]?.id ?? 'local-player'
     statusMessage.value = selectedStatusMessage()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.createError')
   } finally {
     busy.value = false
   }
@@ -210,11 +242,16 @@ async function joinRoom() {
   errorMessage.value = ''
   statusMessage.value = t('customGame.joinQueued')
   try {
-    const joined = await customGameService.joinCustomGameRoomByInviteCode(inviteCode)
+    const joined = await withTimeout(
+      customGameService.joinCustomGameRoomByInviteCode(inviteCode),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_join_timeout',
+    )
     if (!isRoomView(joined)) {
       throw new Error(`${(joined as any)?.code ?? 'JOIN_FAILED'}: ${(joined as any)?.message ?? 'join_failed'}`)
     }
     roomView.value = joined
+    publicRooms.value = []
     subscribeRoomUpdates()
     selectedPlayerId.value = joined.viewer?.playerId ?? roomPlayers.value[0]?.id ?? 'local-player'
     statusMessage.value = t('customGame.joinedRoom')
@@ -226,6 +263,20 @@ async function joinRoom() {
   }
 }
 
+function selectBrowserRoom(room: CustomGameRoomListRow) {
+  selectedBrowserRoomId.value = room.roomId
+  inviteCodeInput.value = room.inviteCode
+}
+
+function queueInvite() {
+  const name = inviteNameInput.value.trim()
+  if (!name) {
+    return
+  }
+  statusMessage.value = t('customGame.inviteQueued', { name })
+  inviteNameInput.value = ''
+}
+
 async function leaveRoom() {
   if (!roomView.value || !isGuest.value || busy.value) {
     return
@@ -233,7 +284,11 @@ async function leaveRoom() {
   busy.value = true
   errorMessage.value = ''
   try {
-    await customGameService.leaveMyCustomGameRoom(roomView.value.room._id)
+    await withTimeout(
+      customGameService.leaveMyCustomGameRoom(roomView.value.room._id),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_leave_timeout',
+    )
     roomUnsubscribe?.unsubscribe()
     roomView.value = null
     inviteCodeInput.value = ''
@@ -253,10 +308,14 @@ async function toggleMyReady() {
   busy.value = true
   errorMessage.value = ''
   try {
-    const updated = await customGameService.setMyCustomGameReady({
-      roomId: roomView.value.room._id,
-      ready: nextReady,
-    })
+    const updated = await withTimeout(
+      customGameService.setMyCustomGameReady({
+        roomId: roomView.value.room._id,
+        ready: nextReady,
+      }),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_ready_timeout',
+    )
     if (!isRoomView(updated)) {
       throw new Error((updated as any)?.message ?? 'ready_update_failed')
     }
@@ -271,6 +330,24 @@ async function toggleMyReady() {
 
 async function refreshRoom() {
   await loadRoom()
+  if (!roomView.value) {
+    await loadPublicRooms()
+  }
+}
+
+function refreshRoomFromToolbar() {
+  if (!canUseConvex.value || busy.value) {
+    return
+  }
+  statusMessage.value = t('customGame.loadingRoom')
+  void refreshRoom()
+    .then(() => {
+      statusMessage.value = roomView.value ? selectedStatusMessage() : ''
+    })
+    .catch((error) => {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+      statusMessage.value = t('customGame.roomLoadError')
+    })
 }
 
 function selectedStatusMessage() {
@@ -288,41 +365,16 @@ function subscribeRoomUpdates() {
         statusMessage.value = selectedStatusMessage()
         if (room.room.status === 'started' && room.room.matchId) {
           statusMessage.value = t('customGame.matchStarted')
+          openMatch({ matchId: room.room.matchId, revision: 0 })
         }
+        return
       }
+      roomView.value = null
     },
     (error) => {
       errorMessage.value = error.message
     },
   )
-}
-
-async function loadVirtualOpponents() {
-  if (!canUseConvex.value || busy.value) {
-    return
-  }
-
-  busy.value = true
-  errorMessage.value = ''
-  statusMessage.value = t('customGame.loadingOpponents')
-  try {
-    const loaded = await virtualOpponentService.ensureDefaultVirtualOpponentsLoaded()
-    virtualOpponents.value = loaded.length > 0
-      ? loaded
-      : await virtualOpponentService.listVirtualOpponents()
-    await refreshRoom()
-    if (roomView.value) {
-      subscribeRoomUpdates()
-      selectedPlayerId.value = roomView.value.viewer?.playerId ?? roomPlayers.value[1]?.id ?? 'local-player'
-    }
-    loadedOnce.value = true
-    statusMessage.value = selectedStatusMessage()
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-    statusMessage.value = t('customGame.startError')
-  } finally {
-    busy.value = false
-  }
 }
 
 function openMatch(match: CreatedMatch) {
@@ -334,7 +386,7 @@ async function startGame() {
     statusMessage.value = t('customGame.signInRequired')
     return
   }
-  if (selectedOpponentKeys.value.length === 0) {
+  if (!hasVirtualOpponents.value) {
     errorMessage.value = t('customGame.selectOpponent')
     return
   }
@@ -351,7 +403,11 @@ async function startGame() {
       errorMessage.value = t('customGame.startError')
       return
     }
-    const result = await customGameService.startMyCustomGameRoom(roomView.value.room._id) as CreatedMatch & { ok?: boolean; code?: string; message?: string }
+    const result = await withTimeout(
+      customGameService.startMyCustomGameRoom(roomView.value.room._id),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_start_timeout',
+    ) as CreatedMatch & { ok?: boolean; code?: string; message?: string }
 
     if (result.ok === false || !result.matchId) {
       errorMessage.value = `${result.code ?? 'CUSTOM_MATCH_FAILED'}: ${result.message ?? 'custom_match_failed'}`
@@ -375,35 +431,50 @@ watchEffect(() => {
   }
 
   if (!isSignedIn.value) {
+    authSetupGeneration += 1
     convex.setAuth(async () => null)
+    convexAuthReady.value = false
     statusMessage.value = t('customGame.signInRequired')
+    loadedOnce.value = false
     return
   }
 
-  convex.setAuth(
-    async ({ forceRefreshToken }) => {
-      return await auth.getToken.value({
-        template: 'convex',
-        skipCache: forceRefreshToken,
-      })
-    },
-    () => {},
-  )
+  const generation = authSetupGeneration + 1
+  authSetupGeneration = generation
+  convexAuthReady.value = false
+  void prepareConvexAuth(generation)
 })
 
 watchEffect(() => {
   if (!canUseConvex.value || loadedOnce.value) {
     return
   }
-  void loadVirtualOpponents()
+  loadedOnce.value = true
+  void refreshRoom()
+    .then(() => {
+      if (roomView.value) {
+        subscribeRoomUpdates()
+        selectedPlayerId.value = roomView.value.viewer?.playerId ?? roomPlayers.value[1]?.id ?? 'local-player'
+      }
+      statusMessage.value = roomView.value ? selectedStatusMessage() : ''
+    })
+    .catch((error) => {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+      statusMessage.value = t('customGame.roomLoadError')
+    })
 })
 
 onMounted(() => {
   if (!canUseConvex.value) {
-    statusMessage.value = auth.isLoaded.value
+    statusMessage.value = auth.isLoaded.value && !isSignedIn.value
       ? t('customGame.signInRequired')
-      : t('customGame.loadingOpponents')
+      : t('customGame.loadingRoom')
   }
+  window.setTimeout(() => {
+    if (!auth.isLoaded.value) {
+      statusMessage.value = t('customGame.signInRequired')
+    }
+  }, 5000)
 })
 
 onUnmounted(() => {
@@ -419,7 +490,10 @@ onUnmounted(() => {
       <img class="custom-game-title" :src="titleAsset.url" :alt="t('customGame.titleAlt')" />
 
       <div class="custom-game-shell custom-game-shell--room">
-        <div class="custom-game-toolbar">
+        <div
+          class="custom-game-toolbar"
+          :class="{ 'custom-game-toolbar--browser': !roomView }"
+        >
           <button
             class="texture-button texture-button--small texture-button--toolbar"
             type="button"
@@ -428,49 +502,80 @@ onUnmounted(() => {
             <span>{{ t('customGame.back') }}</span>
           </button>
 
-          <div class="custom-game-toolbar__spacer" />
+          <button
+            v-if="!roomView"
+            class="texture-button texture-button--small texture-button--toolbar"
+            type="button"
+            :disabled="createDisabled"
+            @click="createRoom"
+          >
+            <span>{{ t('customGame.create') }}</span>
+          </button>
+
+          <div v-else-if="!isHost" class="custom-game-toolbar__spacer" />
+
+          <input
+            v-if="!roomView"
+            v-model="inviteCodeInput"
+            class="custom-game-input"
+            type="text"
+            :placeholder="t('customGame.roomCodePlaceholder')"
+            :aria-label="t('customGame.roomCodeAria')"
+            :disabled="joinDisabled"
+            @keyup.enter="joinRoom"
+          />
+
+          <input
+            v-else-if="isHost && !roomStarted"
+            v-model="inviteNameInput"
+            class="custom-game-input"
+            type="text"
+            :placeholder="t('customGame.namePlaceholder')"
+            :aria-label="t('customGame.inviteNameAria')"
+            :disabled="busy || !canUseConvex"
+            @keyup.enter="queueInvite"
+          />
+
+          <div v-else class="custom-game-toolbar__spacer" />
 
           <button
             class="texture-button texture-button--small texture-button--toolbar"
             type="button"
-            :disabled="busy || !canUseConvex"
-            @click="loadVirtualOpponents"
+            :disabled="toolbarActionDisabled"
+            @click="!roomView ? joinRoom() : isHost && !roomStarted ? queueInvite() : refreshRoomFromToolbar()"
           >
-            <span>{{ t('customGame.refreshOpponents') }}</span>
+            <span>{{ !roomView ? t('customGame.join') : isHost && !roomStarted ? t('customGame.invite') : t('customGame.refreshRoom') }}</span>
           </button>
         </div>
 
-        <section v-if="!roomView" class="custom-game-board custom-game-board--lobby">
-          <div class="room-join-panel">
-            <label class="room-join-panel__label" for="custom-game-invite-code">{{ t('customGame.inviteCode') }}</label>
-            <input
-              id="custom-game-invite-code"
-              v-model="inviteCodeInput"
-              class="room-join-panel__input"
-              type="text"
-              :placeholder="t('customGame.roomCodePlaceholder')"
-              :aria-label="t('customGame.roomCodeAria')"
-              :disabled="busy || !canUseConvex"
-            />
-            <div class="room-action-bar">
-              <button
-                class="texture-button texture-button--large texture-button--wood"
-                type="button"
-                :disabled="busy || !canUseConvex"
-                @click="joinRoom"
-              >
-                <span>{{ t('customGame.join') }}</span>
-              </button>
-              <button
-                class="texture-button texture-button--large texture-button--red"
-                type="button"
-                :disabled="busy || !canUseConvex"
-                @click="createRoom"
-              >
-                <span>{{ t('customGame.create') }}</span>
-              </button>
-            </div>
+        <section v-if="!roomView" class="custom-game-board custom-game-board--room-list">
+          <div class="room-list-header">
+            <span>{{ t('customGame.host') }}</span>
+            <span>{{ t('customGame.players') }}</span>
           </div>
+
+          <div class="room-list-scroll">
+            <button
+              v-for="room in roomBrowserRows"
+              :key="room.roomId"
+              class="room-list-row"
+              :class="{ 'is-selected': selectedBrowserRoomId === room.roomId }"
+              type="button"
+              @click="selectBrowserRoom(room)"
+            >
+              <span>{{ room.hostDisplayName }}</span>
+              <span>{{ room.playerCount }}/{{ room.maxPlayers }}</span>
+            </button>
+          </div>
+
+          <button
+            class="texture-button texture-button--large texture-button--red room-list-join"
+            type="button"
+            :disabled="joinDisabled || !inviteCodeInput.trim()"
+            @click="joinRoom"
+          >
+            <span>{{ t('customGame.join') }}</span>
+          </button>
         </section>
 
         <section v-else class="custom-game-board custom-game-board--room">
@@ -502,22 +607,6 @@ onUnmounted(() => {
             </aside>
           </div>
 
-          <div v-if="isHost" class="virtual-opponent-grid">
-            <button
-              v-for="opponent in virtualOpponents"
-              :key="opponent.key"
-              class="virtual-opponent-tile"
-              :class="{ 'is-selected': isOpponentSelected(opponent.key) }"
-              type="button"
-              :disabled="!canToggleOpponents"
-              @click="toggleOpponent(opponent.key)"
-            >
-              <span>{{ opponent.displayName }}</span>
-              <small>{{ opponent.archetype ?? opponent.key }}</small>
-              <strong>{{ isOpponentSelected(opponent.key) ? t('customGame.selected') : t('customGame.add') }}</strong>
-            </button>
-          </div>
-
           <div class="room-action-bar">
             <button
               v-if="isGuest && !roomStarted"
@@ -538,22 +627,13 @@ onUnmounted(() => {
               <span>{{ t('customGame.leaveRoom') }}</span>
             </button>
             <button
-              v-if="canStartMatch"
+              v-if="canShowStart"
               class="texture-button texture-button--large texture-button--red"
               type="button"
-              :disabled="busy || !canUseConvex"
+              :disabled="busy || !canUseConvex || !canStartMatch"
               @click="startGame"
             >
               <span>{{ t('customGame.start') }}</span>
-            </button>
-            <button
-              v-if="roomStarted && startedMatchId"
-              class="texture-button texture-button--large texture-button--red"
-              type="button"
-              :disabled="busy"
-              @click="openMatch({ matchId: startedMatchId, revision: 0 })"
-            >
-              <span>{{ t('customGame.openMatch') }}</span>
             </button>
           </div>
         </section>

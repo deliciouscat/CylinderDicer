@@ -1,0 +1,99 @@
+local actions = require("game.model.actions")
+local flow_contract = require("game.flow_contract")
+local store_mod = require("game.model.store")
+
+local ACTION_BY_TYPE = {
+	["bidding.open"] = actions.bidding_open,
+	["duel.execute"] = actions.duel_execute,
+	["round.advance"] = actions.round_advance,
+}
+
+local function state_signature(state, transition)
+	local duel = state.duel or {}
+	return table.concat({
+		tostring(transition and transition.type or "none"),
+		tostring(state.flow and state.flow.phase or "waiting"),
+		tostring(duel.phase or "none"),
+		tostring(state.match and state.match.turn_count or 0),
+		tostring(state.match and state.match.events_hash or "0"),
+	}, ":")
+end
+
+local function cancel_armed(self)
+	self.arm_token = (self.arm_token or 0) + 1
+	self.armed_signature = nil
+	if self.timer_handle then
+		timer.cancel(self.timer_handle)
+		self.timer_handle = nil
+	end
+end
+
+local function sync_transition(self)
+	if not self.store then
+		self.store = store_mod.get()
+	end
+	if not self.store then
+		return
+	end
+
+	local state = self.store:get_state()
+	if not state.match or state.match.local_simulator ~= true then
+		if self.armed_signature then
+			cancel_armed(self)
+		end
+		return
+	end
+
+	local transition = flow_contract.automatic_transition(state)
+	local signature = state_signature(state, transition)
+	if not transition then
+		if self.armed_signature then
+			cancel_armed(self)
+		end
+		return
+	end
+	if self.armed_signature == signature then
+		return
+	end
+
+	cancel_armed(self)
+	self.armed_signature = signature
+	local token = self.arm_token
+	self.timer_handle = timer.delay(transition.delay, false, function()
+		self.timer_handle = nil
+		if token ~= self.arm_token or not self.store then
+			return
+		end
+		local current = self.store:get_state()
+		local current_transition = flow_contract.automatic_transition(current)
+		if not current_transition or state_signature(current, current_transition) ~= signature then
+			return
+		end
+		local action_factory = ACTION_BY_TYPE[current_transition.type]
+		if action_factory then
+			self.store:dispatch(action_factory())
+		end
+	end)
+end
+
+function init(self)
+	self.store = nil
+	self.timer_handle = nil
+	self.arm_token = 0
+	self.armed_signature = nil
+	sync_transition(self)
+end
+
+function update(self, dt)
+	sync_transition(self)
+end
+
+function on_message(self, message_id)
+	if message_id == hash("boot") then
+		sync_transition(self)
+	end
+end
+
+function final(self)
+	cancel_armed(self)
+end

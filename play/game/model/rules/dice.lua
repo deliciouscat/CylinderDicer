@@ -39,7 +39,7 @@ function M.count_face(players, face)
 	for _, player in pairs(players.by_id or {}) do
 		if not player.eliminated then
 			for _, value in ipairs(player.dice or {}) do
-				if value == face then
+				if value == face or (face ~= M.SKULL_FACE and value == M.SKULL_FACE) then
 					total = total + 1
 				end
 			end

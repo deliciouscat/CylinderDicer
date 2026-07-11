@@ -87,6 +87,7 @@ export interface BiddingState {
 export interface FlowState {
 	phase: MatchPhase | 'waiting'
 	diceCheckDelaySeconds: number
+	epoch: number
 }
 
 export interface ShakeState {
@@ -295,10 +296,11 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 				windowSize: 10,
 			},
 		},
-		flow: {
-			phase: 'waiting',
-			diceCheckDelaySeconds: DICE_CHECK_DELAY_SECONDS,
-		},
+			flow: {
+				phase: 'waiting',
+				diceCheckDelaySeconds: DICE_CHECK_DELAY_SECONDS,
+				epoch: 0,
+			},
 		shake: {
 			requiredCount: SHAKE_REQUIRED_COUNT,
 			counts: {},
@@ -329,6 +331,7 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 	}
 
 	setHint(state)
+	state.flow.epoch = 1
 	return state
 }
 

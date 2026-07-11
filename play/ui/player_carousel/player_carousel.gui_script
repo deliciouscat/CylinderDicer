@@ -2,6 +2,7 @@ local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local visual_status = require("game.dev.visual_status")
 
 local MAX_SLOTS = 6
 local CENTER_PREVIOUS_SLOT = 3
@@ -17,7 +18,11 @@ local ARC_PHASES = {
 	cup_shake = true,
 	dice_check = true,
 	bidding_gap = true,
-	duel = true,
+}
+local VISIBLE_HUDS = {
+	revolver_reload = true,
+	cup_shake = true,
+	bidding = true,
 }
 
 local function color(r, g, b, a)
@@ -203,7 +208,24 @@ local function render_shake_arc(self, state)
 end
 
 local function render(self, state)
-	if ARC_PHASES[selectors.phase(state)] then
+	local phase = selectors.phase(state)
+	local hud = selectors.hud_kind(state)
+	local visible = VISIBLE_HUDS[hud] == true
+	local arc = ARC_PHASES[phase] == true
+	visual_status.set("player_carousel", {
+		phase = phase,
+		hud = hud,
+		visible = visible,
+		mode = arc and "arc" or "standard",
+		players = #(state.players.order or {}),
+		active_player_id = state.turn.active_player_id,
+	})
+	gui_util.set_enabled("root", visible)
+	if not visible then
+		return
+	end
+
+	if arc then
 		render_shake_arc(self, state)
 	else
 		render_standard(self, state)
@@ -228,31 +250,40 @@ local function cache_body_defaults(self)
 	end
 end
 
-function init(self)
+local function bind_store(self)
+	if self.store then
+		return true
+	end
 	self.store = store_mod.get()
+	if not self.store then
+		return false
+	end
+
+	for _, topic in ipairs({ "players", "turn", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
+
+	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
 	self.subs = {}
 	self.needs_render = false
 	gui.set_render_order(3)
+	gui_util.set_enabled("root", false)
 	cache_body_defaults(self)
 
-	if not self.store then
-		return
-	end
-
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
-		request_render(self)
-	end)
-
-	render(self, self.store:get_state())
+	bind_store(self)
 end
 
 function update(self, dt)
+	if not self.store and not bind_store(self) then
+		return
+	end
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())
@@ -260,6 +291,7 @@ function update(self, dt)
 end
 
 function on_message(self, message_id)
+	bind_store(self)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
 		request_render(self)

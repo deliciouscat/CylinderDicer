@@ -10,34 +10,19 @@ embedded_instances {
   "  id: \"director\"\n"
   "  component: \"/game/director.script\"\n"
   "}\n"
+  "components {\n"
+  "  id: \"flow_coordinator\"\n"
+  "  component: \"/game/flow_coordinator.script\"\n"
+  "}\n"
   ""
 }
 embedded_instances {
   id: "background"
   data: "components {\n"
   "  id: \"background\"\n"
-  "  component: \"/background/background.script\"\n"
-  "}\n"
-  "embedded_components {\n"
-  "  id: \"backdrop\"\n"
-  "  type: \"sprite\"\n"
-  "  data: \"default_animation: \\\"background\\\"\\n"
-  "material: \\\"/builtins/materials/sprite.material\\\"\\n"
-  "textures {\\n"
-  "  sampler: \\\"texture_sampler\\\"\\n"
-  "  texture: \\\"/main/main.atlas\\\"\\n"
-  "}\\n"
-  "\"\n"
+  "  component: \"/background/background.gui\"\n"
   "}\n"
   ""
-  position {
-    x: 640.0
-    y: -410.0
-  }
-  scale3 {
-    x: 1.36
-    y: 1.36
-  }
 }
 embedded_instances {
   id: "ui"
@@ -94,8 +79,8 @@ embedded_instances {
   "  type: \"camera\"\n"
   "  data: \"aspect_ratio: 1.0\\n"
   "fov: 0.7854\\n"
-  "near_z: -1.0\\n"
-  "far_z: 1.0\\n"
+  "near_z: -1.5\\n"
+  "far_z: 1.5\\n"
   "orthographic_projection: 1\\n"
   "orthographic_mode: ORTHO_MODE_AUTO_COVER\\n"
   "\"\n"

@@ -26,6 +26,7 @@ function M.new(bounds)
 		dragging = false,
 		origin = nil,
 		last = nil,
+		shake_down = false,
 	}, Gesture)
 end
 
@@ -105,10 +106,17 @@ function Gesture:feed(action_id, action)
 		return {
 			kind = "key_right",
 		}
-	elseif id_matches(action_id, "shake") and action.pressed then
-		return {
-			kind = "shake",
-		}
+	elseif id_matches(action_id, "shake") then
+		if action.released then
+			self.shake_down = false
+			return nil
+		end
+		if action.pressed and not self.shake_down then
+			self.shake_down = true
+			return {
+				kind = "shake",
+			}
+		end
 	end
 
 	return nil

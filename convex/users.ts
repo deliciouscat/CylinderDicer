@@ -40,6 +40,9 @@ export type GenericCtx = {
 		getUserIdentity(): Promise<ConvexAuthIdentity | null>
 	}
 	db: any
+	scheduler?: {
+		runAfter(delayMs: number, functionReference: any, args: Record<string, unknown>): Promise<unknown>
+	}
 }
 
 function displayNameFromIdentity(

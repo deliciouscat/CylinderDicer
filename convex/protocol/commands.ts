@@ -24,16 +24,20 @@
  * Vue forwards snapshot or rejection to Defold
  * ```
  */
-export type MatchCommandType =
+export type PlayerMatchCommandType =
   | 'setup.load_initial'
   | 'shake.complete'
   | 'dice.check'
-  | 'bidding.open'
   | 'bullet.load'
   | 'bid.raise'
   | 'bid.challenge'
+
+export type AutomaticMatchCommandType =
+  | 'bidding.open'
   | 'duel.execute'
   | 'round.advance'
+
+export type MatchCommandType = PlayerMatchCommandType | AutomaticMatchCommandType
 
 export interface MatchCommand<TPayload = unknown> {
   commandId: string

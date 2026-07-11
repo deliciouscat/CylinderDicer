@@ -5,6 +5,7 @@ local server_command = require("game.net.server_command")
 local gestures = require("game.core.gestures")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local visual_status = require("game.dev.visual_status")
 
 local MAX_OPPONENTS = 5
 local DICE_COUNT = 5
@@ -87,32 +88,6 @@ local function hint_for_phase(phase)
 	return "Bidding starts soon"
 end
 
-local function schedule_bidding_open(self, state)
-	if selectors.phase(state) ~= PHASE_BIDDING_GAP then
-		self.bidding_gap_armed = false
-		return
-	end
-	if self.bidding_gap_armed then
-		return
-	end
-
-	self.bidding_gap_armed = true
-	local delay = state.flow.dice_check_delay_seconds or 3
-	timer.delay(delay, false, function()
-		self.bidding_gap_armed = false
-		if self.store and selectors.phase(self.store:get_state()) == PHASE_BIDDING_GAP then
-			local before = self.store:get_state()
-			if server_command.emit(before, "bidding.open") then
-				return
-			end
-			local result = self.store:dispatch(actions.bidding_open())
-			if result and result.ok then
-				server_command.emit(before, "bidding.open")
-			end
-		end
-	end)
-end
-
 local function render(self, state)
 	local phase = selectors.phase(state)
 	local active = is_shake_phase(phase)
@@ -127,6 +102,15 @@ local function render(self, state)
 	local local_player = selectors.local_player(state)
 	local status = selectors.shake_status(state, local_player_id)
 	local reveal = phase == PHASE_DICE_CHECK or phase == PHASE_BIDDING_GAP
+	visual_status.set("shake", {
+		phase = phase,
+		hud = selectors.hud_kind(state),
+		visible = active,
+		reveal = reveal,
+		count = status.count,
+		required = status.required,
+		local_player_id = local_player_id,
+	})
 
 	if self.last_shake_count and status.count > self.last_shake_count then
 		self.shake_impulse = 0.18
@@ -144,7 +128,6 @@ local function render(self, state)
 		render_dice(local_player)
 	end
 
-	schedule_bidding_open(self, state)
 end
 
 local function request_render(self)
@@ -170,10 +153,10 @@ local function dispatch_shake(self)
 	local result = self.store:dispatch(actions.shake_roll(player_id))
 	if result and result.ok then
 		self.shake_impulse = 0.18
-		local next_state = self.store:get_state()
-		local next_status = selectors.shake_status(next_state, player_id)
-		if next_status.complete then
-			server_command.emit(state, "shake.complete")
+			local next_state = self.store:get_state()
+			local next_status = selectors.shake_status(next_state, player_id)
+			if next_status.complete then
+				server_command.submit(state, "shake.complete")
 		end
 		return true
 	end
@@ -188,13 +171,11 @@ local function dispatch_dice_check(self)
 	if selectors.phase(state) ~= PHASE_DICE_CHECK then
 		return false
 	end
-	if server_command.emit(state, "dice.check") then
-		return true
+	local submission = server_command.submit(state, "dice.check")
+	if submission.status ~= "local" then
+		return submission.status == "sent"
 	end
 	local result = self.store:dispatch(actions.dice_check(state.match.local_player_id))
-	if result and result.ok then
-		server_command.emit(state, "dice.check")
-	end
 	return result and result.ok == true
 end
 
@@ -234,12 +215,30 @@ local function update_local_cup(self, dt)
 	gui.set_rotation(self.local_cup_node, vmath.quat_rotation_z(rotation))
 end
 
-function init(self)
+local function bind_store(self)
+	if self.store then
+		return true
+	end
 	self.store = store_mod.get()
+	if not self.store then
+		return false
+	end
+
+	for _, topic in ipairs({ "turn", "players", "shake", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
+
+	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
 	self.gesture = gestures.new(nil)
 	self.subs = {}
 	self.needs_render = false
-	self.bidding_gap_armed = false
 	self.drag_distance = 0.0
 	self.elapsed = 0.0
 	self.shake_impulse = 0.0
@@ -254,21 +253,12 @@ function init(self)
 	gui_util.set_enabled("root", false)
 	set_dice_visible(false)
 
-	if not self.store then
-		return
-	end
-
-	for _, topic in ipairs({ "turn", "players", "shake", "ui" }) do
-		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
-			request_render(self)
-		end)
-	end
-
-	render(self, self.store:get_state())
+	bind_store(self)
 end
 
 function update(self, dt)
 	self.elapsed = self.elapsed + dt
+	bind_store(self)
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())
@@ -277,7 +267,7 @@ function update(self, dt)
 end
 
 function on_input(self, action_id, action)
-	if not self.store then
+	if not self.store and not bind_store(self) then
 		return
 	end
 
@@ -305,6 +295,7 @@ function on_input(self, action_id, action)
 end
 
 function on_message(self, message_id)
+	bind_store(self)
 	if message_id == hash("activate") then
 		gui_util.set_enabled("root", true)
 		request_render(self)
@@ -314,6 +305,7 @@ function on_message(self, message_id)
 end
 
 function on_reload(self)
+	bind_store(self)
 	request_render(self)
 end
 

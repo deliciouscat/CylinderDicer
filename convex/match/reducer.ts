@@ -137,6 +137,7 @@ function accept(state: MatchState, action: MatchAction, events?: MatchEvent[]): 
 function enterPhase(state: MatchState, phase: MatchState['flow']['phase']): void {
 	state.flow.phase = phase
 	state.flow.diceCheckDelaySeconds = DICE_CHECK_DELAY_SECONDS
+	state.flow.epoch = (state.flow.epoch ?? 0) + 1
 	state.turn.kind = kindForPhase(phase)
 }
 
@@ -203,13 +204,6 @@ function enterDiceCheck(state: MatchState, eventName?: string): string | undefin
 	}
 
 	state.shake.checked = {}
-	const localPlayerId = state.match.localPlayerId
-	for (const playerId of state.players.order) {
-		const player = state.players.byId[playerId]
-		if (isAlive(player) && playerId !== localPlayerId) {
-			state.shake.checked[playerId] = true
-		}
-	}
 	return undefined
 }
 
@@ -229,15 +223,22 @@ function allAliveChecked(state: MatchState): boolean {
 	})
 }
 
-function rollAliveDice(state: MatchState): void {
-	for (const playerId of state.players.order) {
+function allAliveShaken(state: MatchState): boolean {
+	const required = state.shake.requiredCount || SHAKE_REQUIRED_COUNT
+	return state.players.order.every((playerId) => {
 		const player = state.players.byId[playerId]
-		if (isAlive(player)) {
-			const rolled = rollDiceWithSeed(player.diceCount || 5, state.rngSeed)
-			player.dice = rolled.values
-			state.rngSeed = rolled.seed
-		}
+		return !isAlive(player) || (state.shake.counts[playerId] ?? 0) >= required
+	})
+}
+
+function rollPlayerDice(state: MatchState, playerId: string): void {
+	const player = state.players.byId[playerId]
+	if (!isAlive(player)) {
+		return
 	}
+	const rolled = rollDiceWithSeed(player.diceCount || 5, state.rngSeed)
+	player.dice = rolled.values
+	state.rngSeed = rolled.seed
 }
 
 function completeSetupIfReady(state: MatchState): string | undefined {
@@ -318,16 +319,22 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'cup_shake') {
 				return error('INVALID_PHASE', 'not_shaking_turn')
 			}
-			const guard = activeActorGuard(state, action)
-			if (guard) {
-				return guard
+			if (!isAlive(state.players.byId[action.actorPlayerId])) {
+				return domainError('unknown_player')
+			}
+			const required = state.shake.requiredCount || SHAKE_REQUIRED_COUNT
+			if ((state.shake.counts[action.actorPlayerId] ?? 0) >= required) {
+				return domainError('already_shaken')
 			}
 
 			const next = cloneState(state)
 			const playerId = action.actorPlayerId
-			next.shake.counts[playerId] = next.shake.requiredCount || SHAKE_REQUIRED_COUNT
+			next.shake.counts[playerId] = required
+			rollPlayerDice(next, playerId)
 
-			rollAliveDice(next)
+			if (!allAliveShaken(next)) {
+				return accept(next, action)
+			}
 			next.turn.previousPlayerId = next.turn.activePlayerId
 
 			if (next.turn.isFirstShake) {
@@ -555,10 +562,6 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			if (state.duel.resolution) {
 				return error('INVALID_PHASE', 'duel_already_executed')
 			}
-			const guard = activeActorGuard(state, action)
-			if (guard) {
-				return guard
-			}
 
 			const next = cloneState(state)
 			if (!next.duel) {
@@ -566,6 +569,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			}
 			next.duel.resolution = resolveDuel(next, next.duel)
 			next.duel.phase = 'executing'
+			next.flow.epoch = (next.flow.epoch ?? 0) + 1
 			updateAllBullets(next)
 			return accept(next, action, [event(action, { resolution: next.duel.resolution })])
 		}
@@ -573,10 +577,6 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		case 'round.advance': {
 			if (state.turn.kind !== 'dualing' || !state.duel) {
 				return error('INVALID_PHASE', 'not_dueling_turn')
-			}
-			const guard = activeActorGuard(state, action)
-			if (guard) {
-				return guard
 			}
 
 			const next = cloneState(state)

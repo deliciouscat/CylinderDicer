@@ -49,30 +49,37 @@ local function request_render(self)
 	self.needs_render = true
 end
 
-function init(self)
+local function bind_store(self)
+	if self.store then
+		return true
+	end
 	self.store = store_mod.get()
-	self.subs = {}
-	self.needs_render = false
-	gui_util.set_enabled("root", false)
-
 	if not self.store then
-		return
+		return false
 	end
 
-	self.subs[#self.subs + 1] = self.store:subscribe("players", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("turn", function(_state)
-		request_render(self)
-	end)
-	self.subs[#self.subs + 1] = self.store:subscribe("ui", function(_state)
-		request_render(self)
-	end)
+	for _, topic in ipairs({ "players", "turn", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_render(self)
+		end)
+	end
 
 	render(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
+	self.subs = {}
+	self.needs_render = false
+	gui.set_render_order(5)
+	gui_util.set_enabled("root", false)
+
+	bind_store(self)
 end
 
 function update(self, dt)
+	bind_store(self)
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())

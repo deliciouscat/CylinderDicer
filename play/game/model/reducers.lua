@@ -215,12 +215,10 @@ local function is_alive(player)
 	return player and not player.eliminated and (player.hp or 0) > 0
 end
 
-local function roll_alive_dice(next, rng)
-	for _, player_id in ipairs(next.players.order or {}) do
-		local player = next.players.by_id[player_id]
-		if is_alive(player) then
-			player.dice = dice.roll(player.dice_count or 5, rng)
-		end
+local function roll_player_dice(next, player_id, rng)
+	local player = next.players.by_id[player_id]
+	if is_alive(player) then
+		player.dice = dice.roll(player.dice_count or 5, rng)
 	end
 end
 
@@ -264,12 +262,16 @@ local function enter_dice_check(next, event)
 		enter_phase(next, "dice_check")
 	end
 	next.shake.checked = {}
+	return true
+end
 
-	local local_player_id = next.match.local_player_id
+local function all_alive_shaken(next)
+	local required = next.shake.required_count or SHAKE_REQUIRED_COUNT
 	for _, player_id in ipairs(next.players.order or {}) do
 		local player = next.players.by_id[player_id]
-		if is_alive(player) and player_id ~= local_player_id then
-			next.shake.checked[player_id] = true
+		local count = (next.shake.counts or {})[player_id] or 0
+		if is_alive(player) and count < required then
+			return false
 		end
 	end
 	return true
@@ -342,6 +344,7 @@ local KEY_MAP = {
 	playerId = "player_id",
 	previousBidderId = "previous_bidder_id",
 	previousPlayerId = "previous_player_id",
+	requiredCount = "required_count",
 	reloadPlayerId = "reload_player_id",
 	reloadSource = "reload_source",
 	rouletteSubjectId = "roulette_subject_id",
@@ -377,8 +380,34 @@ local function normalize_server_cylinder(raw)
 		return nil
 	end
 
+	local raw_slots = raw.slots
+	if type(raw_slots) ~= "table" then
+		return nil
+	end
+
 	local slots = {}
-	for index, loaded in ipairs(raw.slots or {}) do
+	local slot_count = 0
+	for index, _ in pairs(raw_slots) do
+		local numeric = tonumber(index)
+		if numeric and numeric > slot_count then
+			slot_count = numeric
+		end
+	end
+	-- Also honor array length from ipairs when Convex sends a dense boolean[].
+	for index, _ in ipairs(raw_slots) do
+		if index > slot_count then
+			slot_count = index
+		end
+	end
+	if slot_count == 0 then
+		return nil
+	end
+
+	for index = 1, slot_count do
+		local loaded = raw_slots[index]
+		if loaded == nil then
+			loaded = raw_slots[tostring(index)]
+		end
 		if type(loaded) == "table" then
 			slots[index] = {
 				loaded = loaded.loaded == true,
@@ -430,6 +459,12 @@ local function apply_server_snapshot(state, payload)
 	local public = normalize_snapshot_keys(server_snapshot_public(payload or {}) or {})
 	local private = normalize_snapshot_keys(server_snapshot_private(payload or {}) or {})
 	local snapshot = normalize_snapshot_keys((payload or {}).snapshot or {})
+	local incoming_revision = tonumber(public.revision or snapshot.revision or (payload or {}).revision) or 0
+	local current_revision = tonumber(state.match.revision) or 0
+	if incoming_revision > 0 and current_revision > 0 and incoming_revision < current_revision then
+		return state
+	end
+
 	local next = clone(state)
 	local match = public.match or snapshot.match or {}
 	local turn = public.turn or snapshot.turn or {}
@@ -737,16 +772,31 @@ handlers[actions.types.SHAKE_ROLL] = function(state, action)
 
 	local next = clone(state)
 	local player_id = action.payload.player_id or next.turn.active_player_id or next.match.local_player_id
-	local count = ((next.shake.counts or {})[player_id] or 0) + 1
+	if not is_alive(next.players.by_id[player_id]) then
+		return state, nil, "unknown_player"
+	end
+
+	local required = next.shake.required_count or SHAKE_REQUIRED_COUNT
+	local previous_count = (next.shake.counts or {})[player_id] or 0
+	if previous_count >= required then
+		return state, nil, "already_shaken"
+	end
+	local count = previous_count + 1
 	next.shake.counts[player_id] = count
 
-	if count < (next.shake.required_count or SHAKE_REQUIRED_COUNT) then
+	if count < required then
 		set_hint(next)
 		append_event_hash(next, action)
 		return next, { "shake", "ui" }
 	end
 
-	roll_alive_dice(next, action.payload.rng)
+	roll_player_dice(next, player_id, action.payload.rng)
+	if not all_alive_shaken(next) then
+		set_hint(next)
+		append_event_hash(next, action)
+		return next, { "players", "shake", "ui" }
+	end
+
 	next.turn.previous_player_id = next.turn.active_player_id
 
 	if next.turn.is_first_shake then

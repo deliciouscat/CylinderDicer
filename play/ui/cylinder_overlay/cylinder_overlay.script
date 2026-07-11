@@ -35,7 +35,12 @@ local function post_state(self, state)
 	end
 
 	self.load_player_id = player.id
-	self.can_load = local_permissions.can_load(state)
+	local revision = state.match and state.match.revision
+	if self.command_in_flight and revision ~= self.command_revision then
+		self.command_in_flight = false
+		self.command_revision = revision
+	end
+	self.can_load = local_permissions.can_load(state) and not self.command_in_flight
 	self.loaded_slots = {}
 	for i, slot in ipairs(player.cylinder.slots or {}) do
 		self.loaded_slots[i] = slot.loaded == true
@@ -90,10 +95,53 @@ local function hit_slot(self, action)
 	)
 end
 
+local function handle_load_input(self, action)
+	if not self.can_load or not action.pressed then
+		return
+	end
+
+	local state = self.store:get_state()
+	local pending = state and state.pending_load
+	if not pending or pending.player_id ~= self.load_player_id or not local_permissions.can_load(state) then
+		self.can_load = false
+		print("[cylinder]", "load ignored", "stale_pending", "player=" .. tostring(self.load_player_id))
+		return
+	end
+
+	local slot_index = hit_slot(self, action)
+	if not slot_index or self.loaded_slots[slot_index] then
+		print("[cylinder]", "load rejected", "slot=" .. tostring(slot_index), "target=" .. tostring(self.target))
+		return
+	end
+
+	local command_type = "bullet.load"
+	if state.pending_load and state.pending_load.source == "setup" then
+		command_type = "setup.load_initial"
+	end
+	local submission = server_command.submit(state, command_type, {
+		slotIndex = slot_index,
+	})
+	if submission.status ~= "local" then
+		self.command_in_flight = true
+		self.command_revision = state.match and state.match.revision
+		self.can_load = false
+		print("[cylinder]", "load queued", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
+		return
+	end
+	local result = self.store:dispatch(actions.bullet_load(slot_index, self.load_player_id))
+	if result and result.ok then
+		print("[cylinder]", "loaded", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
+	else
+		print("[cylinder]", "load failed", "slot=" .. tostring(slot_index), "error=" .. tostring(result and result.error))
+	end
+end
+
 function init(self)
 	self.store = nil
 	self.subs = {}
 	self.can_load = false
+	self.command_in_flight = false
+	self.command_revision = nil
 	self.load_player_id = nil
 	self.loaded_slots = {}
 	self.target = "offscreen"
@@ -117,6 +165,8 @@ function on_message(self, message_id, message)
 		if self.store then
 			post_state(self, self.store:get_state())
 		end
+	elseif message_id == hash("pointer_input") then
+		handle_load_input(self, message or {})
 	elseif message_id == hash("activate") then
 		msg.post(".", "enable")
 	elseif message_id == hash("deactivate") then
@@ -131,32 +181,7 @@ function on_input(self, action_id, action)
 		return
 	end
 
-	local slot_index = hit_slot(self, action)
-	if not slot_index or self.loaded_slots[slot_index] then
-		print("[cylinder]", "load rejected", "slot=" .. tostring(slot_index), "target=" .. tostring(self.target))
-		return
-	end
-
-	local state = self.store:get_state()
-	local command_type = "bullet.load"
-	if state.pending_load and state.pending_load.source == "setup" then
-		command_type = "setup.load_initial"
-	end
-	if server_command.emit(state, command_type, {
-		slotIndex = slot_index,
-	}) then
-		print("[cylinder]", "load queued", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
-		return
-	end
-	local result = self.store:dispatch(actions.bullet_load(slot_index, self.load_player_id))
-	if result and result.ok then
-		server_command.emit(state, command_type, {
-			slotIndex = slot_index,
-		})
-		print("[cylinder]", "loaded", "slot=" .. tostring(slot_index), "player=" .. tostring(self.load_player_id))
-	else
-		print("[cylinder]", "load failed", "slot=" .. tostring(slot_index), "error=" .. tostring(result and result.error))
-	end
+	handle_load_input(self, action)
 end
 
 function final(self)
