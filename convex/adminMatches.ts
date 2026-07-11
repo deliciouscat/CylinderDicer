@@ -276,6 +276,23 @@ async function completeLatestMatchState(ctx: GenericCtx, state: MatchState, now:
 	return nextState
 }
 
+function isTerminalMatchState(state: MatchState) {
+	return state.match.status === 'complete' &&
+		state.flow.phase === 'complete' &&
+		state.turn.kind === 'complete'
+}
+
+async function deletePublicMatchSnapshots(ctx: GenericCtx, matchId: string) {
+	const snapshots = await ctx.db
+		.query('matchSnapshots')
+		.withIndex('by_match_kind', (q: any) => q.eq('matchId', matchId).eq('kind', 'public'))
+		.collect()
+	for (const snapshot of snapshots) {
+		await ctx.db.delete(snapshot._id)
+	}
+	return snapshots.length
+}
+
 async function requireDevMatch(ctx: GenericCtx, matchId: string) {
 	const match = await ctx.db.get(matchId)
 	if (!match) {
@@ -630,11 +647,20 @@ export const closeStartedCustomGameRoom = mutationGeneric({
 
 		const now = Date.now()
 		let nextRevision = match.revision
+		let snapshotsDeleted = 0
 		const state = await getLatestMatchState(ctx, room.matchId)
-		if (state && match.status !== 'complete') {
+		if (state && !isTerminalMatchState(state)) {
 			const nextState = await completeLatestMatchState(ctx, state, now)
 			nextRevision = nextState.revision
-		} else if (match.status !== 'complete') {
+		} else if (state) {
+			nextRevision = state.revision
+			await ctx.db.patch(room.matchId, {
+				status: 'complete',
+				revision: state.revision,
+				updatedAt: now,
+			})
+		} else {
+			snapshotsDeleted = await deletePublicMatchSnapshots(ctx, room.matchId)
 			await ctx.db.patch(room.matchId, {
 				status: 'complete',
 				updatedAt: now,
@@ -651,6 +677,7 @@ export const closeStartedCustomGameRoom = mutationGeneric({
 			roomId: args.roomId,
 			matchId: room.matchId,
 			revision: nextRevision,
+			snapshotsDeleted,
 			participantsCompleted,
 		}
 		const auditId = await insertAdminAudit(ctx, {

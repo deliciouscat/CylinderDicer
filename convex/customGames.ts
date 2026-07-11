@@ -43,38 +43,56 @@ async function createInviteCode(ctx: GenericCtx, userId: string, now: number) {
 			return inviteCode
 		}
 	}
-	return inviteCodeFor(userId, now, 8)
+	throw new Error('INVITE_CODE_EXHAUSTED')
 }
 
-async function getActiveRoomForHost(ctx: GenericCtx, hostUserId: string) {
+async function getRoomForHostByStatus(
+	ctx: GenericCtx,
+	hostUserId: string,
+	status: 'composing' | 'started',
+) {
 	return await ctx.db
 		.query('customGameRooms')
-		.withIndex('by_host_status', (q: any) => q.eq('hostUserId', hostUserId).eq('status', 'composing'))
+		.withIndex('by_host_status', (q: any) => q.eq('hostUserId', hostUserId).eq('status', status))
 		.order('desc')
 		.first()
 }
 
+async function getActiveRoomForHost(ctx: GenericCtx, hostUserId: string) {
+	return await getRoomForHostByStatus(ctx, hostUserId, 'composing')
+}
+
 async function findRoomForUser(ctx: GenericCtx, userId: string) {
-	const composingAsHost = await getActiveRoomForHost(ctx, userId)
-	if (composingAsHost) {
-		return composingAsHost
-	}
+	const candidates = []
+	const startedAsHost = await getRoomForHostByStatus(ctx, userId, 'started')
+	const composingAsHost = await getRoomForHostByStatus(ctx, userId, 'composing')
+	if (startedAsHost) candidates.push(startedAsHost)
+	if (composingAsHost) candidates.push(composingAsHost)
 
 	const memberships = await ctx.db
 		.query('customGameParticipants')
 		.withIndex('by_user_status', (q: any) => q.eq('userId', userId).eq('status', 'active'))
 		.take(8)
 
+	const seenRoomIds = new Set(candidates.map((room: any) => String(room._id)))
 	for (const row of memberships) {
 		const room = await ctx.db.get(row.roomId)
-		if (!room) {
+		if (!room || seenRoomIds.has(String(room._id))) {
 			continue
 		}
-		if (room.status === 'composing') {
-			return room
+		if (room.status === 'started' || room.status === 'composing') {
+			candidates.push(room)
+			seenRoomIds.add(String(room._id))
 		}
 	}
-	return null
+
+	candidates.sort((left: any, right: any) => {
+		if (left.status !== right.status) {
+			return left.status === 'started' ? -1 : 1
+		}
+		return right.updatedAt - left.updatedAt
+	})
+	return candidates[0] ?? null
 }
 
 async function getHumanParticipantForUser(ctx: GenericCtx, roomId: string, userId: string) {
@@ -370,8 +388,16 @@ export const joinCustomGameRoomByInviteCode = mutationGeneric({
 			.query('customGameRooms')
 			.withIndex('by_invite_code', (q: any) => q.eq('inviteCode', inviteCode))
 			.take(12)
-		const room = matchingRooms.find((candidate: any) => candidate.status === 'composing')
-		if (!room || room.status !== 'composing') {
+		const composingRooms = matchingRooms.filter((candidate: any) => candidate.status === 'composing')
+		if (composingRooms.length > 1) {
+			return {
+				ok: false,
+				code: 'INVITE_CODE_AMBIGUOUS',
+				message: 'invite_code_ambiguous',
+			}
+		}
+		const room = composingRooms[0]
+		if (!room) {
 			return {
 				ok: false,
 				code: 'CUSTOM_ROOM_NOT_FOUND',
