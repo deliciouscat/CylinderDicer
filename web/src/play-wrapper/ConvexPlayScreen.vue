@@ -20,6 +20,14 @@ import {
 } from '../services/convex/matchService'
 import DefoldCanvas from './DefoldCanvas.vue'
 
+const props = withDefaults(defineProps<{
+  matchId?: string
+  source?: 'dev' | 'ladder'
+}>(), {
+  matchId: undefined,
+  source: 'dev',
+})
+
 const emit = defineEmits<{
   back: []
 }>()
@@ -35,7 +43,7 @@ const mergedSnapshot = ref<MergedMatchSnapshot | null>(null)
 const status = ref('Preparing Convex play session...')
 const errorMessage = ref('')
 const lastRejected = ref<CommandRejectedPayload | null>(null)
-const linkedMatchId = ref(new URLSearchParams(window.location.search).get('matchId') ?? '')
+const linkedMatchId = ref(props.matchId ?? new URLSearchParams(window.location.search).get('matchId') ?? '')
 const loadingMatch = ref(false)
 const commandInFlight = ref(false)
 const defoldCanvas = ref<InstanceType<typeof DefoldCanvas> | null>(null)
@@ -53,6 +61,7 @@ const isSignedIn = computed(() => auth.isSignedIn.value === true)
 const canStart = computed(() => auth.isLoaded.value && isSignedIn.value)
 const isLinkedMatch = computed(() => linkedMatchId.value.length > 0)
 const primaryActionLabel = computed(() => isLinkedMatch.value ? 'Reload Match' : 'Start / Reuse')
+const screenTitle = computed(() => props.source === 'ladder' ? 'Ladder Match' : 'Convex Dev Match')
 
 const startMatchPayload = computed<StartMatchPayload | undefined>(() => {
   if (!createdMatch.value || !mergedSnapshot.value?.viewerPlayerId) {
@@ -63,7 +72,7 @@ const startMatchPayload = computed<StartMatchPayload | undefined>(() => {
     sessionId: 'convex-dev-session',
     matchId: createdMatch.value.matchId,
     playerId: mergedSnapshot.value.viewerPlayerId,
-    mode: 'dev',
+    mode: ((publicSnapshot.value as any)?.match?.mode ?? (props.source === 'ladder' ? 'ranked' : 'dev')),
   }
 })
 
@@ -187,7 +196,9 @@ async function loadExistingMatch(matchId: string) {
   }
 
   loadingMatch.value = true
-  status.value = 'Opening linked Convex dev match...'
+  status.value = props.source === 'ladder'
+    ? 'Opening Ladder match...'
+    : 'Opening linked Convex dev match...'
   errorMessage.value = ''
   try {
     const nextPublicSnapshot = await matchService.getPublicSnapshot(matchId)
@@ -213,7 +224,9 @@ async function loadExistingMatch(matchId: string) {
     refreshMergedSnapshot()
     subscribePublicSnapshot(matchId)
     resumeAutomaticFlow(nextPublicSnapshot)
-    status.value = `Opened linked Convex dev match ${matchId.slice(-6)}.`
+    status.value = props.source === 'ladder'
+      ? `Opened Ladder match ${matchId.slice(-6)}.`
+      : `Opened linked Convex dev match ${matchId.slice(-6)}.`
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
     status.value = 'Could not open linked match.'
@@ -429,7 +442,7 @@ onUnmounted(() => {
         Back
       </button>
       <div>
-        <h1>Convex Dev Match</h1>
+        <h1>{{ screenTitle }}</h1>
         <p>{{ status }}</p>
         <p v-if="errorMessage" class="convex-play-screen__error">{{ errorMessage }}</p>
       </div>

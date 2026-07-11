@@ -691,6 +691,22 @@ Phase 5에서 opponent controller가 담당하는 QA 범위:
 
 ---
 
+### Ladder matchmaking waiting / roster vertical slice
+
+- 2026-07-11 추가 완료:
+  - `web/LADDER_LAYOUT.md`의 `# 개요`, `# 모듈`, `# LadderShell.vue`, `## phase 전이`를 기준으로 `/play/ladder` 단일 route 안에 searching → roster → handing_off를 구현했다. roster 완료 전에는 Defold wrapper를 mount하지 않는다.
+  - `ladderQueueEntries`(고빈도 queue state)와 `ladderStats`(안정적인 MMR/placement summary)를 분리하고, `by_user`, `by_status_and_joined_at` index 기반 `enterQueue`, `leaveQueue`, `observeOwnQueue`를 추가했다.
+  - 첫 production slice의 matching policy는 대기 순서 기준 2인 FIFO다. 성사 시 기존 `matches` / `matchParticipants` / authoritative state / snapshot 계약으로 `ranked` match를 만든다.
+  - normalized placement는 `shared/ladder/placement.ts`의 `(place - 1) / (playerCount - 1) * 5 + 1` 단일 구현을 Web/Convex가 함께 사용한다.
+  - 기존 Defold character/default die source를 독립적인 `web/src/assets/ladder-*` bundle로 패키징했다. Vite runtime은 `play/` 또는 generated HTML5 output을 읽지 않는다.
+  - `ko` / `en` / `ja` searching, roster, recent-N/all-time average, cancel, countdown, retry/error copy를 추가했다.
+  - 검증: `ladder:test` 7/7, `convex:typecheck`, Web production build, `phase4:deploy`, `phase4:check`, authenticated Chrome 1440×900 / 1280×720 / 375×812 QA 통과.
+  - 브라우저 roster 2/4/6과 Ready → real dev fixture matchId → single `ConvexPlayScreen` iframe은 deterministic dev fixture로 확인했다. 실제 2-user FIFO production matchmaking은 한 계정 브라우저만 사용한 이번 QA 범위 밖이다.
+- 의도적으로 미룬 것: tier boundary, season reset, leaderboard, rating/result writeback, queue ETA/인원, sophisticated opponent selection, persisted fidget rewards, character selection pipeline.
+- Runbook: [shared/docs/LADDER_QA.md](shared/docs/LADDER_QA.md)
+
+---
+
 ### Phase 6. Dirty code 단계적 제거
 
 목표: 기능 parity 확인 후 오래된 duct tape 제거.

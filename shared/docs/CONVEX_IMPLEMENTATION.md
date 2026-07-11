@@ -76,6 +76,7 @@ High-frequency examples:
 
 Convex owns:
 
+- Ladder queue entry lifecycle, indexed FIFO match formation, and stable Ladder stat summaries
 - match creation and participants
 - seat/order
 - turn/phase FSM
@@ -187,8 +188,10 @@ Legacy/local simulator code may still expose `shake.roll` for Defold tests, but 
 ```text
 convex/
   auth.config.ts
+  convex.config.ts
   schema.ts
   users.ts
+  ladder.ts
   matches.ts
   commands.ts
   snapshots.ts
@@ -214,6 +217,7 @@ web/src/services/convex/
   profileService.ts
   inventoryService.ts
   rankingService.ts
+  ladderService.ts
   errors.ts
 ```
 
@@ -660,6 +664,29 @@ write private delta only for affected viewers when needed
 return accepted/rejected result
 ```
 
+### Ladder queue and roster introduction
+
+`/play/ladder`의 waiting/roster contract는 [web/LADDER_LAYOUT.md](../../web/LADDER_LAYOUT.md)의 `# 개요`, `# LadderShell.vue`, `## phase 전이`가 SSOT다.
+
+Backend ownership:
+
+- `ladderQueueEntries`: high-churn operational row. `by_user`로 own state를 읽고 `by_status_and_joined_at`로 bounded FIFO 후보 2명만 읽는다.
+- `ladderStats`: stable per-user MMR/recent placement summary. queue refresh와 분리해 subscription/write contention을 만들지 않는다.
+- `ladder.enterQueue`: idempotent enter/re-enter 후 첫 slice의 2-human FIFO match를 만든다.
+- `ladder.leaveQueue`: waiting row만 cancelled로 바꾸며 반복 호출해도 안전하다. 이미 matched라면 matched state를 반환해 cancel race에서 match-found가 사라지지 않는다.
+- `ladder.observeOwnQueue`: own queue, self stats, matchId, 2–6 seat-ordered roster를 한 subscription shape로 제공한다.
+- match-found는 새 gameplay reducer를 만들지 않고 기존 `matches`, `matchParticipants`, `createInitialMatchState`, public/private snapshot 계약으로 `ranked` match를 생성한다.
+
+Web ownership:
+
+- `LadderShell`만 Convex auth/queue subscription과 searching → roster → handing_off를 소유한다.
+- fidget chips/die는 server write가 없는 local-only state다.
+- roster 종료 후 `App.vue`가 matchId prop으로 기존 `ConvexPlayScreen`을 mount한다. GameBridge protocol과 Defold transport는 변경하지 않았다.
+
+Placement normalization은 `shared/ladder/placement.ts`의 단일 구현을 Web/Convex가 같이 import한다. 1인전은 1.0, 그 외는 `(place - 1) / (playerCount - 1) * 5 + 1`이며 표시만 소수 1자리로 반올림한다.
+
+현재 `ladderStats`는 신규 사용자를 MMR 1000 / placement 없음으로 초기화한다. ranked match result에서 MMR/placement를 writeback하는 정책, tier, season, leaderboard는 별도 제품 결정 전까지 구현하지 않는다.
+
 ## Vue integration target
 
 ### `web/src/main.ts`
@@ -763,6 +790,8 @@ Convex snapshot keys are camelCase and the Defold model is snake_case. `play/gam
 
 ## Data lifecycle
 
+Ladder queue는 profile/user row와 분리한다. 명시적 cancel, component unmount, 다음 enter가 waiting row를 idempotently 정리/재사용하며 refresh 중에는 같은 indexed row를 다시 관찰한다. 장기 offline lease/sweeper는 실제 queue 규모와 reconnect 정책이 정해질 때 추가한다. matched row는 match가 complete된 뒤 다음 enter에서 waiting으로 재사용한다.
+
 Completed match data is cleaned up in two layers:
 
 - `compactMatchLogs` remains the lightweight log retention path for `matchCommands` and `matchEvents`.
@@ -791,6 +820,10 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 - local/opponent permissions
 
 ### Convex integration tests
+
+- Ladder normalized placement 1–6 formula and invalid edges.
+- Ladder fidget Skull/chip cap, queue/cancel/match-found state precedence, 2–6 roster order/density, stat fallback, duplicate handoff guard.
+- Two authenticated humans can enter the indexed FIFO queue and receive the same ranked matchId (manual multi-account E2E; deterministic fixture does not prove this).
 
 - Clerk-authenticated user can create profile.
 - User can create dev match.

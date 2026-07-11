@@ -28,6 +28,12 @@ export const convexFunctions = {
     getCurrentUser: api.users.getCurrentUser,
     createOrUpdateCurrentUser: api.users.createOrUpdateCurrentUser,
   },
+  ladder: {
+    observeOwnQueue: api.ladder.observeOwnQueue,
+    enterQueue: api.ladder.enterQueue,
+    leaveQueue: api.ladder.leaveQueue,
+    createDevFixture: api.ladder.createDevFixture,
+  },
   matches: {
     createDevMatch: api.matches.createDevMatch,
     createCustomMatchWithOpponents: api.matches.createCustomMatchWithOpponents,

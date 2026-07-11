@@ -36,6 +36,28 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index('by_clerk_id', ['clerkId']),
 
+  ladderStats: defineTable({
+    userId: v.id('users'),
+    mmr: v.number(),
+    recentPlacements: v.array(v.object({
+      place: v.number(),
+      playerCount: v.number(),
+    })),
+    totalNormalizedPlacementSum: v.number(),
+    totalPlacements: v.number(),
+    updatedAt: v.number(),
+  }).index('by_user', ['userId']),
+
+  ladderQueueEntries: defineTable({
+    userId: v.id('users'),
+    status: v.union(v.literal('waiting'), v.literal('matched'), v.literal('cancelled')),
+    matchId: v.optional(v.id('matches')),
+    joinedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_status_and_joined_at', ['status', 'joinedAt']),
+
   inventories: defineTable({
     userId: v.id('users'),
     currencies: v.object({
