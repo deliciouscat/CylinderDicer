@@ -43,6 +43,8 @@ export interface PublicPlayerSnapshot {
   hp: number
   bullets: number
   eliminated: boolean
+  skin?: string
+  portraitState?: string
   isActive: boolean
   isLocal?: boolean
 }
@@ -96,6 +98,20 @@ export interface MatchSnapshotBase {
       count: number
       face: number
     }
+		skullRoulette?: {
+			playerId: string
+			spinSteps: number
+			hit: boolean
+			slotIndex: number
+			consumed: boolean
+			hpBefore: number
+			hpAfter: number
+			sequence: number
+		}
+		reloadGate?: {
+			countdownSeconds: number
+			epoch: number
+		}
   }
   pendingLoad?: unknown
 	shake?: MatchShakeSnapshot

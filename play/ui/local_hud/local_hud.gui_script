@@ -3,6 +3,7 @@ local selectors = require("game.model.selectors")
 local i18n = require("game.core.i18n")
 local anchors = require("game.core.anchors")
 local gui_util = require("ui.common.gui_util")
+local dice_art = require("ui.common.dice_art")
 
 local function register_anchor()
 	local position = gui_util.world_position("cylinder_anchor")
@@ -14,9 +15,9 @@ end
 local function set_dice_enabled(enabled)
 	for index = 1, 5 do
 		gui_util.set_enabled("dice_" .. tostring(index) .. "_box", enabled)
-		gui_util.set_enabled("dice_" .. tostring(index), enabled)
+		gui_util.set_enabled("dice_" .. tostring(index), false)
 	end
-	gui_util.set_enabled("dice_values", enabled)
+	gui_util.set_enabled("dice_values", false)
 end
 
 local function render(self, state)
@@ -31,13 +32,13 @@ local function render(self, state)
 	gui_util.set_text("hp", player.hp or 0)
 	gui_util.set_text("bullets", selectors.player_bullets(player))
 	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
-	gui_util.set_text("dice_values", table.concat(player.dice or {}, " "))
-
 	for index = 1, 5 do
 		local face = player.dice[index]
-		gui_util.set_text("dice_" .. tostring(index), face or "-")
 		if face then
-			gui_util.play_flipbook("dice_" .. tostring(index) .. "_box", "f" .. tostring(face) .. "_a0")
+			gui_util.play_flipbook(
+				"dice_" .. tostring(index) .. "_box",
+				dice_art.front_animation(face)
+			)
 		end
 	end
 
@@ -85,6 +86,12 @@ function update(self, dt)
 		render(self, self.store:get_state())
 	end
 	register_anchor()
+end
+
+function on_message(self, message_id)
+	if message_id == hash("locale_changed") then
+		request_render(self)
+	end
 end
 
 function final(self)

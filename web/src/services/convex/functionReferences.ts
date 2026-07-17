@@ -31,7 +31,9 @@ export const convexFunctions = {
   ladder: {
     observeOwnQueue: api.ladder.observeOwnQueue,
     enterQueue: api.ladder.enterQueue,
+    heartbeatQueue: api.ladder.heartbeatQueue,
     leaveQueue: api.ladder.leaveQueue,
+    acknowledgeMatchHandoff: api.ladder.acknowledgeMatchHandoff,
     createDevFixture: api.ladder.createDevFixture,
   },
   matches: {
@@ -57,10 +59,13 @@ export const convexFunctions = {
   },
   adminMatches: {
     createDevMatchWithBots: api.adminMatches.createDevMatchWithBots,
+    getLatestLadderQaSessionForAdmin: api.adminMatches.getLatestLadderQaSessionForAdmin,
+    addLadderQaOpponent: api.adminMatches.addLadderQaOpponent,
     listAdminCustomGameRooms: api.adminMatches.listAdminCustomGameRooms,
     getAdminCustomGameRoom: api.adminMatches.getAdminCustomGameRoom,
     setCustomGameOpponentReady: api.adminMatches.setCustomGameOpponentReady,
     closeStartedCustomGameRoom: api.adminMatches.closeStartedCustomGameRoom,
+    dismissReadyDevMatch: api.adminMatches.dismissReadyDevMatch,
     listAdminDevMatches: api.adminMatches.listAdminDevMatches,
     getAdminMatchState: api.adminMatches.getAdminMatchState,
     submitOpponentCommand: api.adminMatches.submitOpponentCommand,

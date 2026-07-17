@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import en from './en.json'
 import ja from './ja.json'
 import ko from './ko.json'
@@ -15,7 +16,38 @@ const messages = {
 } as const
 
 const DEFAULT_LOCALE: LocaleCode = 'en'
-const activeLocale: LocaleCode = DEFAULT_LOCALE
+const LOCALE_STORAGE_KEY = 'cylinderdicer.locale'
+
+function isLocaleCode(value: string | null): value is LocaleCode {
+  return value !== null && value in messages
+}
+
+function readInitialLocale(): LocaleCode {
+  if (typeof window === 'undefined') {
+    return DEFAULT_LOCALE
+  }
+
+  const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY)
+  if (isLocaleCode(savedLocale)) {
+    return savedLocale
+  }
+
+  return DEFAULT_LOCALE
+}
+
+export const activeLocale = ref<LocaleCode>(readInitialLocale())
+
+export function setLocale(locale: LocaleCode) {
+  activeLocale.value = locale
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale
+  }
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale)
+  }
+}
+
+setLocale(activeLocale.value)
 
 function lookup(path: string, locale: LocaleCode): string | undefined {
   const value = path.split('.').reduce<unknown>((current, segment) => {
@@ -30,7 +62,7 @@ function lookup(path: string, locale: LocaleCode): string | undefined {
 }
 
 export function t(path: string, replacements: Record<string, string> = {}): string {
-  const template = lookup(path, activeLocale) ?? lookup(path, DEFAULT_LOCALE) ?? path
+  const template = lookup(path, activeLocale.value) ?? lookup(path, DEFAULT_LOCALE) ?? path
 
   return Object.entries(replacements).reduce(
     (message, [key, value]) => message.replace(`{${key}}`, value),

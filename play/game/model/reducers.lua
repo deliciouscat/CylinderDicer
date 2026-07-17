@@ -9,6 +9,7 @@ local M = {}
 
 local SHAKE_REQUIRED_COUNT = 6
 local DICE_CHECK_DELAY_SECONDS = 3
+local BID_RELOAD_COUNTDOWN_SECONDS = 3
 
 local DEFAULT_STATE = {
 	match = {
@@ -36,6 +37,8 @@ local DEFAULT_STATE = {
 	bidding = {
 		current_bid = nil,
 		recent_bids = {},
+		deferred_load = nil,
+		reload_gate = nil,
 		my_bid = {
 			count = 1,
 			face = 2,
@@ -277,6 +280,29 @@ local function all_alive_shaken(next)
 	return true
 end
 
+local function finish_shake_phase(next, fallback_player_id)
+	next.turn.previous_player_id = next.turn.active_player_id
+
+	if next.turn.is_first_shake then
+		next.turn.is_first_shake = false
+		return enter_dice_check(next, "shake_complete_first")
+	end
+
+	next.turn.is_first_shake = false
+	local reload_player_id = next.shake.reload_player_id
+	local reload_source = next.shake.reload_source
+	local pending = nil
+	if reload_player_id then
+		pending = pending_for_player(next, reload_player_id, reload_source or "shake", 1)
+	elseif reload_source ~= "duel" then
+		pending = pending_for_player(next, next.turn.active_player_id or fallback_player_id, "shake", 1)
+	end
+	if pending then
+		return enter_revolver_reload(next, pending, "shake_complete_reload")
+	end
+	return enter_dice_check(next, "shake_complete_no_reload")
+end
+
 local function all_alive_checked(next)
 	for _, player_id in ipairs(next.players.order or {}) do
 		local player = next.players.by_id[player_id]
@@ -309,7 +335,7 @@ local function normalize_player(player, local_player_id)
 	local next = clone(player)
 	next.id = next.id or next.player_id
 	next.name = next.name or next.id
-	next.hp = next.hp or 3
+	next.hp = next.hp or 6
 	next.dice_count = next.dice_count or 5
 	next.dice = next.dice or {}
 	next.skin = next.skin or "default"
@@ -333,6 +359,7 @@ local KEY_MAP = {
 	challengerId = "challenger_id",
 	currentBid = "current_bid",
 	diceCheckDelaySeconds = "dice_check_delay_seconds",
+	countdownSeconds = "countdown_seconds",
 	eventsHash = "events_hash",
 	hpChanges = "hp_changes",
 	isFirstShake = "is_first_shake",
@@ -342,6 +369,7 @@ local KEY_MAP = {
 	needsChoice = "needs_choice",
 	pendingLoad = "pending_load",
 	playerId = "player_id",
+	portraitState = "portrait_state",
 	previousBidderId = "previous_bidder_id",
 	previousPlayerId = "previous_player_id",
 	requiredCount = "required_count",
@@ -349,6 +377,10 @@ local KEY_MAP = {
 	reloadSource = "reload_source",
 	rouletteSubjectId = "roulette_subject_id",
 	roundIndex = "round_index",
+	skullRoulette = "skull_roulette",
+	spinSteps = "spin_steps",
+	hpBefore = "hp_before",
+	hpAfter = "hp_after",
 	shooterId = "shooter_id",
 	slotIndex = "slot_index",
 	suggestedBid = "suggested_bid",
@@ -512,6 +544,8 @@ local function apply_server_snapshot(state, payload)
 				existing.hp = player.hp or existing.hp
 				existing.bullets = player.bullets or existing.bullets
 				existing.eliminated = player.eliminated == true
+				existing.skin = player.skin or existing.skin
+				existing.portrait_state = player.portrait_state or existing.portrait_state
 				existing.is_local = player_id == local_player_id
 				next.players.by_id[player_id] = existing
 			end
@@ -531,6 +565,8 @@ local function apply_server_snapshot(state, payload)
 	end
 
 	next.bidding.current_bid = normalize_snapshot_keys(bidding_snapshot.current_bid)
+	next.bidding.skull_roulette = normalize_snapshot_keys(bidding_snapshot.skull_roulette)
+	next.bidding.reload_gate = normalize_snapshot_keys(bidding_snapshot.reload_gate)
 	if bidding_snapshot.suggested_bid then
 		next.bidding.my_bid = {
 			count = bidding_snapshot.suggested_bid.count or next.bidding.my_bid.count,
@@ -765,7 +801,7 @@ handlers[actions.types.SETUP_LOAD_INITIAL] = function(state, action)
 	return next, { "players", "turn", "flow", "shake", "ui" }
 end
 
-handlers[actions.types.SHAKE_ROLL] = function(state, action)
+handlers[actions.types.SHAKE_COMPLETE] = function(state, action)
 	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "cup_shake" then
 		return state, nil, "not_shaking_turn"
 	end
@@ -777,18 +813,10 @@ handlers[actions.types.SHAKE_ROLL] = function(state, action)
 	end
 
 	local required = next.shake.required_count or SHAKE_REQUIRED_COUNT
-	local previous_count = (next.shake.counts or {})[player_id] or 0
-	if previous_count >= required then
+	if ((next.shake.counts or {})[player_id] or 0) >= required then
 		return state, nil, "already_shaken"
 	end
-	local count = previous_count + 1
-	next.shake.counts[player_id] = count
-
-	if count < required then
-		set_hint(next)
-		append_event_hash(next, action)
-		return next, { "shake", "ui" }
-	end
+	next.shake.counts[player_id] = required
 
 	roll_player_dice(next, player_id, action.payload.rng)
 	if not all_alive_shaken(next) then
@@ -797,35 +825,35 @@ handlers[actions.types.SHAKE_ROLL] = function(state, action)
 		return next, { "players", "shake", "ui" }
 	end
 
-	next.turn.previous_player_id = next.turn.active_player_id
+	local ok, err = finish_shake_phase(next, player_id)
+	if not ok then
+		return state, nil, err
+	end
 
-	if next.turn.is_first_shake then
-		next.turn.is_first_shake = false
-		local ok, err = enter_dice_check(next, "shake_complete_first")
-		if not ok then
-			return state, nil, err
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "players", "turn", "flow", "shake", "ui" }
+end
+
+handlers[actions.types.SHAKE_TIMEOUT] = function(state, action)
+	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "cup_shake" then
+		return state, nil, "not_shaking_turn"
+	end
+
+	local next = clone(state)
+	local required = next.shake.required_count or SHAKE_REQUIRED_COUNT
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		local count = (next.shake.counts or {})[player_id] or 0
+		if is_alive(player) and count < required then
+			next.shake.counts[player_id] = required
+			roll_player_dice(next, player_id, action.payload.rng)
 		end
-	else
-		next.turn.is_first_shake = false
-		local reload_player_id = next.shake.reload_player_id
-		local reload_source = next.shake.reload_source
-		local pending = nil
-		if reload_player_id then
-			pending = pending_for_player(next, reload_player_id, reload_source or "shake", 1)
-		elseif reload_source ~= "duel" then
-			pending = pending_for_player(next, next.turn.active_player_id, "shake", 1)
-		end
-		if pending then
-			local ok, err = enter_revolver_reload(next, pending, "shake_complete_reload")
-			if not ok then
-				return state, nil, err
-			end
-		else
-			local ok, err = enter_dice_check(next, "shake_complete_no_reload")
-			if not ok then
-				return state, nil, err
-			end
-		end
+	end
+
+	local ok, err = finish_shake_phase(next, next.turn.active_player_id)
+	if not ok then
+		return state, nil, err
 	end
 
 	set_hint(next)
@@ -900,7 +928,12 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 	next.pending_load = cylinder.consume_pending(next.pending_load)
 
 	if next.pending_load then
-		enter_revolver_reload(next, next.pending_load)
+		if pending.source == "bid" then
+			next.flow.phase = "bidding"
+			next.turn.kind = "bidding"
+		else
+			enter_revolver_reload(next, next.pending_load)
+		end
 	elseif pending.source == "setup" then
 		local transition_err = complete_setup_if_ready(next)
 		if transition_err then
@@ -912,10 +945,11 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 			return state, nil, transition_err
 		end
 	elseif pending.source == "bid" then
-		local ok, err = enter_bidding(next, "reload_complete_bid")
-		if not ok then
-			return state, nil, err
-		end
+		next.pending_load = next.bidding.deferred_load
+		next.bidding.deferred_load = nil
+		next.bidding.reload_gate = nil
+		next.flow.phase = "bidding"
+		next.turn.kind = "bidding"
 	elseif pending.source == "exact_duel" then
 		local ok, err = enter_cup_shake(next, "reload_complete_exact_duel", {
 			reload_source = "duel",
@@ -928,6 +962,43 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 	set_hint(next)
 	append_event_hash(next, action)
 	return next, { "players", "turn", "flow", "shake", "ui" }
+end
+
+handlers[actions.types.BID_RELOAD_TIMEOUT] = function(state, action)
+	local pending = state.pending_load
+	if not state.flow or state.flow.phase ~= "bidding"
+		or not pending or pending.source ~= "bid"
+		or not state.bidding.reload_gate then
+		return state, nil, "no_bid_reload_timeout"
+	end
+
+	local next = clone(state)
+	local player = next.players.by_id[pending.player_id]
+	local slot_index = nil
+	for index, slot in ipairs(player and player.cylinder and player.cylinder.slots or {}) do
+		if not slot.loaded then
+			slot_index = index
+			break
+		end
+	end
+	if not player or not slot_index then
+		return state, nil, "no_empty_load_slot"
+	end
+
+	local loaded, ok, err = cylinder.load(player.cylinder, slot_index)
+	if not ok then
+		return state, nil, err
+	end
+	player.cylinder = loaded
+	update_bullets(player)
+	next.pending_load = next.bidding.deferred_load
+	next.bidding.deferred_load = nil
+	next.bidding.reload_gate = nil
+	next.flow.phase = "bidding"
+	next.turn.kind = "bidding"
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "players", "turn", "bidding", "flow", "ui" }
 end
 
 handlers[actions.types.BID_SELECT_COUNT] = function(state, action)
@@ -958,7 +1029,10 @@ handlers[actions.types.BID_RAISE] = function(state, action)
 	if state.turn.kind ~= "bidding" then
 		return state, nil, "not_bidding_turn"
 	end
-	if state.pending_load then
+	if state.bidding.reload_gate then
+		return state, nil, "load_pending"
+	end
+	if state.pending_load and state.pending_load.source ~= "bid" then
 		return state, nil, "load_pending"
 	end
 
@@ -975,13 +1049,63 @@ handlers[actions.types.BID_RAISE] = function(state, action)
 	end
 
 	local next = clone(state)
+	local bidder = next.players.by_id[bid.player_id]
+	if not bidder then
+		return state, nil, "unknown_player"
+	end
+
+	if bid.face == 1 then
+		bidder.cylinder = cylinder.spin(bidder.cylinder, action.payload.spin_steps or 1)
+		local triggered, shots = cylinder.trigger(bidder.cylinder, 1)
+		bidder.cylinder = triggered
+		local shot = shots[1]
+		local hp_before = bidder.hp or 0
+		if shot and shot.hit then
+			bidder.hp = math.max(0, hp_before - 1)
+			bidder.eliminated = bidder.hp <= 0
+		end
+		update_bullets(bidder)
+		next.bidding.skull_roulette = {
+			player_id = bidder.id,
+			spin_steps = action.payload.spin_steps or 1,
+			hit = shot and shot.hit == true or false,
+			slot_index = shot and shot.slot_index or bidder.cylinder.chamber_index,
+			consumed = shot and shot.consumed == true or false,
+			hp_before = hp_before,
+			hp_after = bidder.hp,
+			sequence = (next.match.turn_count or 0) + 1,
+		}
+		next.match.turn_count = (next.match.turn_count or 0) + 1
+
+		if not is_alive(bidder) then
+			reset_my_bid(next)
+			local count, winner_id = alive_count(next.players)
+			if count <= 1 then
+				next.match.status = "complete"
+				next.match.winner_id = winner_id
+				next.pending_load = nil
+				enter_phase(next, "complete")
+			else
+				next.turn.active_player_id = turn_machine.next_alive_after(next.players, bidder.id)
+				next.turn.previous_player_id = next.bidding.current_bid and next.bidding.current_bid.player_id or nil
+				next.turn.kind = "bidding"
+				next.flow.phase = "bidding"
+			end
+			set_hint(next)
+			append_event_hash(next, action)
+			return next, { "match", "players", "bidding", "turn", "flow", "ui" }
+		end
+	end
+
 	next.bidding.current_bid = bid
 	next.bidding.my_bid = {
 		count = bid.count,
 		face = bid.face,
 	}
 	next.bidding.recent_bids[#next.bidding.recent_bids + 1] = bid
-	next.match.turn_count = next.match.turn_count + 1
+	if bid.face ~= 1 then
+		next.match.turn_count = next.match.turn_count + 1
+	end
 
 	local previous_active = next.turn.active_player_id
 	next.turn = {
@@ -993,17 +1117,20 @@ handlers[actions.types.BID_RAISE] = function(state, action)
 	}
 
 	local pending = pending_for_player(next, previous_active, "bid", 1)
-	if pending then
-		local ok, err = enter_revolver_reload(next, pending, "bid_reload")
-		if not ok then
-			return state, nil, err
-		end
+	if state.pending_load and state.pending_load.source == "bid" then
+		next.pending_load = clone(state.pending_load)
+		next.bidding.deferred_load = pending
+		next.bidding.reload_gate = {
+			countdown_seconds = BID_RELOAD_COUNTDOWN_SECONDS,
+			epoch = 1,
+		}
 	else
-		local ok, err = enter_bidding(next, "bid_no_reload")
-		if not ok then
-			return state, nil, err
-		end
+		next.pending_load = pending
+		next.bidding.deferred_load = nil
+		next.bidding.reload_gate = nil
 	end
+	next.flow.phase = "bidding"
+	next.turn.kind = "bidding"
 
 	set_hint(next)
 	append_event_hash(next, action)
@@ -1114,6 +1241,9 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 	next.turn.is_first_shake = false
 	next.bidding.current_bid = nil
 	next.bidding.recent_bids = {}
+	next.bidding.deferred_load = nil
+	next.bidding.reload_gate = nil
+	next.bidding.skull_roulette = nil
 	next.duel = nil
 	reset_my_bid(next)
 

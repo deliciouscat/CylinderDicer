@@ -2,6 +2,7 @@
 import { useAuth } from '@clerk/vue'
 import { useConvexClient } from 'convex-vue'
 import { computed, nextTick, onUnmounted, ref, watchEffect } from 'vue'
+import { LADDER_QUEUE_HEARTBEAT_MS } from '@shared/ladder/matchmaking'
 import { assetLoader } from '../assets/assetLoader'
 import { t } from '../i18n'
 import { createLadderService, type LadderQueueUnsubscribe } from '../services/convex/ladderService'
@@ -38,6 +39,7 @@ const debugFaces = import.meta.env.DEV
 let queueUnsubscribe: LadderQueueUnsubscribe | undefined
 let fixtureTimer: number | undefined
 let handoffTimer: number | undefined
+let heartbeatTimer: number | undefined
 
 const phaseLabel = computed(() => t(`ladder.phase.${runtime.value.phase}`))
 const authPending = computed(() => !auth.isLoaded.value)
@@ -63,6 +65,7 @@ function applyQueueState(queue: LadderQueueState) {
   const next = reduceLadderRuntime(runtime.value, { type: 'queue_update', queue })
   if (next.phase === 'roster') {
     window.clearTimeout(fixtureTimer)
+    window.clearInterval(heartbeatTimer)
     queueUnsubscribe?.unsubscribe()
     queueUnsubscribe = undefined
     errorMessage.value = ''
@@ -83,6 +86,15 @@ async function enterQueue() {
   subscribeQueue()
   try {
     applyQueueState(await ladderService.enterQueue())
+    window.clearInterval(heartbeatTimer)
+    if (runtime.value.phase === 'searching') {
+      heartbeatTimer = window.setInterval(() => {
+        if (disposed.value || runtime.value.phase !== 'searching') return
+        void ladderService.heartbeatQueue().then(applyQueueState).catch(() => {
+          errorMessage.value = t('ladder.queueSubscriptionError')
+        })
+      }, LADDER_QUEUE_HEARTBEAT_MS)
+    }
   } catch (error) {
     errorMessage.value = localizedError(error, 'ladder.queueEnterError')
   }
@@ -157,7 +169,13 @@ async function beginHandoff() {
     handoffTimer = window.setTimeout(resolve, 320)
   })
   if (disposed.value) return
-  emit('handoff', matchId)
+  try {
+    await ladderService.acknowledgeMatchHandoff(matchId)
+    if (!disposed.value) emit('handoff', matchId)
+  } catch (error) {
+    runtime.value = reduceLadderRuntime(runtime.value, { type: 'handoff_failed' })
+    errorMessage.value = localizedError(error, 'ladder.handoffError')
+  }
 }
 
 watchEffect(() => {
@@ -178,6 +196,7 @@ onUnmounted(() => {
   disposed.value = true
   window.clearTimeout(fixtureTimer)
   window.clearTimeout(handoffTimer)
+  window.clearInterval(heartbeatTimer)
   queueUnsubscribe?.unsubscribe()
   if (started.value && runtime.value.phase === 'searching' && fixtureCount === 0) {
     void ladderService.leaveQueue().catch(() => undefined)

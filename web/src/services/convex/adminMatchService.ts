@@ -139,6 +139,21 @@ export interface AdminPurgeCompletedDevMatchResult {
   auditId?: string
 }
 
+export interface AdminLadderQaSession {
+  status: 'waiting_for_player' | 'player_joined'
+  queueEntryId: string | null
+  userId: string | null
+  displayName: string | null
+  joinedAt: number | null
+  pendingOpponents: Array<{
+    virtualOpponentId: string
+    displayName: string
+    seatIndex: number
+  }>
+  playerCount: number
+  maxPlayerCount: number
+}
+
 export function createAdminMatchService(client: ConvexClient) {
   return {
     async createDevMatchWithBots(options: {
@@ -148,6 +163,12 @@ export function createAdminMatchService(client: ConvexClient) {
       reuseActive?: boolean
     } = {}) {
       return await client.mutation(convexFunctions.adminMatches.createDevMatchWithBots, options)
+    },
+    async getLatestLadderQaSession(): Promise<AdminLadderQaSession> {
+      return await client.query(convexFunctions.adminMatches.getLatestLadderQaSessionForAdmin, {}) as AdminLadderQaSession
+    },
+    async addLadderQaOpponent(): Promise<Record<string, any>> {
+      return await client.mutation(convexFunctions.adminMatches.addLadderQaOpponent, {}) as Record<string, any>
     },
     async listAdminCustomGameRooms(options: { status?: 'composing' | 'started' | 'completed' | 'cancelled'; limit?: number } = {}): Promise<AdminCustomGameRoomView[]> {
       return await client.query(convexFunctions.adminMatches.listAdminCustomGameRooms, options) as AdminCustomGameRoomView[]
@@ -160,6 +181,9 @@ export function createAdminMatchService(client: ConvexClient) {
     },
     async closeStartedCustomGameRoom(roomId: string): Promise<Record<string, any>> {
       return await client.mutation(convexFunctions.adminMatches.closeStartedCustomGameRoom, { roomId } as any)
+    },
+    async dismissReadyDevMatch(matchId: string): Promise<Record<string, any>> {
+      return await client.mutation(convexFunctions.adminMatches.dismissReadyDevMatch, { matchId } as any)
     },
     async listAdminDevMatches(options: { status?: 'ready' | 'complete'; limit?: number } = {}): Promise<AdminDevMatchRow[]> {
       return await client.query(convexFunctions.adminMatches.listAdminDevMatches, options)
@@ -204,6 +228,17 @@ export function createAdminMatchService(client: ConvexClient) {
         convexFunctions.adminMatches.getAdminCustomGameRoom,
         { roomId } as any,
         (room) => onRoom(room as AdminCustomGameRoomView),
+        onError,
+      )
+    },
+    subscribeLatestLadderQaSession(
+      onSession: (session: AdminLadderQaSession) => void,
+      onError?: (error: Error) => void,
+    ) {
+      return client.onUpdate(
+        convexFunctions.adminMatches.getLatestLadderQaSessionForAdmin,
+        {},
+        (session) => onSession(session as AdminLadderQaSession),
         onError,
       )
     },

@@ -16,7 +16,7 @@
 - 출력:
   - bid actions.
   - button enabled/disabled state.
-  - selected face display.
+  - selected face display (`f{face}_a0` dice image).
 
 # 의사코드
 ```lua

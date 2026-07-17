@@ -14,6 +14,14 @@ Defold 프로젝트 루트는 `play/`. 이 문서는 **턴 진행(bidding/shakin
 - 유료 치장 아이템은 카테고리/`<id>/` 단위로 분리 → **Live Update** 온디맨드 배포에 적합.
 - 로컬라이즈 텍스트는 `assets/locale/*.json`, 한/일은 CJK 폰트 리소스 필요.
 
+## 공통 폰트
+
+- `assets/fonts/NotoSerifCJKkr-SemiBold.otf`: Defold HUD의 한·영·일 공통 서체. Google/Adobe Noto Serif CJK의 Korean region OTF이며 SIL Open Font License 1.1로 배포된다.
+- `assets/fonts/noto_serif_cjk_kr_semibold.font`: 현재 게임/i18n 문자열만 굽는 distance-field 리소스. 전체 CJK `all_chars`를 사용하지 않아 HTML5 glyph atlas를 제한한다.
+- `assets/fonts/OFL.txt`: 포함된 폰트 라이선스 전문.
+- 원본: https://github.com/notofonts/noto-cjk/tree/main/Serif/OTF/Korean
+- Defold의 TTF/OTF font resource 사용법: https://defold.com/manuals/font/
+
 ## 디렉토리 구조
 ```
 play/
@@ -24,7 +32,8 @@ play/
    │  │   └─ {front,side,damage,dying,victory}.png
    │  │   (_template/ 은 새 캐릭터 추가용 빈 틀)
    │  ├─ revolver/<skinId>/     # 리볼버 스킨 (유료). default 필수.
-   │  │   └─ {revolver.png, cylinder.png, bullet.png}  # 총기 전체 / 약실 뷰 / 총알
+   │  │   └─ {cylinder.png, bullet_bottom.png, bullet_unloaded.png}
+   │  │       # 약실 본체 / 장전된 약실의 탄피 바닥 / 재장전 대기 탄환
    │  ├─ dice/<skinId>/         # 주사위 36장 (유료 스킨). default 필수.
    │  ├─ cup/<skinId>/          # 셰이크 컵 (유료 스킨). default 필수.
    │  ├─ backgrounds/<mapId>/   # 세로 파노라마 배경 (유료 맵). default 필수.
@@ -34,6 +43,7 @@ play/
    │  │   ├─ buttons/           # 넘기기 / 결투신청 (normal/pressed/disabled)
    │  │   ├─ arrows/            # 주사위 눈 ▲▼ (normal/pressed/disabled)
    │  │   ├─ rail/              # 포인터 캐럿 등 맵 테마와 무관한 레일 UI만
+   │  │   ├─ results/           # 매치 결과 순위 프레임
    │  │   ├─ hud/               # 안내(hint) 패널
    │  │   └─ panels/            # 공통 패널/프레임
    │  └─ icons/                 # heart, cylinder_badge, bullet, skull, target, die_small
@@ -64,13 +74,23 @@ play/
 |---|---|
 | ternIndicator | ui/turn_indicator/*, locale(turn.*) |
 | PlayerSlot.Portrait | characters/<id>/* (+atlas 등록된 캐릭터만 화면 표시) |
-| StatusBadge | icons/cylinder_badge, icons/heart, 숫자 폰트 |
-| BidControls | ui/buttons/*(pass,challenge), ui/arrows/*, icons/target,die_small |
-| rail (셀 프레임 포함) | rail/<mapId>/* (테마 종속), ui/rail/*(caret) |
+| StatusBadge | `icons/bullet_indicator`, `icons/hp_indicator`, 숫자 폰트 |
+| BidControls | `ui/buttons/bid_button`, `ui/buttons/challenge_button`, `ui/arrows/{up,down}` |
+| rail (셀 프레임 포함) | `rail/<mapId>/*` (테마 종속), `ui/rail/bid_normal` (숫자칸 배경), `ui/rail/bid_skull` (향후 skull 전용 칸) |
 | BidMarker | icons/cylinder_badge + DiceFace |
 | DiceTray / DiceFace | dice/<skinId>/* (f1=해골) |
-| cylinderOverlay | revolver/<skinId>/cylinder.png (+ bullet.png) |
+| cylinderOverlay | `revolver/<skinId>/cylinder.png` + `bullet_bottom` (장전된 약실) + `bullet_unloaded` (재장전 대기 탄환) |
 | 배경 | backgrounds/<mapId>/* |
 
 ## 미정 (전투 씬 와이어프레임 후 추가)
 - 결투 FX/사운드(`철컥`/`탕`), PerfectDuel 지목·응사 UI, 데미지 플로팅, 승/패 화면.
+
+## 적용된 HUD 자산
+
+- `assets/atlases/ui.atlas`: 입찰/결투 버튼, ▲▼, 턴 배너, 레일 숫자칸 배경.
+- `assets/atlases/dices/dice_default.atlas`: default 주사위 36장 전체. bidding face와 하단 리스트에는 정면 `a0`, 컵 앞 테이블 주사위에만 `a1`–`a5` 굴림 각도를 사용한다.
+- `assets/atlases/status_indicators.atlas`: `player_carousel`과 `duel`의 장탄·HP 배지.
+- `assets/atlases/cylinder_default.atlas`: `cylinder_overlay`의 실린더 본체. HTML5에서도 실린더 투명 영역을 독립 texture page로 유지한다.
+- `assets/atlases/revolver_default.atlas`: `cylinder_overlay`의 장전된 약실과 재장전 대기 탄환.
+- `assets/atlases/rank_result.atlas`: `rank_{1,2_3,4_6}` 순위 프레임. 결과 HUD가 아직 없으므로 atlas만 준비되었고 화면에는 아직 연결하지 않는다.
+- 모든 gameplay GUI의 `system_font` mapping은 `assets/fonts/noto_serif_cjk_kr_semibold.font`를 사용한다.

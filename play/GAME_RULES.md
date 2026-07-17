@@ -15,10 +15,10 @@ flowchart TD
     Action -->|결투신청| Duel["결투집행 (duel)<br/>주사위 공개 · 판정"]
     Duel --> Judge{콜 판정}
 
-    Judge -->|부족 SHORT| Short["도전자가 총을 맞음<br/>|실제−콜|만큼 russian roulette"]
+    Judge -->|부족 SHORT| Short["도전자가 직전 콜러에게 격발<br/>|실제−콜|회"]
     Short --> Shake
 
-    Judge -->|초과 OVER| Over["직전 콜러가 총을 맞음<br/>|실제−콜|만큼 russian roulette"]
+    Judge -->|초과 OVER| Over["직전 콜러가 도전자에게 격발<br/>|실제−콜|회"]
     Over --> Shake
 
     Judge -->|EXACT| Perfect["맞춘 사람(A) → 나머지 순서대로<br/>방아쇠/회피 · 응사/걍맞기<br/>(PerfectDuel · 6회)"]
@@ -47,10 +47,14 @@ flowchart TD
             bidding 마치면 다음 플레이어 턴으로 넘어가게 됨. (제한시간 30초)
             해당 플레이어가 넘기기 선택하면:
                 -> 콜이 레일에 기록되고, 넘긴 본인만 우하단 cylinder에 1발 장전.
+                -> 이 장전과 다음 플레이어의 bidding은 동시에 진행한다.
+                -> 다음 bidding이 먼저 끝나면 장전자에게 3초가 주어지고, 나머지는 회전 실린더 loading 화면에서 기다린다.
+                -> 3초 안에 직접 장전하지 않으면 첫 빈 슬롯에 자동 장전하고 다음 입찰자의 장전을 이어서 처리한다.
             해당 플레이어가 결투신청 선택하면:
                 -> `결투집행`
         내 턴이면:
-            넘기기 — 레일로 개수, ▲▼ 버튼(또는 키보드 화살표)로 주사위눈 선택. 직전 콜보다 높게만 가능. 확정 시 턴 넘기고 `revolver reload` HUD에서 본인 1발 장전.
+            넘기기 — 레일로 개수, ▲▼ 버튼(또는 키보드 화살표)로 주사위눈 선택. 직전 콜보다 높게만 가능. 확정 시 턴을 넘기고 본인은 `revolver reload` HUD에서 1발을 장전한다. 다음 active player는 이 장전과 병행해 bidding할 수 있다.
+            Skull(1) 넘기기 — 입찰을 확정하기 전에 본인 실린더를 회전하고 본인 총으로 1회 격발한다. 탄환이 발사되면 본인 HP가 1 감소하고 일러스트가 진동한다. 생존하면 Skull 입찰을 확정하고, 사망하면 해당 입찰은 무효이며 기존 입찰을 유지한 채 다음 생존 플레이어로 넘어간다.
             결투신청 선택 시:
                 -> `결투집행`
 
@@ -66,8 +70,8 @@ def `결투집행`상세:
     콜 판정(부족/초과/정확) 후 `duel` HUD 띄워서 데미지 집행.
     판정 시 face `1` 해골은 특수 눈이다. 콜한 눈이 해골이 아니면 해골도 콜한 눈 집계에 포함한다. 콜한 눈이 해골이면 해골만 집계한다.
     장전 없음.
-    - **부족(SHORT)**: 실제 개수가 콜보다 적음 → **도전자**가 |실제 − 콜|만큼 russian roulette(총을 맞음). 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
-    - **초과(OVER)**: 실제 개수가 콜보다 많음 → **직전 콜러**가 |실제 − 콜|만큼 russian roulette(총을 맞음). 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
+    - **부족(SHORT)**: 실제 개수가 콜보다 적음 → **도전자**가 직전 콜러에게 |실제 − 콜|번 격발. 도전자 리볼버의 장전 위치에 따라 일부만/안 나갈 수 있음.
+    - **초과(OVER)**: 실제 개수가 콜보다 많음 → **직전 콜러**가 도전자에게 |실제 − 콜|번 격발. 직전 콜러 리볼버의 장전 위치에 따라 일부만/안 나갈 수 있음.
     - **정확(EXACT)**: 맞춘 당사자(A=직전 콜러)가 나머지 플레이어(B)를 순서대로 지목. A는 방아쇠/회피, B는 응사/걍맞기 선택 → README 데미지 정책표대로 처리.
 
 
@@ -141,16 +145,16 @@ Sequence[
     "배경 shading 및 vignetting이 ease-inout 되며 나타남",
     "총을 쏘는 플레이어의 일러스트가 왼쪽, 맞는 플레이어가 오른쪽에 나타날거임. 남은 HP/총알 표시와 함께. with ease-out from left/right",
     if "bidding이 부족(SHORT)인 상황":
-        for |실제−콜|번: "도전자가 russian roulette · 총을 맞음. 리볼버 장전 위치에 따라 hit/miss",
+        for |실제−콜|번: "도전자가 직전 콜러에게 격발. 도전자 리볼버 장전 위치에 따라 hit/miss",
     if "bidding이 초과(OVER)인 상황":
-        for |실제−콜|번: "직전 콜러가 russian roulette · 총을 맞음. 리볼버 장전 위치에 따라 hit/miss",
+        for |실제−콜|번: "직전 콜러가 도전자에게 격발. 직전 콜러 리볼버 장전 위치에 따라 hit/miss",
     if "bidding이 정확히 맞아서(EXACT) 모든 플레이어에게 총을 쏘는 상황":
         for 6번: "도전자부터 그 이후 플레이어 순서로 돌아가면서 russian roulette 진행. 예를 들어 [p1, p2, p3, p4] 중 p4가 도전해서 p3가 정확히 맞춘 상황이면, [p4, p1, p2, p4, p1, p2] 순서로 russian roulette 진행하는거임. A(맞춘 사람): 방아쇠/회피, B(지목 대상): 응사/걍맞기",
     "배경 shading 및 vignetting이 ease-inout 되며 사라짐",
     "`cup shake` 차례로 돌아감. (EXACT이면 정확히 맞춘 사람만 3발 충전 후 shaking, SHORT/OVER면 바로 shaking)",
     "SHORT/OVER에서 실제 총알이 소진됐다면 다음 shake 후 그 총알을 소진한 플레이어만 1발 장전함. 다음 첫 bidding 플레이어와 결투 후 장전 대상은 별개.",
     "다음 라운드의 첫 bidding 순서는 결투를 신청한 도전자가 가져감. 도전자가 탈락했다면 그 다음 생존 플레이어가 첫 bidding을 시작함.",
-    "장전 대상이 local player일 때만 reload HUD와 cylinder 조작을 표시함. opponent가 장전 중이면 loading message만 표시.",
+    "bid 장전 중 다음 입찰 전에는 장전자만 reload HUD, 나머지는 bidding HUD를 표시함. 다음 입찰이 먼저 끝나면 장전자는 3초 countdown, 나머지는 회전 cylinder loading HUD를 표시함.",
 ]
 
 

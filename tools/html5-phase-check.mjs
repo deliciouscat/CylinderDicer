@@ -129,6 +129,27 @@ async function clickLogical(page, x, y) {
 	await page.mouse.click(point.x, point.y);
 }
 
+async function dragShake(page) {
+	const points = await page.evaluate(() => {
+		const canvas = document.getElementById("canvas") || document.querySelector("canvas");
+		if (!canvas) {
+			return null;
+		}
+		const rect = canvas.getBoundingClientRect();
+		return {
+			from: { x: rect.left + rect.width * 0.42, y: rect.top + rect.height * 0.5 },
+			to: { x: rect.left + rect.width * 0.58, y: rect.top + rect.height * 0.5 },
+		};
+	});
+	if (!points) {
+		throw new Error("missing_canvas_for_drag");
+	}
+	await page.mouse.move(points.from.x, points.from.y);
+	await page.mouse.down();
+	await page.mouse.move(points.to.x, points.to.y, { steps: 3 });
+	await page.mouse.up();
+}
+
 function focalSlotCenter(slotIndex) {
 	const centerX = 640;
 	const centerY = 372;
@@ -154,6 +175,21 @@ const browser = await chromium.launch({
 	});
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const consoleErrors = [];
+page.on("console", (message) => {
+	if (message.type() === "error") {
+		consoleErrors.push({
+			message: message.text(),
+			url: message.location().url || "",
+		});
+	}
+});
+page.on("pageerror", (error) => {
+	consoleErrors.push({
+		message: String(error?.message ?? error),
+		url: "",
+	});
+});
 
 try {
 	await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -202,7 +238,30 @@ try {
 		),
 	);
 
-	await page.evaluate(() => window.__cdHarness.qa("shake", "local-player"));
+	await page.bringToFront();
+	await clickLogical(page, 12, 708);
+	await dragShake(page);
+	phases.shake_gauge_initial = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => Number(s.visual?.shake?.gauge ?? 0) >= 20,
+				3000,
+			),
+		),
+	);
+	phases.shake_gauge_initial.screenshot = await screenshotMetrics(page, "shake_gauge_initial");
+	phases.shake_gauge_decay = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => Number(s.visual?.shake?.gauge ?? 100) < 22,
+				2000,
+			),
+		),
+	);
+	for (let index = 0; index < 4; index += 1) {
+		await dragShake(page);
+		await page.waitForTimeout(35);
+	}
 	phases.shake = await page.evaluate(async () =>
 		window.__cdHarness.summarize(
 			await window.__cdHarness.waitStatus(
@@ -241,16 +300,56 @@ try {
 	);
 	phases.bidding_local_turn.screenshot = await screenshotMetrics(page, "bidding_local_turn");
 
-	await page.evaluate(() => window.__cdHarness.qa("bid", "local-player", { count: 1, face: 2 }));
-	await page.evaluate(async () => window.__cdHarness.waitStatus(
-		(s) => s.phase === "revolver_reload" && s.pending_load?.player_id === "local-player",
-		5000,
-	));
+	await page.bringToFront();
+	await clickLogical(page, 12, 708);
+	await page.waitForTimeout(100);
+	await page.keyboard.down("ArrowRight");
+	await page.waitForTimeout(100);
+	await page.keyboard.up("ArrowRight");
+	phases.rail_input = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => s.phase === "bidding"
+					&& s.turn?.active_player_id === "local-player"
+					&& Number(s.visual?.rail?.selected_count ?? 0) === 2,
+				5000,
+			),
+		),
+	);
+
+	await page.evaluate(() => window.__cdHarness.qa("bid", "local-player", {
+		count: 1,
+		face: 1,
+		spin_steps: 1,
+	}));
+	phases.skull_bid_hit = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => s.phase === "bidding"
+					&& s.pending_load?.player_id === "local-player"
+					&& s.bidding?.skull_roulette?.hit === true,
+				5000,
+			),
+		),
+	);
+	phases.skull_bid_hit.screenshot = await screenshotMetrics(page, "skull_bid_hit");
 	await page.evaluate(() => window.__cdHarness.qa("load_all", "local-player"));
-	await page.evaluate(async () => window.__cdHarness.waitStatus(
-		(s) => s.phase === "bidding" && s.turn?.active_player_id === "opponent-1",
-		5000,
-	));
+	phases.after_skull_reload = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => s.phase === "bidding"
+					&& s.turn?.active_player_id === "opponent-1"
+					&& !s.pending_load
+					&& s.visual?.rail?.visible === true
+					&& s.visual?.bid_controls?.can_drive === false
+					&& s.visual?.bid_controls?.visible === false
+					&& s.visual?.player_carousel?.active_player_id === "opponent-1"
+					&& Number(s.visual?.player_carousel?.active_position_x) === 0,
+				5000,
+			),
+		),
+	);
+	phases.after_skull_reload.screenshot = await screenshotMetrics(page, "after_skull_reload");
 	await page.evaluate(() => window.__cdHarness.qa("challenge", "opponent-1"));
 	phases.duel_reveal = await page.evaluate(async () =>
 		window.__cdHarness.summarize(
@@ -287,12 +386,24 @@ try {
 			),
 		),
 	);
+	const timeoutStartedAt = Date.now();
+	phases.next_round_timeout = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => Number(s.turn?.round_index ?? 0) >= 1 && s.phase !== "cup_shake",
+				9000,
+			),
+		),
+	);
+	phases.next_round_timeout.elapsed_ms = Date.now() - timeoutStartedAt;
 
 	const expectations = {
 		reload: { position_y: -410 },
 		after_reload_clicks: { position_y: 720, phase: "cup_shake", player_bullets: 3 },
 		shake: { position_y: 720 },
 		bidding_local_turn: { position_y: -410 },
+		skull_bid_hit: { position_y: -410, phase: "bidding" },
+		after_skull_reload: { position_y: -410, phase: "bidding" },
 		duel_reveal: { position_y: 720, phase: "duel" },
 		duel_combat: { position_y: 720, phase: "duel" },
 	};
@@ -327,14 +438,62 @@ try {
 		&& Boolean(phases.duel_combat?.duel?.data?.resolution);
 	checks.shake.ok = checks.shake.ok
 		&& Number(phases.shake?.shake_state?.counts?.["local-player"] ?? 0) >= 6
+		&& Number(phases.shake?.shake?.gauge ?? 0) === 100
+		&& phases.shake?.shake?.submitted === true
+		&& Number(phases.shake_gauge_initial?.shake?.gauge ?? 0) >= 20
+		&& Number(phases.shake_gauge_decay?.shake?.gauge ?? 0)
+			< Number(phases.shake_gauge_initial?.shake?.gauge ?? 0)
+		&& phases.shake?.carousel?.visible === false
 		&& phases.shake?.players
 			?.filter((player) => player.id !== "local-player" && !player.eliminated)
 			.every((player) => player.actions?.some((action) => action.type === "shake"));
+	checks.bidding_local_turn.ok = checks.bidding_local_turn.ok
+		&& phases.bidding_local_turn?.bid_controls?.visible === true
+		&& phases.bidding_local_turn?.bid_controls?.can_drive === true
+		&& phases.bidding_local_turn?.carousel?.visible === true
+		&& Number(phases.bidding_local_turn?.carousel?.active_position_x) === 0;
+	checks.rail_input = {
+		ok: phases.rail_input?.phase === "bidding"
+			&& phases.rail_input?.turn === "local-player"
+			&& Number(phases.rail_input?.rail?.selected_count) === 2,
+		expected_selected_count: 2,
+		selected_count: phases.rail_input?.rail?.selected_count ?? null,
+		active_player_id: phases.rail_input?.turn ?? null,
+	};
+	checks.skull_bid_hit.ok = checks.skull_bid_hit.ok
+		&& phases.skull_bid_hit?.bidding?.skull_roulette?.player_id === "local-player"
+		&& phases.skull_bid_hit?.bidding?.skull_roulette?.hit === true
+		&& phases.skull_bid_hit?.players?.find((player) => player.id === "local-player")?.hp === 5
+		&& phases.skull_bid_hit?.players?.find((player) => player.id === "local-player")?.bullets === 2;
+	checks.after_skull_reload.ok = checks.after_skull_reload.ok
+		&& phases.after_skull_reload?.players?.find((player) => player.id === "local-player")?.hp === 5
+		&& phases.after_skull_reload?.players?.find((player) => player.id === "local-player")?.bullets === 3
+		&& phases.after_skull_reload?.rail?.visible === true
+		&& phases.after_skull_reload?.bid_controls?.can_drive === false
+		&& phases.after_skull_reload?.bid_controls?.visible === false
+		&& phases.after_skull_reload?.carousel?.active_player_id === "opponent-1"
+		&& Number(phases.after_skull_reload?.carousel?.active_position_x) === 0;
 	checks.next_round = {
 		ok: Number(phases.next_round?.round_index ?? 0) >= 1 && phases.next_round?.phase !== "duel",
 		expected_round_index: 1,
 		phase: phases.next_round?.phase ?? null,
 		round_index: phases.next_round?.round_index ?? null,
+	};
+	checks.shake_timeout = {
+		ok: phases.next_round_timeout?.phase === "revolver_reload"
+			&& Number(phases.next_round_timeout?.elapsed_ms ?? 0) >= 5_500
+			&& phases.next_round_timeout?.players
+				?.filter((player) => !player.eliminated)
+				.every((player) => Number(phases.next_round_timeout?.shake_state?.counts?.[player.id] ?? 0) >= 6),
+		expected_delay_ms: 6_000,
+		elapsed_ms: phases.next_round_timeout?.elapsed_ms ?? null,
+		phase: phases.next_round_timeout?.phase ?? null,
+	};
+	const actionableConsoleErrors = consoleErrors.filter((error) => !error.url.endsWith("/favicon.ico"));
+	checks.console = {
+		ok: actionableConsoleErrors.length === 0,
+		errors: actionableConsoleErrors,
+		ignored: consoleErrors.filter((error) => error.url.endsWith("/favicon.ico")),
 	};
 
 	const summary = {
@@ -342,6 +501,7 @@ try {
 		webgl,
 		phases,
 		checks,
+		consoleErrors,
 		screenshots: shotsDir,
 	};
 	const allOk = Object.values(checks).every((row) => row.ok);

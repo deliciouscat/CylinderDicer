@@ -2,18 +2,108 @@ images {
   image: "/assets/images/dice/default/f1_a0.png"
 }
 images {
+  image: "/assets/images/dice/default/f1_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f1_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f1_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f1_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f1_a5.png"
+}
+images {
   image: "/assets/images/dice/default/f2_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f2_a5.png"
 }
 images {
   image: "/assets/images/dice/default/f3_a0.png"
 }
 images {
+  image: "/assets/images/dice/default/f3_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f3_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f3_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f3_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f3_a5.png"
+}
+images {
   image: "/assets/images/dice/default/f4_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f4_a5.png"
 }
 images {
   image: "/assets/images/dice/default/f5_a0.png"
 }
 images {
+  image: "/assets/images/dice/default/f5_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f5_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f5_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f5_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f5_a5.png"
+}
+images {
   image: "/assets/images/dice/default/f6_a0.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a1.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a2.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a3.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a4.png"
+}
+images {
+  image: "/assets/images/dice/default/f6_a5.png"
 }
 extrude_borders: 2

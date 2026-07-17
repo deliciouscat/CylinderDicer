@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/the-kid/front.png"
+}
+images {
+  image: "/assets/images/characters/the-kid/side.png"
+}
+images {
+  image: "/assets/images/characters/the-kid/damage.png"
+}
+images {
+  image: "/assets/images/characters/the-kid/dying.png"
+}
+images {
+  image: "/assets/images/characters/the-kid/victory.png"
+}
+extrude_borders: 2

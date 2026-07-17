@@ -9,8 +9,15 @@ import LocalPlayScreen from '../play-wrapper/LocalPlayScreen.vue'
 import SignInView from '../views/sign-in.vue'
 import SignUpView from '../views/sign-up.vue'
 
+function ladderMatchIdFromUrl(pathname: string, search: string) {
+  if (pathname !== '/play/ladder') return null
+  return new URLSearchParams(search).get('matchId')
+}
+
 const currentPath = ref(window.location.pathname)
-const ladderHandoffMatchId = ref<string | null>(null)
+const ladderHandoffMatchId = ref<string | null>(
+  ladderMatchIdFromUrl(window.location.pathname, window.location.search),
+)
 const useLocalDefoldSimulator = import.meta.env.VITE_USE_LOCAL_DEFOLD_SIMULATOR === 'true'
 const activeScreen = computed(() => {
   if (currentPath.value === '/play/custom-game') {
@@ -38,20 +45,20 @@ const activeScreen = computed(() => {
 })
 
 function navigate(path: string) {
-  if (path !== '/play/ladder') {
-    ladderHandoffMatchId.value = null
-  }
-  window.history.pushState({}, '', path)
-  currentPath.value = path
+  const target = new URL(path, window.location.origin)
+  ladderHandoffMatchId.value = ladderMatchIdFromUrl(target.pathname, target.search)
+  window.history.pushState({}, '', `${target.pathname}${target.search}`)
+  currentPath.value = target.pathname
 }
 
 function handoffLadderMatch(matchId: string) {
   if (!matchId) return
+  window.history.replaceState({}, '', `/play/ladder?matchId=${encodeURIComponent(matchId)}`)
   ladderHandoffMatchId.value = matchId
 }
 
 window.addEventListener('popstate', () => {
-  ladderHandoffMatchId.value = null
+  ladderHandoffMatchId.value = ladderMatchIdFromUrl(window.location.pathname, window.location.search)
   currentPath.value = window.location.pathname
 })
 </script>

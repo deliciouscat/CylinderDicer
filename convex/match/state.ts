@@ -73,6 +73,12 @@ export interface TurnState {
 export interface BiddingState {
 	currentBid?: BidState
 	recentBids: BidState[]
+	skullRoulette?: SkullRouletteState
+	deferredLoad?: PendingLoadState
+	reloadGate?: {
+		countdownSeconds: number
+		epoch: number
+	}
 	myBid: {
 		count: number
 		face: number
@@ -82,6 +88,17 @@ export interface BiddingState {
 		windowStart: number
 		windowSize: number
 	}
+}
+
+export interface SkullRouletteState {
+	playerId: string
+	spinSteps: number
+	hit: boolean
+	slotIndex: number
+	consumed: boolean
+	hpBefore: number
+	hpAfter: number
+	sequence: number
 }
 
 export interface FlowState {
@@ -205,14 +222,26 @@ export interface CreateInitialStateInput {
 		virtualOpponentId?: string
 		participantKind?: 'human' | 'virtual'
 		name: string
+		skin?: string
+		portraitState?: string
 		hp?: number
 		diceCount?: number
 		initialLoadedSlots?: number[]
 	}>
 }
 
+export const DEFAULT_PLAYER_SKINS = [
+	'rosemund',
+	'hush-feather',
+	'samuel-saber',
+	'zippo-jay',
+	'calamity-kate',
+	'the-kid',
+] as const
+
 export const SHAKE_REQUIRED_COUNT = 6
 export const DICE_CHECK_DELAY_SECONDS = 3
+export const BID_RELOAD_COUNTDOWN_SECONDS = 3
 
 export function createCylinder(size = 6): CylinderState {
 	return {
@@ -230,7 +259,7 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 	const playersById: Record<string, PlayerState> = {}
 	const order: string[] = []
 
-	for (const player of input.players) {
+	for (const [playerIndex, player] of input.players.entries()) {
 		const cylinder = createCylinder(6)
 		for (const slotIndex of player.initialLoadedSlots ?? []) {
 			if (slotIndex >= 1 && slotIndex <= cylinder.slots.length) {
@@ -244,15 +273,15 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 			virtualOpponentId: player.virtualOpponentId,
 			participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
 			name: player.name || player.id,
-			hp: player.hp ?? 3,
+			hp: player.hp ?? 6,
 			bullets: cylinder.slots.filter(Boolean).length,
 			diceCount: player.diceCount ?? 5,
 			dice: [],
 			cylinder,
-			eliminated: (player.hp ?? 3) <= 0,
+			eliminated: (player.hp ?? 6) <= 0,
 			isLocal: player.id === localPlayerId,
-			skin: 'default',
-			portraitState: 'front',
+			skin: player.skin ?? DEFAULT_PLAYER_SKINS[playerIndex % DEFAULT_PLAYER_SKINS.length],
+			portraitState: player.portraitState ?? 'front',
 		}
 
 		order.push(normalized.id)

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/vue'
+import { computed } from 'vue'
 import lobbyConfig from '../config/lobby.config.json'
 import { assetLoader } from '../assets/assetLoader'
-import { t } from '../i18n'
+import DropdownButton, { type DropdownOption } from '../components/ui/DropdownButton.vue'
+import { activeLocale, setLocale, t, type LocaleCode } from '../i18n'
 
 type MenuEntry = {
   id: string
@@ -14,11 +16,22 @@ const emit = defineEmits<{
   navigate: [url: string]
 }>()
 
-const menuItems: MenuEntry[] = Object.entries(lobbyConfig.menu).map(([id, entry]) => ({
+const menuItems = computed<MenuEntry[]>(() => Object.entries(lobbyConfig.menu).map(([id, entry]) => ({
   id,
   url: entry.url,
   label: t(entry.labelKey),
-}))
+})))
+
+const localeOptions = computed<DropdownOption[]>(() => [
+  { label: t('lobby.locales.en'), value: 'en' },
+  { label: t('lobby.locales.ko'), value: 'ko' },
+  { label: t('lobby.locales.ja'), value: 'ja' },
+])
+
+const selectedLocale = computed({
+  get: () => activeLocale.value,
+  set: (value: string) => setLocale(value as LocaleCode),
+})
 
 const backgroundAsset = assetLoader('background-lobby')
 const menuPanelAsset = assetLoader('menu-panel')
@@ -47,12 +60,18 @@ function openMenuItem(item: MenuEntry) {
   <main class="lobby-screen" :style="lobbyStyles" :aria-label="t('lobby.screenLabel')">
     <div class="lobby-background" aria-hidden="true" />
     <div class="lobby-auth">
+      <DropdownButton
+        v-model="selectedLocale"
+        class="lobby-locale"
+        :options="localeOptions"
+        :aria-label="t('lobby.localeLabel')"
+      />
       <Show when="signed-out">
         <SignInButton mode="modal">
-          <button class="lobby-auth__button" type="button">Sign in</button>
+          <button class="lobby-auth__button" type="button">{{ t('lobby.signIn') }}</button>
         </SignInButton>
         <SignUpButton mode="modal">
-          <button class="lobby-auth__button lobby-auth__button--primary" type="button">Sign up</button>
+          <button class="lobby-auth__button lobby-auth__button--primary" type="button">{{ t('lobby.signUp') }}</button>
         </SignUpButton>
       </Show>
       <Show when="signed-in">

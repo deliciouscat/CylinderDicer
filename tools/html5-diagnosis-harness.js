@@ -80,10 +80,10 @@
         locale: 'ko',
         localSimulator: true,
         players: [
-          { id: 'local-player', name: 'You', hp: 3, dice_count: 5, skin: 'rosemund' },
-          { id: 'opponent-1', name: 'Hush Feather', hp: 3, dice_count: 5, skin: 'hush-feather', initial_loaded_slots: [1, 3, 5] },
-          { id: 'opponent-2', name: 'Samuel Saber', hp: 3, dice_count: 5, skin: 'samuel-saber', initial_loaded_slots: [1, 3, 5] },
-          { id: 'opponent-3', name: 'Zippo Jay', hp: 3, dice_count: 5, skin: 'zippo-jay', initial_loaded_slots: [1, 3, 5] },
+          { id: 'local-player', name: 'You', hp: 6, dice_count: 5, skin: 'rosemund' },
+          { id: 'opponent-1', name: 'Hush Feather', hp: 6, dice_count: 5, skin: 'hush-feather', initial_loaded_slots: [1, 3, 5] },
+          { id: 'opponent-2', name: 'Samuel Saber', hp: 6, dice_count: 5, skin: 'samuel-saber', initial_loaded_slots: [1, 3, 5] },
+          { id: 'opponent-3', name: 'Zippo Jay', hp: 6, dice_count: 5, skin: 'zippo-jay', initial_loaded_slots: [1, 3, 5] },
         ],
       },
     });
@@ -101,6 +101,7 @@
       round_index: snap.turn && snap.turn.round_index,
       background: snap.visual && snap.visual.background,
       rail: snap.visual && snap.visual.rail,
+      bidding: snap.bidding,
       bid_controls: snap.visual && snap.visual.bid_controls,
       shake: snap.visual && snap.visual.shake,
       duel: {
@@ -115,6 +116,7 @@
       players: (snap.players || []).map((player) => ({
         id: player.id,
         hp: player.hp,
+        bullets: player.bullets,
         eliminated: player.eliminated,
         actions: player.available_actions,
       })),

@@ -22,7 +22,8 @@ M.types = {
     MATCH_INIT         = "match.init",
     COSMETICS_APPLY    = "cosmetics.apply",
     SETUP_LOAD_INITIAL = "setup.load_initial",
-    SHAKE_ROLL         = "shake.roll",
+    SHAKE_COMPLETE     = "shake.complete",
+    SHAKE_TIMEOUT      = "shake.timeout",
     DICE_CHECK         = "dice.check",
     BIDDING_OPEN       = "bidding.open",
     BULLET_LOAD        = "bullet.load",
@@ -40,7 +41,8 @@ local function action(type_, payload) return { type = type_, payload = payload o
 
 function M.match_init(payload)        return action(M.types.MATCH_INIT, payload) end
 function M.cosmetics_apply(cos)       return action(M.types.COSMETICS_APPLY, { cosmetics = cos }) end
-function M.shake_roll(player_id, rng) return action(M.types.SHAKE_ROLL, { player_id = player_id, rng = rng }) end -- shake 입력 1회
+function M.shake_complete(player_id, rng) return action(M.types.SHAKE_COMPLETE, { player_id = player_id, rng = rng }) end
+function M.shake_timeout(rng) return action(M.types.SHAKE_TIMEOUT, { rng = rng }) end
 function M.dice_check(player_id)      return action(M.types.DICE_CHECK, { player_id = player_id }) end
 function M.bidding_open()             return action(M.types.BIDDING_OPEN) end
 function M.bullet_load(slot_index)    return action(M.types.BULLET_LOAD, { slot_index = slot_index }) end

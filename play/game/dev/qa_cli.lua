@@ -146,17 +146,7 @@ local function qa_shake(self, count, actor_id)
 	if not is_alive(state.players.by_id[player_id]) then
 		return false, "unknown_player"
 	end
-	local current = ((state.shake and state.shake.counts) or {})[player_id] or 0
-	local required = (state.shake and state.shake.required_count) or 6
-	local repeat_count = count or math.max(1, required - current)
-
-	for _ = 1, repeat_count do
-		local ok, err = dispatch(self, actions.shake_roll(player_id))
-		if not ok then
-			return false, err
-		end
-	end
-	return true, nil
+	return dispatch(self, actions.shake_complete(player_id))
 end
 
 local function qa_shake_all(self)
@@ -196,7 +186,7 @@ local function qa_check_all(self)
 	return true, nil
 end
 
-local function qa_bid(self, count, face, actor_id)
+local function qa_bid(self, count, face, actor_id, spin_steps)
 	local state = self.store:get_state()
 	if actor_id and actor_id ~= state.turn.active_player_id then
 		return false, "wrong_active_player"
@@ -206,7 +196,11 @@ local function qa_bid(self, count, face, actor_id)
 		count = count or state.bidding.my_bid.count,
 		face = face or state.bidding.my_bid.face,
 	}
-	return dispatch(self, actions.bid_raise(bid))
+	local bid_action = actions.bid_raise(bid)
+	if face == 1 and spin_steps then
+		bid_action.payload.spin_steps = math.max(1, math.min(6, math.floor(spin_steps)))
+	end
+	return dispatch(self, bid_action)
 end
 
 local function qa_advance(self)
@@ -296,7 +290,7 @@ local function available_actions(state, player_id)
 		if is_alive(player) and not shake.complete then
 			result[#result + 1] = {
 				type = "shake",
-				remaining = math.max(0, shake.required - shake.count),
+				remaining = 1,
 			}
 		end
 	elseif phase == "dice_check" then
@@ -309,6 +303,9 @@ local function available_actions(state, player_id)
 	elseif phase == "bidding_gap" then
 		result[#result + 1] = { type = "open" }
 	elseif phase == "bidding" then
+		if state.bidding.reload_gate then
+			return result
+		end
 		result[#result + 1] = {
 			type = "bid",
 			min_count = 1,
@@ -317,7 +314,7 @@ local function available_actions(state, player_id)
 			max_face = 6,
 			suggested = suggested_bid(state),
 		}
-		if state.bidding.current_bid then
+		if not pending and state.bidding.current_bid then
 			result[#result + 1] = { type = "challenge" }
 		end
 	elseif phase == "duel" then
@@ -377,6 +374,7 @@ function M.status_snapshot(state)
 		bidding = {
 			current_bid = state.bidding.current_bid,
 			suggested_bid = suggested_bid(state),
+			skull_roulette = state.bidding.skull_roulette,
 		},
 		pending_load = state.pending_load,
 		shake = state.shake,
@@ -473,7 +471,13 @@ local function process_json_command(self, command)
 		end
 		return dispatch(self, actions.bidding_open())
 	elseif action == "bid" then
-		return qa_bid(self, number_or_nil(payload.count), number_or_nil(payload.face), actor_id)
+		return qa_bid(
+			self,
+			number_or_nil(payload.count),
+			number_or_nil(payload.face),
+			actor_id,
+			number_or_nil(payload.spin_steps)
+		)
 	elseif action == "challenge" then
 		if actor_id ~= state.turn.active_player_id then
 			return false, "wrong_active_player"

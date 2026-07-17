@@ -6,6 +6,7 @@ local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 local local_permissions = require("ui.common.local_permissions")
+local dice_art = require("ui.common.dice_art")
 local visual_status = require("game.dev.visual_status")
 
 local ACTION_FACE_UP = hash("face_up")
@@ -21,6 +22,12 @@ local function render(self, state)
 	self.can_pass = self.can_drive and selectors.is_my_bid_valid(state)
 	self.can_challenge = self.can_drive and selectors.has_previous_bid(state)
 
+	gui_util.set_enabled("root", self.can_drive)
+	gui_util.set_text("pass_label", i18n.t("action.pass"))
+	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
+	gui_util.play_flipbook("pass_die", dice_art.bid_animation(bid.face))
+	gui_util.set_text("pass_enabled", self.can_pass and "enabled" or "disabled")
+	gui_util.set_text("challenge_enabled", self.can_challenge and "enabled" or "disabled")
 	visual_status.set("bid_controls", {
 		phase = selectors.phase(state),
 		hud = selectors.hud_kind(state),
@@ -31,16 +38,6 @@ local function render(self, state)
 		active_player_id = state.turn.active_player_id,
 		local_player_id = state.match.local_player_id,
 	})
-	gui_util.set_enabled("root", self.can_drive)
-	gui_util.set_text("pass_label", i18n.t("action.pass"))
-	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
-	gui_util.set_text("bid_value", bid.face)
-	gui_util.set_text("face_hint", i18n.t("bid.count_face", {
-		count = bid.count,
-		face = bid.face,
-	}))
-	gui_util.set_text("pass_enabled", self.can_pass and "enabled" or "disabled")
-	gui_util.set_text("challenge_enabled", self.can_challenge and "enabled" or "disabled")
 end
 
 local function request_render(self)
@@ -179,6 +176,8 @@ function on_message(self, message_id, message)
 		gui_util.set_enabled("root", false)
 	elseif message_id == hash("command") then
 		handle_command(self, message.command)
+	elseif message_id == hash("locale_changed") then
+		request_render(self)
 	end
 end
 

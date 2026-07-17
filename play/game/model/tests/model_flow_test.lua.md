@@ -36,7 +36,7 @@ function M.run(t)
     s = apply(s, actions.match_init(MOCK_2P)).state          -- 결정적 mock match
 
     -- first shake -> bidding, 추가 장전 없음
-    s = apply(s, actions.shake_roll("p1", FIXED_RNG)).state
+    s = apply(s, actions.shake_complete("p1", FIXED_RNG)).state
     t.eq(s.turn.kind, "bidding", "first shake -> bidding")
     t.eq(s.pending_load, nil, "first shake has no pending load")
 
@@ -59,4 +59,3 @@ end
 
 return M
 ```
-

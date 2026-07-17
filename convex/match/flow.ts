@@ -2,6 +2,8 @@ import type { AutomaticMatchCommandType } from '../protocol/commands'
 import type { MatchState } from './state'
 
 export const BIDDING_OPEN_DELAY_MS = 3_000
+export const SHAKE_TIMEOUT_MS = 6_000
+export const BID_RELOAD_TIMEOUT_MS = 3_000
 export const DUEL_REVEAL_INTERVAL_MS = 160
 export const DUEL_REVEAL_DURATION_MS = 340
 export const DUEL_REVEAL_HOLD_MS = 3_000
@@ -54,9 +56,19 @@ export function automaticTransitionFor(state: MatchState): AutomaticTransition |
 	let type: AutomaticMatchCommandType | undefined
 	let delayMs = 0
 
-	if (state.flow.phase === 'bidding_gap') {
+	if (state.flow.phase === 'cup_shake') {
+		type = 'shake.timeout'
+		delayMs = SHAKE_TIMEOUT_MS
+	} else if (state.flow.phase === 'bidding_gap') {
 		type = 'bidding.open'
 		delayMs = BIDDING_OPEN_DELAY_MS
+	} else if (
+		state.flow.phase === 'bidding' &&
+		state.pendingLoad?.source === 'bid' &&
+		state.bidding.reloadGate
+	) {
+		type = 'bid.reload_timeout'
+		delayMs = BID_RELOAD_TIMEOUT_MS
 	} else if (state.flow.phase === 'duel' && state.duel?.phase === 'ready' && !state.duel.resolution) {
 		type = 'duel.execute'
 		delayMs = duelRevealDelayMs(state)
@@ -86,5 +98,5 @@ export function matchesAutomaticTransition(
 	return current?.type === expected.type
 		&& current.expectedPhase === expected.expectedPhase
 		&& current.expectedEpoch === expected.expectedEpoch
-		&& current.expectedRevision === expected.expectedRevision
+		&& (expected.type === 'shake.timeout' || current.expectedRevision === expected.expectedRevision)
 }

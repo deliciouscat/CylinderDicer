@@ -10,9 +10,13 @@ local DEFAULT_LOCALES = {
 		["turn.duel"] = "Duel",
 		["turn.shake"] = "Shake",
 		["turn.reload"] = "Reload",
+		["turn.reload_countdown"] = "Reload · {seconds}",
 		["turn.loading"] = "{name} reloading...",
 		["action.pass"] = "Pass",
 		["action.challenge"] = "Challenge",
+		["player.marker.mine"] = "Your turn",
+		["player.marker.active"] = "Current turn",
+		["player.marker.previous"] = "Previous turn",
 		["bid.count_face"] = "{count} x {face}",
 		["duel.verdict.SHORT"] = "Short",
 		["duel.verdict.OVER"] = "Over",
@@ -35,7 +39,7 @@ local DEFAULT_LOCALES = {
 		["hud.hint.shaking"] = "Shake to roll your dice.",
 		["hud.hint.dice_check"] = "Check your dice, then press Space.",
 		["hud.hint.bidding_soon"] = "Bidding starts soon.",
-		["hud.hint.bidding"] = "Drag the rail to set the count, pick a die face, then choose 'Pass' or 'Challenge'.",
+		["hud.hint.bidding"] = "Set the count and face, then Pass or Challenge. A Skull bid triggers your own revolver first.",
 		["hud.hint.duel"] = "Duel in progress.",
 		["hud.hint.complete"] = "Match complete.",
 		["hud.hint.control.pc"] = "PC: drag / arrows / scroll",
@@ -60,9 +64,13 @@ local DEFAULT_LOCALES = {
 		["turn.duel"] = "결투",
 		["turn.shake"] = "흔들기",
 		["turn.reload"] = "장전",
+		["turn.reload_countdown"] = "RELOAD · {seconds}",
 		["turn.loading"] = "{name} 장전 중...",
 		["action.pass"] = "넘기기",
 		["action.challenge"] = "결투신청",
+		["player.marker.mine"] = "내 턴",
+		["player.marker.active"] = "현재 턴",
+		["player.marker.previous"] = "전 턴",
 		["bid.count_face"] = "{count}개 · {face}",
 		["duel.verdict.SHORT"] = "부족",
 		["duel.verdict.OVER"] = "초과",
@@ -85,7 +93,7 @@ local DEFAULT_LOCALES = {
 		["hud.hint.shaking"] = "흔들어서 주사위를 굴리세요.",
 		["hud.hint.dice_check"] = "내 주사위를 확인한 뒤 Space를 누르세요.",
 		["hud.hint.bidding_soon"] = "잠시 후 입찰을 시작합니다.",
-		["hud.hint.bidding"] = "레일을 드래그하여 개수를 선택하고, 주사위 면을 선택한 후 '넘기기' 또는 '결투신청'을 선택하세요.",
+		["hud.hint.bidding"] = "개수와 주사위 면을 선택한 뒤 넘기기 또는 결투신청을 선택하세요. Skull 입찰은 먼저 본인 총을 격발합니다.",
 		["hud.hint.duel"] = "결투 진행 중입니다.",
 		["hud.hint.complete"] = "매치가 끝났습니다.",
 		["hud.hint.control.pc"] = "PC 조작: 드래그 · ←→ · 스크롤",
@@ -110,9 +118,13 @@ local DEFAULT_LOCALES = {
 		["turn.duel"] = "決闘",
 		["turn.shake"] = "シェイク",
 		["turn.reload"] = "リロード",
+		["turn.reload_countdown"] = "RELOAD · {seconds}",
 		["turn.loading"] = "{name} がリロード中...",
 		["action.pass"] = "パス",
 		["action.challenge"] = "決闘を申し込む",
+		["player.marker.mine"] = "自分のターン",
+		["player.marker.active"] = "現在のターン",
+		["player.marker.previous"] = "前のターン",
 		["bid.count_face"] = "{count}個 · {face}",
 		["duel.verdict.SHORT"] = "不足",
 		["duel.verdict.OVER"] = "超過",
@@ -135,7 +147,7 @@ local DEFAULT_LOCALES = {
 		["hud.hint.shaking"] = "振ってサイコロを振ってください。",
 		["hud.hint.dice_check"] = "自分のサイコロを確認してからSpaceを押してください。",
 		["hud.hint.bidding_soon"] = "まもなくビッドを開始します。",
-		["hud.hint.bidding"] = "レールをドラッグして個数を選び、サイコロの目を選んでから「パス」または「決闘を申し込む」を選んでください。",
+		["hud.hint.bidding"] = "個数と目を選び、パスまたは決闘を選んでください。Skullビッドでは先に自分の銃を1回撃ちます。",
 		["hud.hint.duel"] = "決闘中です。",
 		["hud.hint.complete"] = "マッチ完了。",
 		["hud.hint.control.pc"] = "PC操作: ドラッグ / ←→ / スクロール",
@@ -227,8 +239,16 @@ local function load_locale(locale)
 end
 
 function M.set_locale(locale)
-	current = locale or "ko"
+	if type(locale) ~= "string" or not DEFAULT_LOCALES[locale] then
+		return false
+	end
+	current = locale
 	cache[current] = cache[current] or load_locale(current)
+	return true
+end
+
+function M.is_supported(locale)
+	return type(locale) == "string" and DEFAULT_LOCALES[locale] ~= nil
 end
 
 function M.get_locale()

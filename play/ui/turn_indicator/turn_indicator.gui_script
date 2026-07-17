@@ -3,9 +3,15 @@ local selectors = require("game.model.selectors")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 
-local function label_for_state(state)
+local function label_for_state(self, state)
 	local phase = selectors.phase(state)
-	if phase == "revolver_reload" then
+	local hud = selectors.hud_kind(state)
+	if hud == "revolver_reload" then
+		if state.bidding and state.bidding.reload_gate and selectors.is_local_pending_load(state) then
+			return i18n.t("turn.reload_countdown", {
+				seconds = math.max(0, math.ceil(self.reload_countdown or 0)),
+			})
+		end
 		if not selectors.is_local_pending_load(state) then
 			local pending = state.pending_load
 			local player = pending and state.players.by_id[pending.player_id]
@@ -14,6 +20,13 @@ local function label_for_state(state)
 			})
 		end
 		return i18n.t("turn.reload")
+	end
+	if hud == "loading" then
+		local pending = state.pending_load
+		local player = pending and state.players.by_id[pending.player_id]
+		return i18n.t("turn.loading", {
+			name = player and (player.name or player.id) or i18n.t("turn.opponent"),
+		})
 	end
 	if phase == "cup_shake" or phase == "dice_check" or phase == "bidding_gap" then
 		return i18n.t("turn.shake")
@@ -32,7 +45,15 @@ local function label_for_state(state)
 end
 
 local function render(self, state)
-	gui_util.set_text("label", label_for_state(state))
+	local gate = state.bidding and state.bidding.reload_gate
+	if gate and gate.epoch ~= self.reload_gate_epoch then
+		self.reload_gate_epoch = gate.epoch
+		self.reload_countdown = gate.countdown_seconds or 3
+	elseif not gate then
+		self.reload_gate_epoch = nil
+		self.reload_countdown = nil
+	end
+	gui_util.set_text("label", label_for_state(self, state))
 end
 
 local function request_render(self)
@@ -48,7 +69,7 @@ local function bind_store(self)
 		return false
 	end
 
-	for _, topic in ipairs({ "turn", "players", "flow", "ui" }) do
+	for _, topic in ipairs({ "turn", "players", "flow", "bidding", "ui" }) do
 		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
 			request_render(self)
 		end)
@@ -62,6 +83,8 @@ function init(self)
 	self.store = nil
 	self.subs = {}
 	self.needs_render = false
+	self.reload_gate_epoch = nil
+	self.reload_countdown = nil
 	gui.set_render_order(6)
 
 	bind_store(self)
@@ -75,6 +98,10 @@ function update(self, dt)
 		self.needs_render = false
 		render(self, self.store:get_state())
 	end
+	if self.reload_countdown and self.reload_countdown > 0 and self.store then
+		self.reload_countdown = math.max(0, self.reload_countdown - dt)
+		gui_util.set_text("label", label_for_state(self, self.store:get_state()))
+	end
 end
 
 function on_message(self, message_id)
@@ -84,6 +111,8 @@ function on_message(self, message_id)
 		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
+	elseif message_id == hash("locale_changed") then
+		request_render(self)
 	end
 end
 

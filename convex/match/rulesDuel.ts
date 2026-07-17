@@ -29,8 +29,8 @@
  *   else EXACT
  *
  * resolveDuel:
- *   SHORT -> challenger roulette delta times
- *   OVER -> previous bidder roulette delta times
+ *   SHORT -> challenger shoots previous bidder delta times
+ *   OVER -> previous bidder shoots challenger delta times
  *   EXACT -> previous bidder executes perfect duel sequence
  *   return ordered steps and next state patch
  * ```
@@ -152,20 +152,23 @@ export function spinDuelRevolver(
 }
 
 function resolveDuelShots(state: MatchState, duel: DuelState): DuelResolutionState {
-	const targetId = duel.judge.verdict === 'SHORT' ? duel.challengerId : duel.previousBidderId
+	const shooterId = duel.judge.verdict === 'SHORT' ? duel.challengerId : duel.previousBidderId
+	const targetId = duel.judge.verdict === 'SHORT' ? duel.previousBidderId : duel.challengerId
+	const shooter = state.players.byId[shooterId]
 	const target = state.players.byId[targetId]
 	const steps: DuelResolutionState['steps'] = []
 	const hpChanges: Record<string, number> = {}
 
-	if (target) {
-		const result = triggerCylinder(target.cylinder, duel.judge.delta)
-		target.cylinder = result.cylinder
+	if (shooter && target) {
+		const result = triggerCylinder(shooter.cylinder, duel.judge.delta)
+		shooter.cylinder = result.cylinder
 
 		for (const shot of result.shots) {
 			steps.push({
 				kind: 'roulette',
+				shooterId,
 				targetId,
-				rouletteSubjectId: targetId,
+				rouletteSubjectId: shooterId,
 				hit: shot.hit,
 				slotIndex: shot.slotIndex,
 				consumed: shot.consumed,
@@ -182,8 +185,9 @@ function resolveDuelShots(state: MatchState, duel: DuelState): DuelResolutionSta
 		verdict: duel.judge.verdict,
 		challengerId: duel.challengerId,
 		previousBidderId: duel.previousBidderId,
+		shooterId,
 		targetId,
-		rouletteSubjectId: targetId,
+		rouletteSubjectId: shooterId,
 		steps,
 		hpChanges,
 	}

@@ -1,0 +1,16 @@
+images {
+  image: "/assets/images/characters/calamity-kate/front.png"
+}
+images {
+  image: "/assets/images/characters/calamity-kate/side.png"
+}
+images {
+  image: "/assets/images/characters/calamity-kate/damage.png"
+}
+images {
+  image: "/assets/images/characters/calamity-kate/dying.png"
+}
+images {
+  image: "/assets/images/characters/calamity-kate/victory.png"
+}
+extrude_borders: 2

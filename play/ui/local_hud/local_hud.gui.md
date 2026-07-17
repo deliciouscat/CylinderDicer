@@ -3,6 +3,8 @@
 
 # 의존성
 - `local_hud.gui_script`
+
+로컬 HP와 탄환은 carousel과 동일한 status indicator icon 위 숫자로 표시한다. `HP` / `B` 텍스트 label을 추가하지 않는다.
 - `ui/common/dice_face.gui`
 - `ui/common/badge.gui`
 - `assets/images/characters/*`
@@ -26,4 +28,3 @@ root (box, layout = horizontal)
 │  └─ dice_tray (box) -> dice_face 템플릿들   # 굴림 결과(1=skull)
 └─ cylinder_anchor (box, 비가시)       # anchors.register("hud", here)
 ```
-

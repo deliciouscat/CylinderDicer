@@ -4,9 +4,11 @@ M.types = {
 	MATCH_INIT = "match.init",
 	COSMETICS_APPLY = "cosmetics.apply",
 	SETUP_LOAD_INITIAL = "setup.load_initial",
-	SHAKE_ROLL = "shake.roll",
+	SHAKE_COMPLETE = "shake.complete",
+	SHAKE_TIMEOUT = "shake.timeout",
 	DICE_CHECK = "dice.check",
 	BIDDING_OPEN = "bidding.open",
+	BID_RELOAD_TIMEOUT = "bid.reload_timeout",
 	BULLET_LOAD = "bullet.load",
 	BID_SELECT_COUNT = "bid.select_count",
 	BID_SELECT_FACE = "bid.select_face",
@@ -52,11 +54,15 @@ function M.setup_load_initial(player_id, slot_index)
 	})
 end
 
-function M.shake_roll(player_id, rng)
-	return action(M.types.SHAKE_ROLL, {
+function M.shake_complete(player_id, rng)
+	return action(M.types.SHAKE_COMPLETE, {
 		player_id = player_id,
 		rng = rng,
 	})
+end
+
+function M.shake_timeout(rng)
+	return action(M.types.SHAKE_TIMEOUT, { rng = rng })
 end
 
 function M.dice_check(player_id)
@@ -67,6 +73,10 @@ end
 
 function M.bidding_open()
 	return action(M.types.BIDDING_OPEN)
+end
+
+function M.bid_reload_timeout()
+	return action(M.types.BID_RELOAD_TIMEOUT)
 end
 
 function M.bullet_load(slot_index, player_id)
@@ -84,8 +94,12 @@ function M.bid_select_face(face)
 	return action(M.types.BID_SELECT_FACE, { face = face })
 end
 
-function M.bid_raise(bid)
-	return action(M.types.BID_RAISE, { bid = bid })
+function M.bid_raise(bid, rng)
+	local payload = { bid = bid }
+	if bid and bid.face == 1 then
+		payload.spin_steps = random_int(rng, 1, 6)
+	end
+	return action(M.types.BID_RAISE, payload)
 end
 
 function M.bid_challenge(rng)

@@ -14,14 +14,14 @@ local function mock_players(local_player_id)
 		{
 			id = local_player_id,
 			name = "You",
-			hp = 3,
+			hp = 6,
 			dice_count = 5,
 			skin = "rosemund",
 		},
 		{
 			id = "opponent-1",
 			name = "Hush Feather",
-			hp = 3,
+			hp = 6,
 			dice_count = 5,
 			skin = "hush-feather",
 			initial_loaded_slots = { 1, 3, 5 },
@@ -29,7 +29,7 @@ local function mock_players(local_player_id)
 		{
 			id = "opponent-2",
 			name = "Samuel Saber",
-			hp = 3,
+			hp = 6,
 			dice_count = 5,
 			skin = "samuel-saber",
 			initial_loaded_slots = { 1, 3, 5 },
@@ -37,7 +37,7 @@ local function mock_players(local_player_id)
 		{
 			id = "opponent-3",
 			name = "Zippo Jay",
-			hp = 3,
+			hp = 6,
 			dice_count = 5,
 			skin = "zippo-jay",
 			initial_loaded_slots = { 1, 3, 5 },

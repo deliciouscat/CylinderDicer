@@ -7,6 +7,17 @@ local match_adapter = require("game.net.match_adapter")
 local i18n = require("game.core.i18n")
 local qa_cli = require("game.dev.qa_cli")
 
+local LOCALE_TARGETS = {
+	"/ui#turn_indicator",
+	"/ui#shake",
+	"/ui#local_hud",
+	"/ui#player_carousel",
+	"/ui#bid_controls",
+	"/ui#rail",
+	"/ui#duel",
+	"/cylinder#cylinder_gui",
+}
+
 local function submit_result_once(self)
 	if self.result_submitted or not self.adapter then
 		return
@@ -37,6 +48,26 @@ local function try_handle_dom_pointer(message)
 	end
 
 	msg.post("/cylinder#cylinder", "pointer_input", message.payload or {})
+	return true
+end
+
+local function try_handle_locale_message(message)
+	if message.type ~= "SET_LOCALE" then
+		return false
+	end
+
+	local payload = message.payload or {}
+	local applied = i18n.set_locale(payload.locale)
+	if applied then
+		for _, target in ipairs(LOCALE_TARGETS) do
+			msg.post(target, "locale_changed")
+		end
+	end
+
+	bridge.emit("LOCALE_APPLIED", {
+		locale = i18n.get_locale(),
+		applied = applied,
+	})
 	return true
 end
 
@@ -109,7 +140,9 @@ function update(self, dt)
 			break
 		end
 
-		if not try_handle_dom_pointer(message) and not try_handle_qa_message(self, message) then
+		if not try_handle_locale_message(message)
+			and not try_handle_dom_pointer(message)
+			and not try_handle_qa_message(self, message) then
 			self.adapter:on_bridge_message(message)
 		end
 	end

@@ -25,7 +25,7 @@
  * ```
  */
 import type { MatchPrivateDelta, MatchPublicSnapshot } from '../protocol/snapshots'
-import type { MatchState } from './state'
+import { DEFAULT_PLAYER_SKINS, type MatchState, type PlayerState } from './state'
 import { deriveAvailableActions } from './capabilities'
 import { suggestedBid } from './rulesBidding'
 
@@ -39,9 +39,20 @@ const HUD_BY_PHASE: Record<string, string> = {
 	complete: 'complete',
 }
 
+function displaySkin(state: MatchState, player: Pick<PlayerState, 'id' | 'skin'>): string {
+	if (player.skin && player.skin !== 'default') {
+		return player.skin
+	}
+	const playerIndex = Math.max(0, state.players.order.indexOf(player.id))
+	return DEFAULT_PLAYER_SKINS[playerIndex % DEFAULT_PLAYER_SKINS.length]
+}
+
 function publicDuelPlayers(state: MatchState) {
 	if (state.duel?.players && state.duel.players.length > 0) {
-		return state.duel.players
+		return state.duel.players.map((player) => ({
+			...player,
+			skin: displaySkin(state, player),
+		}))
 	}
 
 	return state.players.order.map((id) => {
@@ -54,6 +65,15 @@ function publicDuelPlayers(state: MatchState) {
 }
 
 export function hudKind(state: MatchState, viewerPlayerId?: string): string {
+	if (
+		state.flow.phase === 'bidding' &&
+		state.pendingLoad?.source === 'bid'
+	) {
+		if (viewerPlayerId && state.pendingLoad.playerId === viewerPlayerId) {
+			return 'revolver_reload'
+		}
+		return state.bidding.reloadGate ? 'loading' : 'bidding'
+	}
 	if (
 		state.flow.phase === 'revolver_reload' &&
 		state.pendingLoad &&
@@ -97,6 +117,8 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 				hp: player.hp,
 				bullets: player.bullets,
 				eliminated: player.eliminated,
+				skin: displaySkin(state, player),
+				portraitState: player.portraitState,
 				isActive: state.turn.activePlayerId === id,
 				isLocal: player.isLocal,
 			}
@@ -104,6 +126,8 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 		bidding: {
 			currentBid: state.bidding.currentBid,
 			suggestedBid: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
+			skullRoulette: state.bidding.skullRoulette,
+			reloadGate: state.bidding.reloadGate,
 		},
 		pendingLoad: state.pendingLoad
 			? {

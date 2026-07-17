@@ -12,7 +12,9 @@
 - 출력:
   - portrait slots.
   - HP/bullet badges.
-  - active/dimmed visual state.
+- active/dimmed visual state.
+
+`bidding`에서는 turn banner가 최상단을 독점한다. authoritative active player의 `slot*_body`를 정확한 가로 중앙에, previous player의 `slot*_body`를 바로 왼쪽에 배치한다. `slot*_body`가 portrait의 위치·크기·진동 기준이며 삭제된 구형 `slot*_head` placeholder는 사용하지 않는다. HP/bullet badge는 banner 아래 safe area에 배치하고, badge가 이미 표현하는 HP/탄환을 별도의 텍스트 행으로 반복하지 않는다.
 
 # 의사코드
 ```text
@@ -23,4 +25,3 @@ root (box, layout = horizontal SPACE_BETWEEN)
    ├─ badge_hp     -> template: ui/common/badge.gui
    └─ badge_bullets-> template: ui/common/badge.gui
 ```
-

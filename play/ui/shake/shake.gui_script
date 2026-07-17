@@ -5,6 +5,9 @@ local server_command = require("game.net.server_command")
 local gestures = require("game.core.gestures")
 local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local dice_art = require("ui.common.dice_art")
+local shake_gauge = require("ui.shake.shake_gauge")
+local i18n = require("game.core.i18n")
 local visual_status = require("game.dev.visual_status")
 
 local MAX_OPPONENTS = 5
@@ -14,7 +17,6 @@ local LOCAL_CUP_CLOSED_Y = 8.0
 local LOCAL_CUP_REVEAL_Y = 48.0
 local CUP_WIDTH = 220.0
 local CUP_HEIGHT = 248.0
-
 local PHASE_CUP_SHAKE = "cup_shake"
 local PHASE_DICE_CHECK = "dice_check"
 local PHASE_BIDDING_GAP = "bidding_gap"
@@ -44,12 +46,17 @@ local function set_dice_visible(visible)
 	end
 end
 
-local function render_dice(player)
+local function render_dice(player, round_index)
 	for index = 1, DICE_COUNT do
 		local face = player and player.dice and player.dice[index]
-		local animation = "f" .. tostring(face or 1) .. "_a0"
-		gui_util.play_flipbook("reveal_dice_" .. tostring(index), animation)
-		gui_util.play_flipbook("tray_dice_" .. tostring(index), animation)
+		gui_util.play_flipbook(
+			"reveal_dice_" .. tostring(index),
+			dice_art.table_animation(face or 1, index, round_index)
+		)
+		gui_util.play_flipbook(
+			"tray_dice_" .. tostring(index),
+			dice_art.front_animation(face or 1)
+		)
 	end
 end
 
@@ -80,12 +87,20 @@ end
 
 local function hint_for_phase(phase)
 	if phase == PHASE_CUP_SHAKE then
-		return "[Space] repeatedly or drag the mouse to shake"
+		return i18n.t("hud.hint.shaking")
 	end
 	if phase == PHASE_DICE_CHECK then
-		return "Check your dice, then press [Space]"
+		return i18n.t("hud.hint.dice_check")
 	end
-	return "Bidding starts soon"
+	return i18n.t("hud.hint.bidding_soon")
+end
+
+local function shake_round_token(state)
+	return table.concat({
+		tostring(state.match and state.match.match_id or "local"),
+		tostring(state.turn and state.turn.round_index or 0),
+		tostring(state.flow and state.flow.epoch or 0),
+	}, ":")
 end
 
 local function render(self, state)
@@ -102,13 +117,24 @@ local function render(self, state)
 	local local_player = selectors.local_player(state)
 	local status = selectors.shake_status(state, local_player_id)
 	local reveal = phase == PHASE_DICE_CHECK or phase == PHASE_BIDDING_GAP
+	local token = shake_round_token(state)
+	if phase == PHASE_CUP_SHAKE and self.gauge_token ~= token then
+		self.gauge_token = token
+		self.gauge = status.complete and shake_gauge.MAX or shake_gauge.MIN
+		self.shake_submitted = status.complete
+	elseif status.complete then
+		self.gauge = shake_gauge.MAX
+		self.shake_submitted = true
+	end
 	visual_status.set("shake", {
 		phase = phase,
 		hud = selectors.hud_kind(state),
 		visible = active,
 		reveal = reveal,
-		count = status.count,
-		required = status.required,
+		gauge = self.gauge,
+		gauge_max = shake_gauge.MAX,
+		submitted = self.shake_submitted == true,
+		server_complete = status.complete,
 		local_player_id = local_player_id,
 	})
 
@@ -120,18 +146,30 @@ local function render(self, state)
 
 	gui_util.set_alpha("cup_local", reveal and 0.78 or 1.0)
 	gui_util.set_text("hint", hint_for_phase(phase))
-	gui_util.set_text("progress", ("%d / %d"):format(status.count, status.required))
-	gui_util.set_enabled("progress", phase == PHASE_CUP_SHAKE)
 
 	set_dice_visible(reveal)
 	if reveal then
-		render_dice(local_player)
+		render_dice(local_player, state.turn.round_index)
 	end
 
 end
 
 local function request_render(self)
 	self.needs_render = true
+end
+
+local function submit_shake_complete(self, state, player_id)
+	if self.shake_submitted then
+		return true
+	end
+	local submission = server_command.submit(state, "shake.complete")
+	if submission.status == "local" then
+		local result = self.store:dispatch(actions.shake_complete(player_id))
+		self.shake_submitted = result and result.ok == true
+		return self.shake_submitted
+	end
+	self.shake_submitted = submission.status == "sent"
+	return self.shake_submitted
 end
 
 local function dispatch_shake(self)
@@ -150,17 +188,13 @@ local function dispatch_shake(self)
 		return false
 	end
 
-	local result = self.store:dispatch(actions.shake_roll(player_id))
-	if result and result.ok then
-		self.shake_impulse = 0.18
-			local next_state = self.store:get_state()
-			local next_status = selectors.shake_status(next_state, player_id)
-			if next_status.complete then
-				server_command.submit(state, "shake.complete")
-		end
-		return true
+	self.gauge = shake_gauge.add(self.gauge)
+	self.shake_impulse = 0.18
+	if shake_gauge.complete(self.gauge) then
+		submit_shake_complete(self, state, player_id)
 	end
-	return false
+	self.needs_render = true
+	return true
 end
 
 local function dispatch_dice_check(self)
@@ -246,6 +280,9 @@ function init(self)
 	self.local_cup_target_y = LOCAL_CUP_CLOSED_Y
 	self.local_cup_base_x = 0.0
 	self.last_shake_count = nil
+	self.gauge = shake_gauge.MIN
+	self.gauge_token = nil
+	self.shake_submitted = false
 	self.local_cup_node = gui.get_node("cup_local")
 
 	gui.set_render_order(4)
@@ -262,6 +299,13 @@ function update(self, dt)
 	if self.needs_render and self.store then
 		self.needs_render = false
 		render(self, self.store:get_state())
+	end
+	if self.store and selectors.phase(self.store:get_state()) == PHASE_CUP_SHAKE
+		and not self.shake_submitted and not shake_gauge.complete(self.gauge) then
+		local next_gauge = shake_gauge.decay(self.gauge, dt)
+		if next_gauge ~= self.gauge then
+			self.gauge = next_gauge
+		end
 	end
 	update_local_cup(self, dt)
 end
@@ -301,6 +345,8 @@ function on_message(self, message_id)
 		request_render(self)
 	elseif message_id == hash("deactivate") then
 		gui_util.set_enabled("root", false)
+	elseif message_id == hash("locale_changed") then
+		request_render(self)
 	end
 end
 

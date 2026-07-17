@@ -1,13 +1,29 @@
-import { mutationGeneric, queryGeneric } from 'convex/server'
+import { internalMutationGeneric, mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import { internal } from './_generated/api'
 import { env } from './_generated/server'
 import {
 	averageNormalizedPlacement,
 	type LadderPlacement,
 } from '../shared/ladder/placement'
+import {
+	canFinalizeLadderQaRoster,
+	LADDER_QA_FINALIZE_DELAY_MS,
+	LADDER_QA_MAX_PLAYER_COUNT,
+	nextLadderQaPlayerCount,
+	nextLadderQaWaitingBotCount,
+	shouldResumeReadyLadderMatch,
+} from '../shared/ladder/qa'
+import {
+	decideLadderMatch,
+	eligibleLadderCandidates,
+	LADDER_MAX_WAIT_MS,
+	LADDER_QUEUE_LEASE_MS,
+} from '../shared/ladder/matchmaking'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
 import {
 	createInitialMatchState,
+	DEFAULT_PLAYER_SKINS,
 	type CreateInitialStateInput,
 	type MatchMode,
 } from './match/state'
@@ -20,15 +36,16 @@ import {
 import { ensureVirtualOpponent } from './virtualOpponents'
 
 const DEFAULT_MMR = 1000
-const MAX_ROSTER_SIZE = 6
-const CHARACTER_KEYS = [
-	'calamity-kate',
-	'hush-feather',
-	'samuel-saber',
-	'zippo-jay',
-	'rosemund',
-	'the-kid',
+const MAX_ROSTER_SIZE = LADDER_QA_MAX_PLAYER_COUNT
+const LADDER_QA_POOL_KEY = 'default'
+const LADDER_QA_OPPONENT_NAMES = [
+	'Hush Feather',
+	'Samuel Saber',
+	'Zippo Jay',
+	'Calamity Kate',
+	'The Kid',
 ] as const
+const CHARACTER_KEYS = DEFAULT_PLAYER_SKINS
 
 type LadderStatsRow = {
 	mmr: number
@@ -91,6 +108,196 @@ async function getQueueEntry(ctx: GenericCtx, userId: string) {
 		.query('ladderQueueEntries')
 		.withIndex('by_user', (q: any) => q.eq('userId', userId))
 		.unique()
+}
+
+async function getQaOpponents(ctx: GenericCtx, queueEntryId: string) {
+	return await ctx.db
+		.query('ladderQaOpponents')
+		.withIndex('by_queue_entry_and_seat_index', (q: any) => q.eq('queueEntryId', queueEntryId))
+		.order('asc')
+		.take(MAX_ROSTER_SIZE - 1)
+}
+
+async function deleteQaOpponents(ctx: GenericCtx, queueEntryId: string) {
+	const rows = await getQaOpponents(ctx, queueEntryId)
+	for (const row of rows) {
+		await ctx.db.delete(row._id)
+	}
+}
+
+async function getQaWaitingOpponents(ctx: GenericCtx) {
+	return await ctx.db
+		.query('ladderQaWaitingOpponents')
+		.withIndex('by_pool_key_and_created_at', (q: any) => q.eq('poolKey', LADDER_QA_POOL_KEY))
+		.order('asc')
+		.take(MAX_ROSTER_SIZE - 1)
+}
+
+async function qaOpponentViews(ctx: GenericCtx, rows: any[]) {
+	const opponents = []
+	for (const row of rows) {
+		const opponent = await ctx.db.get(row.virtualOpponentId)
+		opponents.push({
+			virtualOpponentId: row.virtualOpponentId,
+			displayName: opponent?.displayName ?? `Opponent ${row.seatIndex}`,
+			seatIndex: row.seatIndex,
+		})
+	}
+	return opponents
+}
+
+export async function getLatestLadderQaSession(ctx: GenericCtx) {
+	const active = await activeWaitingEntries(ctx, Date.now(), true)
+	const entry = active[active.length - 1]
+	if (!entry) {
+		return null
+	}
+	const [user, opponents] = await Promise.all([
+		ctx.db.get(entry.userId),
+		getQaOpponents(ctx, entry._id),
+	])
+	if (!user) {
+		return null
+	}
+	const pendingOpponents = await qaOpponentViews(ctx, opponents)
+	return {
+		queueEntryId: entry._id,
+		userId: user._id,
+		displayName: user.displayName ?? 'Ladder player',
+		joinedAt: entry.joinedAt,
+		pendingOpponents,
+		playerCount: 1 + pendingOpponents.length,
+		maxPlayerCount: MAX_ROSTER_SIZE,
+	}
+}
+
+export async function getLadderQaAdminState(ctx: GenericCtx) {
+	const session = await getLatestLadderQaSession(ctx)
+	if (session) {
+		return { ...session, status: 'player_joined' as const }
+	}
+	const waiting = await getQaWaitingOpponents(ctx)
+	return {
+		status: 'waiting_for_player' as const,
+		queueEntryId: null,
+		userId: null,
+		displayName: null,
+		joinedAt: null,
+		pendingOpponents: await qaOpponentViews(ctx, waiting),
+		playerCount: waiting.length,
+		maxPlayerCount: MAX_ROSTER_SIZE,
+	}
+}
+
+export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string) {
+	const session = await getLatestLadderQaSession(ctx)
+	if (!session) {
+		const waiting = await getQaWaitingOpponents(ctx)
+		const nextWaitingBotCount = nextLadderQaWaitingBotCount(waiting.length)
+		if (nextWaitingBotCount === null) {
+			return {
+				ok: false as const,
+				code: 'LADDER_QA_ROSTER_FULL',
+				playerCount: waiting.length,
+			}
+		}
+		const opponentIndex = waiting.length
+		const opponent = await ensureVirtualOpponent(
+			ctx,
+			`ladder-fixture-${opponentIndex + 1}`,
+			LADDER_QA_OPPONENT_NAMES[opponentIndex],
+			'ladder-fixture',
+		)
+		await ctx.db.insert('ladderQaWaitingOpponents', {
+			poolKey: LADDER_QA_POOL_KEY,
+			virtualOpponentId: opponent._id,
+			seatIndex: opponentIndex,
+			addedByUserId: adminUserId,
+			createdAt: Date.now(),
+		})
+		return {
+			ok: true as const,
+			waitingForPlayer: true,
+			virtualOpponentId: opponent._id,
+			opponentDisplayName: opponent.displayName,
+			playerCount: nextWaitingBotCount,
+			maxPlayerCount: MAX_ROSTER_SIZE,
+		}
+	}
+	const nextPlayerCount = nextLadderQaPlayerCount(session.pendingOpponents.length)
+	if (nextPlayerCount === null) {
+		return {
+			ok: false as const,
+			code: 'LADDER_QA_ROSTER_FULL',
+			queueEntryId: session.queueEntryId,
+			playerCount: MAX_ROSTER_SIZE,
+		}
+	}
+
+	const opponentIndex = session.pendingOpponents.length
+	const opponent = await ensureVirtualOpponent(
+		ctx,
+		`ladder-fixture-${opponentIndex + 1}`,
+		LADDER_QA_OPPONENT_NAMES[opponentIndex],
+		'ladder-fixture',
+	)
+	const entry = await ctx.db.get(session.queueEntryId)
+	if (!entry || entry.status !== 'waiting') {
+		return { ok: false as const, code: 'LADDER_QA_SESSION_NOT_FOUND' }
+	}
+	const qaRevision = (entry.qaRevision ?? 0) + 1
+	const now = Date.now()
+	await ctx.db.insert('ladderQaOpponents', {
+		queueEntryId: entry._id,
+		virtualOpponentId: opponent._id,
+		seatIndex: opponentIndex + 1,
+		addedByUserId: adminUserId,
+		createdAt: now,
+	})
+	await ctx.db.patch(entry._id, {
+		qaRevision,
+		qaPendingCount: opponentIndex + 1,
+		updatedAt: now,
+	})
+	await ctx.scheduler!.runAfter(LADDER_QA_FINALIZE_DELAY_MS, internal.ladder.finalizeQaRoster, {
+		queueEntryId: entry._id,
+		expectedQaRevision: qaRevision,
+	})
+	return {
+		ok: true as const,
+		queueEntryId: entry._id,
+		virtualOpponentId: opponent._id,
+		opponentDisplayName: opponent.displayName,
+		playerCount: nextPlayerCount,
+		maxPlayerCount: MAX_ROSTER_SIZE,
+		finalizeDelayMs: LADDER_QA_FINALIZE_DELAY_MS,
+	}
+}
+
+async function claimQaWaitingOpponents(ctx: GenericCtx, entry: any, now: number) {
+	const waiting = await getQaWaitingOpponents(ctx)
+	if (waiting.length === 0) return 0
+	for (const [index, row] of waiting.entries()) {
+		await ctx.db.insert('ladderQaOpponents', {
+			queueEntryId: entry._id,
+			virtualOpponentId: row.virtualOpponentId,
+			seatIndex: index + 1,
+			addedByUserId: row.addedByUserId,
+			createdAt: now,
+		})
+		await ctx.db.delete(row._id)
+	}
+	const qaRevision = (entry.qaRevision ?? 0) + 1
+	await ctx.db.patch(entry._id, {
+		qaRevision,
+		qaPendingCount: waiting.length,
+		updatedAt: now,
+	})
+	await ctx.scheduler!.runAfter(LADDER_QA_FINALIZE_DELAY_MS, internal.ladder.finalizeQaRoster, {
+		queueEntryId: entry._id,
+		expectedQaRevision: qaRevision,
+	})
+	return waiting.length
 }
 
 async function createAuthoritativeMatch(
@@ -173,18 +380,43 @@ async function queueStateForUser(ctx: GenericCtx, currentUser: any) {
 	}
 }
 
-async function matchOldestWaitingPair(ctx: GenericCtx) {
+async function activeWaitingEntries(ctx: GenericCtx, now: number, includeQa = false) {
 	const waiting = await ctx.db
 		.query('ladderQueueEntries')
-		.withIndex('by_status_and_joined_at', (q: any) => q.eq('status', 'waiting'))
-		.order('asc')
-		.take(2)
+		.withIndex('by_status_and_last_seen_at', (q: any) => q
+			.eq('status', 'waiting')
+			.gte('lastSeenAt', now - LADDER_QUEUE_LEASE_MS))
+		.order('desc')
+		.take(24)
+	const eligible = includeQa
+		? waiting
+		: waiting.filter((entry: any) => (entry.qaPendingCount ?? 0) === 0)
+	eligible.sort((left: any, right: any) => left.joinedAt - right.joinedAt)
+	return eligible
+}
+
+async function matchWaitingRoster(ctx: GenericCtx, now: number) {
+	const waiting = await activeWaitingEntries(ctx, now)
 	if (waiting.length < 2) {
+		return null
+	}
+	const enriched = []
+	for (const entry of waiting) {
+		const stats = await getStatsRow(ctx, entry.userId)
+		enriched.push({ entry, joinedAt: entry.joinedAt, mmr: stats?.mmr ?? DEFAULT_MMR })
+	}
+	const decision = decideLadderMatch(enriched, now)
+	if (!decision.shouldStart) {
+		return null
+	}
+	const eligible = eligibleLadderCandidates(enriched, now).slice(0, decision.playerCount)
+	if (eligible.length < 2) {
 		return null
 	}
 
 	const players = []
-	for (const [seatIndex, entry] of waiting.entries()) {
+	for (const [seatIndex, candidate] of eligible.entries()) {
+		const entry = candidate.entry
 		const user = await ctx.db.get(entry.userId)
 		if (!user) {
 			return null
@@ -199,16 +431,32 @@ async function matchOldestWaitingPair(ctx: GenericCtx) {
 	}
 
 	const created = await createAuthoritativeMatch(ctx, players, 'ranked')
-	const now = Date.now()
-	for (const entry of waiting) {
+	const matchedAt = Date.now()
+	for (const candidate of eligible) {
+		const entry = candidate.entry
+		await deleteQaOpponents(ctx, entry._id)
 		await ctx.db.patch(entry._id, {
 			status: 'matched',
 			matchId: created.matchId,
-			updatedAt: now,
+			qaPendingCount: 0,
+			updatedAt: matchedAt,
 		})
 	}
 	return created.matchId
 }
+
+export const evaluateWaitingRoster = internalMutationGeneric({
+	args: { queueEntryId: v.id('ladderQueueEntries') },
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: { queueEntryId: string }) => {
+		const entry = await ctx.db.get(args.queueEntryId)
+		if (!entry || entry.status !== 'waiting') {
+			return { ok: true, matched: false }
+		}
+		const matchId = await matchWaitingRoster(ctx, Date.now())
+		return { ok: true, matched: Boolean(matchId), matchId }
+	},
+})
 
 export const observeOwnQueue = queryGeneric({
 	args: {},
@@ -226,31 +474,96 @@ export const enterQueue = mutationGeneric({
 		const currentUser = await requireCurrentUser(ctx)
 		await ensureStatsRow(ctx, currentUser._id)
 		const existing = await getQueueEntry(ctx, currentUser._id)
+		const now = Date.now()
+		let queueEntryId: string
 		if (existing?.status === 'matched' && existing.matchId) {
 			const match = await ctx.db.get(existing.matchId)
-			if (match?.status === 'ready') {
+			if (match?.status === 'ready' && shouldResumeReadyLadderMatch({
+				mode: match.mode,
+				ageMs: now - existing.updatedAt,
+			})) {
 				return await queueStateForUser(ctx, currentUser)
 			}
 		}
 
-		const now = Date.now()
 		if (existing) {
+			queueEntryId = existing._id
+			const shouldScheduleEvaluation = existing.status !== 'waiting'
+			if (existing.status !== 'waiting') {
+				await deleteQaOpponents(ctx, existing._id)
+			}
 			await ctx.db.patch(existing._id, {
 				status: 'waiting',
 				matchId: undefined,
+				qaRevision: existing.status === 'waiting' ? existing.qaRevision : (existing.qaRevision ?? 0) + 1,
+				qaPendingCount: existing.status === 'waiting' ? existing.qaPendingCount : 0,
+				lastSeenAt: now,
 				joinedAt: existing.status === 'waiting' ? existing.joinedAt : now,
 				updatedAt: now,
 			})
+			if (shouldScheduleEvaluation) {
+				await ctx.scheduler!.runAfter(LADDER_MAX_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
+					queueEntryId: existing._id,
+				})
+			}
 		} else {
-			await ctx.db.insert('ladderQueueEntries', {
+			queueEntryId = await ctx.db.insert('ladderQueueEntries', {
 				userId: currentUser._id,
 				status: 'waiting',
+				qaRevision: 0,
+				qaPendingCount: 0,
+				lastSeenAt: now,
 				joinedAt: now,
 				updatedAt: now,
 			})
+			await ctx.scheduler!.runAfter(LADDER_MAX_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
+				queueEntryId,
+			})
 		}
-		await matchOldestWaitingPair(ctx)
+		const activeEntry = await ctx.db.get(queueEntryId)
+		const claimedQaOpponents = activeEntry
+			? await claimQaWaitingOpponents(ctx, activeEntry, now)
+			: 0
+		if (claimedQaOpponents === 0) {
+			await matchWaitingRoster(ctx, now)
+		}
 		return await queueStateForUser(ctx, currentUser)
+	},
+})
+
+export const heartbeatQueue = mutationGeneric({
+	args: {},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx) => {
+		const currentUser = await requireCurrentUser(ctx)
+		const existing = await getQueueEntry(ctx, currentUser._id)
+		const now = Date.now()
+		if (existing?.status === 'waiting') {
+			await ctx.db.patch(existing._id, { lastSeenAt: now, updatedAt: now })
+			await matchWaitingRoster(ctx, now)
+		}
+		return await queueStateForUser(ctx, currentUser)
+	},
+})
+
+export const acknowledgeMatchHandoff = mutationGeneric({
+	args: { matchId: v.id('matches') },
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: { matchId: string }) => {
+		const currentUser = await requireCurrentUser(ctx)
+		const existing = await getQueueEntry(ctx, currentUser._id)
+		if (!existing || existing.status !== 'matched' || existing.matchId !== args.matchId) {
+			return { ok: true, consumed: false }
+		}
+		await deleteQaOpponents(ctx, existing._id)
+		await ctx.db.patch(existing._id, {
+			status: 'cancelled',
+			matchId: undefined,
+			qaRevision: (existing.qaRevision ?? 0) + 1,
+			qaPendingCount: 0,
+			updatedAt: Date.now(),
+		})
+		return { ok: true, consumed: true }
 	},
 })
 
@@ -261,13 +574,74 @@ export const leaveQueue = mutationGeneric({
 		const currentUser = await requireCurrentUser(ctx)
 		const existing = await getQueueEntry(ctx, currentUser._id)
 		if (existing?.status === 'waiting') {
+			await deleteQaOpponents(ctx, existing._id)
 			await ctx.db.patch(existing._id, {
 				status: 'cancelled',
 				matchId: undefined,
+				qaRevision: (existing.qaRevision ?? 0) + 1,
+				qaPendingCount: 0,
 				updatedAt: Date.now(),
 			})
 		}
 		return await queueStateForUser(ctx, currentUser)
+	},
+})
+
+export const finalizeQaRoster = internalMutationGeneric({
+	args: {
+		queueEntryId: v.id('ladderQueueEntries'),
+		expectedQaRevision: v.number(),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: { queueEntryId: string; expectedQaRevision: number }) => {
+		const entry = await ctx.db.get(args.queueEntryId)
+		if (!entry || entry.status !== 'waiting' || entry.qaRevision !== args.expectedQaRevision) {
+			return { ok: false, code: 'LADDER_QA_FINALIZE_STALE' }
+		}
+		const [user, opponents] = await Promise.all([
+			ctx.db.get(entry.userId),
+			getQaOpponents(ctx, entry._id),
+		])
+		if (!user || !canFinalizeLadderQaRoster({
+			status: entry.status,
+			qaRevision: entry.qaRevision,
+			expectedQaRevision: args.expectedQaRevision,
+			pendingOpponentCount: opponents.length,
+		})) {
+			return { ok: false, code: 'LADDER_QA_FINALIZE_EMPTY' }
+		}
+		const players: CreateInitialStateInput['players'] = [{
+			id: 'qa-player-1',
+			userId: user._id,
+			participantKind: 'human',
+			name: user.displayName ?? 'You',
+		}]
+		for (const row of opponents) {
+			const opponent = await ctx.db.get(row.virtualOpponentId)
+			if (!opponent) {
+				continue
+			}
+			players.push({
+				id: `qa-player-${players.length + 1}`,
+				virtualOpponentId: opponent._id,
+				participantKind: 'virtual',
+				name: opponent.displayName,
+				initialLoadedSlots: [1, 3, 5],
+			})
+		}
+		if (players.length < 2) {
+			return { ok: false, code: 'LADDER_QA_FINALIZE_EMPTY' }
+		}
+
+		const created = await createAuthoritativeMatch(ctx, players, 'dev')
+		await deleteQaOpponents(ctx, entry._id)
+		await ctx.db.patch(entry._id, {
+			status: 'matched',
+			matchId: created.matchId,
+			qaPendingCount: 0,
+			updatedAt: Date.now(),
+		})
+		return { ok: true, matchId: created.matchId, playerCount: players.length }
 	},
 })
 
@@ -290,7 +664,7 @@ export const createDevFixture = mutationGeneric({
 			const opponent = await ensureVirtualOpponent(
 				ctx,
 				`ladder-fixture-${index}`,
-				['Hush Feather', 'Samuel Saber', 'Zippo Jay', 'Rosemund', 'The Kid'][index - 1],
+				LADDER_QA_OPPONENT_NAMES[index - 1],
 				'ladder-fixture',
 			)
 			players.push({

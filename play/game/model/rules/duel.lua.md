@@ -45,13 +45,13 @@ end
 
 function M.resolve(state, duel_state)
     if judge.verdict == M.VERDICT.SHORT then
-        -- 실제 < 콜: 도전자 본인이 |actual-bid|회 russian roulette.
-        -- target cylinder를 consume하고 hp_changes를 적용한다.
-        return { kind = "duel_shots", roulette_subject_id = challenger_id, target_id = challenger_id, steps = steps }
+        -- 실제 < 콜: 도전자가 직전 콜러에게 |actual-bid|회 격발.
+        -- challenger cylinder를 consume하고 previous bidder hp_changes를 적용한다.
+        return { kind = "duel_shots", shooter_id = challenger_id, roulette_subject_id = challenger_id, target_id = previous_id, steps = steps }
     elseif judge.verdict == M.VERDICT.OVER then
-        -- 실제 > 콜: 직전 콜러가 |actual-bid|회 russian roulette.
-        -- previous bidder cylinder를 consume하고 hp_changes를 적용한다.
-        return { kind = "duel_shots", roulette_subject_id = previous_id, target_id = previous_id, steps = steps }
+        -- 실제 > 콜: 직전 콜러가 도전자에게 |actual-bid|회 격발.
+        -- previous bidder cylinder를 consume하고 challenger hp_changes를 적용한다.
+        return { kind = "duel_shots", shooter_id = previous_id, roulette_subject_id = previous_id, target_id = challenger_id, steps = steps }
     end
 
     -- EXACT: previous_bidder(A)가 맞춘 사람. challenger부터 alive order로 target을 돌려 6회 step 생성.

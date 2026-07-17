@@ -70,6 +70,29 @@ Opponent Controller의 `Create Dev Match`가 만드는 개발용 match다.
 - 빠른 admin command 테스트용이다.
 - Custom Game room/ready/start QA를 대체하지 않는다.
 
+### Dev Match Cleanup
+
+`Dev Matches` 목록은 아직 `ready` 상태인 standalone/Ladder QA dev match다. Custom Game room 자체가 아닐 수도 있다.
+
+- 각 row의 `Remove`: 해당 ready dev match를 먼저 terminal `complete`로 전환한 뒤, `matchParticipants`, state/snapshot, command/event, 연결된 custom room/participant와 match parent를 physical purge한다.
+- `Remove All (N)`: 현재 보이는 ready dev match를 하나씩 같은 complete → purge path로 제거한다.
+- 이 동작은 `dev` mode에만 허용된다. Ranked/casual match는 대상이 아니다.
+- purge는 bounded batch를 모두 소비할 때까지 반복한다. `adminAudit`은 운영 증적으로 보존되며 physical purge 대상이 아니다.
+
+### Ladder QA
+
+`/play/ladder`에서 waiting 중인 최신 authenticated session에 virtual opponent를 순서대로 stage하는 QA shortcut이다.
+
+1. player tab에서 Ladder를 열기 전에 admin tab의 `Ladder QA` panel을 확인한다. `0/5 virtual opponents waiting` 상태에서도 `Add Ladder Opponent`가 enabled여야 한다.
+2. `Add Ladder Opponent`를 1–5회 눌러 bot을 먼저 queue한다. 예: 3회면 `3/5 virtual opponents waiting`이다.
+3. 그 뒤 player tab에서 `http://localhost:5173/play/ladder`를 연다. Player가 후순위로 들어오면서 waiting bot pool을 claim한다.
+4. player + 미리 대기하던 bot 수의 roster가 생성되는지 확인한다. 예: bots 3 + player 1 = 4-player roster.
+5. claim 뒤 admin pool은 `0/5`로 돌아가야 한다.
+6. 마지막 claim/click 1.5초 뒤 Ladder tab에 Match Found roster가 나타난다.
+7. countdown 후 같은 `/play/ladder?matchId=...` URL에서 기존 `ConvexPlayScreen`이 단 한 번 mount되는지 확인한다.
+
+각 click은 `adminAudit`의 `ladder.qa.add_opponent` row로 남는다. Staged row는 cancel, production match-found, QA finalize에서 정리된다. QA finalize는 기존 authoritative match/participant/snapshot contract로 `dev` match를 만들며 production adaptive 2–6 policy와 분리된다.
+
 ## Main QA Flow
 
 ### 1. Host Creates Custom Game Room
@@ -172,15 +195,18 @@ http://localhost:5173/play/dev?matchId=<matchId>
 ## Buttons
 
 - `Create Dev Match`: standalone dev match 생성 또는 재사용. Custom Game room 생성 버튼이 아니다.
+- `Remove`: one ready dev match와 그 QA game data를 영구 삭제한다. 완료/삭제 audit은 남는다.
+- `Remove All (N)`: 표시 중인 ready dev matches 전체를 같은 방식으로 영구 삭제한다.
+- `Add Ladder Opponent`: human이 없으면 QA bot pool에 먼저 enqueue하고, human이 이미 waiting이면 그 session에 직접 stage한다. Bot-first pool은 human join을 기다리고, human이 claim했거나 이미 waiting 중이면 마지막 stage 뒤 1.5초에 2–6 player dev roster를 확정한다.
 - `Ready All`: selected Custom Game room의 virtual opponents를 ready 처리한다.
 - `Unready All`: selected Custom Game room의 virtual opponents를 unready 처리한다.
 - `Open Started Match`: started room의 linked match를 admin match panel로 연다.
 - `Load All`: 현재 selected bot의 setup/bullet load를 가능한 만큼 반복 제출한다.
-- `Shake n / 6`: selected bot의 shake gesture를 단계적으로 기록하고 6번째에 `shake.complete`를 제출한다. 모든 생존 bot에 대해 수행한다.
+- `Complete Shake`: selected bot의 로컬 gauge를 모사하지 않고 `shake.complete`를 즉시 한 번 제출한다. 모든 생존 bot에 대해 수행할 수 있으며, 6초 phase timeout이 먼저 끝나면 action이 사라진다.
 - Bid `Face`의 `Skull (1)`: protocol face `1`이다. 현재 bid보다 낮으면 controller가 다음 count의 skull로 올려 유효한 raise를 제출한다.
 - Command buttons: selected virtual opponent의 match command를 제출한다.
 
-Bot 추가/선택/room composition은 Custom Game host 화면 또는 이후 별도 asset/composition flow의 책임이다. Opponent Controller는 현재 room에 이미 존재하는 virtual opponent를 ready/조작하는 QA 도구다.
+Custom Game의 bot 추가/선택/room composition은 Custom Game host 화면 또는 이후 별도 asset/composition flow의 책임이다. 예외적으로 Ladder QA panel은 waiting Ladder session의 2–6 roster smoke test를 위해 virtual opponent를 stage한다. Opponent Controller의 나머지 기능은 현재 room/match에 이미 존재하는 virtual opponent를 ready/조작한다.
 
 ## Audit
 
@@ -196,6 +222,7 @@ Opponent Controller actions는 `adminAudit`에 기록된다.
 - target player missing.
 - target not bot.
 - reducer reject.
+- Ladder QA opponent stage 성공/reject.
 
 UI의 Recent Admin Audit panel에서 최근 row를 확인할 수 있다.
 
@@ -213,6 +240,12 @@ UI의 Recent Admin Audit panel에서 최근 row를 확인할 수 있다.
 정상일 수 있다. Opponent Controller의 `Create Dev Match`는 Custom Game room을 만들지 않는다.
 
 Custom Game room QA는 반드시 `/play/custom-game`에서 human host가 `Create`를 눌러 시작한다.
+
+### Ladder QA Session Is Empty
+
+- Player session이 없어도 정상이며 `Add Ladder Opponent`가 enabled여야 한다. 이 상태의 숫자는 human을 제외한 waiting bot 수다.
+- Player가 `/play/ladder`에 들어오면 pool이 zero가 되고 player name + total roster count로 표시가 전환된다.
+- 이미 Match Found 또는 gameplay handoff가 끝난 session은 waiting target이 아니다.
 
 ### Play Tab Cannot Open Match
 

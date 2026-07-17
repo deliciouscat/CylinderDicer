@@ -77,7 +77,9 @@ export const matchCommandTypeValidator = v.union(
 	)
 
 export const automaticMatchCommandTypeValidator = v.union(
+	v.literal('shake.timeout'),
 	v.literal('bidding.open'),
+	v.literal('bid.reload_timeout'),
 	v.literal('duel.execute'),
 	v.literal('round.advance'),
 )

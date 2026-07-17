@@ -5,7 +5,7 @@ import { test } from 'node:test'
 const require = createRequire(import.meta.url)
 const { createInitialMatchState } = require('../../../.tmp/convex-domain/match/state.js')
 const { reduceMatchState } = require('../../../.tmp/convex-domain/match/reducer.js')
-const { buildPrivateDelta, buildPublicSnapshot } = require('../../../.tmp/convex-domain/match/snapshots.js')
+const { buildPrivateDelta, buildPublicSnapshot, hudKind } = require('../../../.tmp/convex-domain/match/snapshots.js')
 const { automaticTransitionFor, automaticTransitionScheduleArgs, matchesAutomaticTransition } = require('../../../.tmp/convex-domain/match/flow.js')
 const { deriveAvailableActions } = require('../../../.tmp/convex-domain/match/capabilities.js')
 
@@ -82,6 +82,98 @@ function createDevState(overrides = {}) {
 		...overrides,
 	})
 }
+
+test('player character identity survives initial state and public snapshot projection', () => {
+	const state = createDevState()
+	const snapshot = buildPublicSnapshot(state)
+
+	assert.deepEqual(
+		snapshot.players.map((player) => [player.id, player.skin, player.portraitState]),
+		[
+			['local-player', 'rosemund', 'front'],
+			['opponent-1', 'hush-feather', 'front'],
+			['opponent-2', 'samuel-saber', 'front'],
+		],
+	)
+})
+
+test('legacy default skins project to deterministic seat characters', () => {
+	const state = createDevState()
+	for (const playerId of state.players.order) {
+		state.players.byId[playerId].skin = 'default'
+	}
+	const snapshot = buildPublicSnapshot(state)
+
+	assert.deepEqual(
+		snapshot.players.map((player) => player.skin),
+		['rosemund', 'hush-feather', 'samuel-saber'],
+	)
+})
+
+test('challenge pairs the active Samuel seat with previous bidder Hush', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'opponent-2'
+	state.turn.previousPlayerId = 'opponent-1'
+	state.bidding.currentBid = { playerId: 'opponent-1', count: 10, face: 1 }
+
+	state = dispatch(state, 'bid.challenge', 'opponent-2')
+	const snapshot = buildPublicSnapshot(state)
+
+	assert.equal(snapshot.duel.challengerId, 'opponent-2')
+	assert.equal(snapshot.duel.previousBidderId, 'opponent-1')
+	assert.equal(snapshot.duel.players.find((player) => player.id === 'opponent-2').skin, 'samuel-saber')
+	assert.equal(snapshot.duel.players.find((player) => player.id === 'opponent-1').skin, 'hush-feather')
+})
+
+test('SHORT gives the challenger attack chances against the previous bidder', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+	state.turn.previousPlayerId = 'opponent-1'
+	state.bidding.currentBid = { playerId: 'opponent-1', count: 10, face: 4 }
+	for (const player of Object.values(state.players.byId)) {
+		player.dice = [6, 6, 6, 6, 6]
+	}
+	state.players.byId['local-player'].cylinder.slots = [true, true, true, false, false, false]
+	state.players.byId['local-player'].bullets = 3
+
+	state = dispatch(state, 'bid.challenge', 'local-player')
+	assert.equal(state.duel.judge.verdict, 'SHORT')
+	assert.equal(state.duel.revolverSpin.playerId, 'local-player')
+	state = dispatchAutomaticTransition(state, 'duel.execute')
+
+	assert.equal(state.duel.resolution.shooterId, 'local-player')
+	assert.equal(state.duel.resolution.rouletteSubjectId, 'local-player')
+	assert.equal(state.duel.resolution.targetId, 'opponent-1')
+	assert.equal(state.players.byId['local-player'].hp, 6)
+	assert.equal(state.players.byId['opponent-1'].hp, 3)
+})
+
+test('OVER gives the previous bidder attack chances against the challenger', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+	state.turn.previousPlayerId = 'opponent-1'
+	state.bidding.currentBid = { playerId: 'opponent-1', count: 1, face: 6 }
+	for (const player of Object.values(state.players.byId)) {
+		player.dice = [6, 6, 6, 6, 6]
+	}
+
+	state = dispatch(state, 'bid.challenge', 'local-player')
+	assert.equal(state.duel.judge.verdict, 'OVER')
+	assert.equal(state.duel.revolverSpin.playerId, 'opponent-1')
+	state = dispatchAutomaticTransition(state, 'duel.execute')
+
+	assert.equal(state.duel.resolution.shooterId, 'opponent-1')
+	assert.equal(state.duel.resolution.rouletteSubjectId, 'opponent-1')
+	assert.equal(state.duel.resolution.targetId, 'local-player')
+	assert.equal(state.players.byId['opponent-1'].hp, 6)
+	assert.equal(state.players.byId['local-player'].hp, 3)
+})
 
 test('minimum playable Convex round reaches next round after duel', () => {
 	let state = createDevState()
@@ -161,6 +253,8 @@ test('challenger starts the next bidding round after a non-lethal duel', () => {
 	for (const player of Object.values(state.players.byId)) {
 		player.dice = [1, 1, 1, 1, 1]
 	}
+	state.players.byId['opponent-1'].cylinder.slots = [false, false, false, false, false, false]
+	state.players.byId['opponent-1'].bullets = 0
 
 	state = dispatch(state, 'bid.challenge', 'local-player')
 	state = dispatchAutomaticTransition(state, 'duel.execute')
@@ -213,12 +307,13 @@ test('cup shake waits for every alive player and rolls only the completing playe
 	})
 
 	for (const playerId of state.players.order) {
-		assert.equal(
+	assert.equal(
 			deriveAvailableActions(state, playerId).some((available) => available.type === 'shake_complete'),
 			true,
 			`${playerId} should be able to shake own cup`,
 		)
 	}
+	assert.equal(deriveAvailableActions(state, 'local-player')[0].remaining, 1)
 
 	state = dispatch(state, 'shake.complete', 'local-player')
 	assert.equal(state.flow.phase, 'cup_shake')
@@ -236,6 +331,31 @@ test('cup shake waits for every alive player and rolls only the completing playe
 	assert.equal(state.flow.phase, 'dice_check')
 })
 
+test('phase-wide shake timeout completes only unfinished players after six seconds', () => {
+	let state = createDevState({
+		matchId: 'shake-timeout-match',
+		requiresSetupLoad: false,
+	})
+	const scheduled = automaticTransitionFor(state)
+	assert.equal(scheduled.type, 'shake.timeout')
+	assert.equal(scheduled.delayMs, 6_000)
+
+	state = dispatch(state, 'shake.complete', 'local-player')
+	const localDice = [...state.players.byId['local-player'].dice]
+	assert.equal(matchesAutomaticTransition(state, scheduled), true)
+	assert.equal(automaticTransitionFor(state).expectedRevision, state.revision)
+
+	state = dispatch(state, 'shake.timeout', state.turn.activePlayerId)
+	assert.equal(state.flow.phase, 'dice_check')
+	assert.deepEqual(state.players.byId['local-player'].dice, localDice)
+	assert.equal(state.shake.counts['local-player'], 6)
+	assert.equal(state.shake.counts['opponent-1'], 6)
+	assert.equal(state.shake.counts['opponent-2'], 6)
+	assert.equal(state.players.byId['opponent-1'].dice.length, 5)
+	assert.equal(state.players.byId['opponent-2'].dice.length, 5)
+	assert.equal(matchesAutomaticTransition(state, scheduled), false)
+})
+
 test('face one is a skull bid and raises after face six at the next count', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
@@ -248,6 +368,103 @@ test('face one is a skull bid and raises after face six at the next count', () =
 	})
 	assert.equal(state.bidding.currentBid.face, 1)
 	assert.equal(state.bidding.currentBid.count, 3)
+	assert.equal(state.bidding.skullRoulette.playerId, 'local-player')
+	assert.equal(state.bidding.skullRoulette.hit, false)
+	assert.deepEqual(buildPublicSnapshot(state).bidding.skullRoulette, state.bidding.skullRoulette)
+})
+
+test('skull bid spins and triggers the bidders own cylinder before accepting the bid', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+	state.players.byId['local-player'].cylinder.slots = [true, true, true, true, true, true]
+	state.players.byId['local-player'].bullets = 6
+
+	state = dispatch(state, 'bid.raise', 'local-player', {
+		bid: { count: 1, face: 1 },
+	})
+
+	assert.equal(state.bidding.currentBid.playerId, 'local-player')
+	assert.equal(state.bidding.skullRoulette.hit, true)
+	assert.equal(state.bidding.skullRoulette.hpBefore, 6)
+	assert.equal(state.bidding.skullRoulette.hpAfter, 5)
+	assert.equal(state.players.byId['local-player'].hp, 5)
+	assert.equal(state.players.byId['local-player'].bullets, 5)
+	assert.equal(state.pendingLoad.playerId, 'local-player')
+})
+
+test('lethal skull roulette rejects the attempted bid and skips the eliminated bidder', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+	state.bidding.currentBid = { playerId: 'opponent-2', count: 2, face: 6 }
+	state.players.byId['local-player'].hp = 1
+	state.players.byId['local-player'].cylinder.slots = [true, true, true, true, true, true]
+	state.players.byId['local-player'].bullets = 6
+
+	state = dispatch(state, 'bid.raise', 'local-player', {
+		bid: { count: 3, face: 1 },
+	})
+
+	assert.equal(state.players.byId['local-player'].hp, 0)
+	assert.equal(state.players.byId['local-player'].eliminated, true)
+	assert.deepEqual(state.bidding.currentBid, { playerId: 'opponent-2', count: 2, face: 6 })
+	assert.equal(state.turn.activePlayerId, 'opponent-1')
+	assert.equal(state.turn.previousPlayerId, 'opponent-2')
+	assert.deepEqual(state.bidding.myBid, { count: 1, face: 2 })
+	assert.equal(state.pendingLoad, undefined)
+})
+
+test('bid reload pipelines one next bid then gates until the previous reload completes', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+
+	state = dispatch(state, 'bid.raise', 'local-player', {
+		bid: { count: 1, face: 2 },
+	})
+	assert.equal(state.flow.phase, 'bidding')
+	assert.equal(state.pendingLoad.playerId, 'local-player')
+	assert.equal(hudKind(state, 'local-player'), 'revolver_reload')
+	assert.equal(hudKind(state, 'opponent-1'), 'bidding')
+	assert.equal(deriveAvailableActions(state, 'local-player')[0].type, 'load')
+	assert.equal(deriveAvailableActions(state, 'opponent-1')[0].type, 'bid')
+	assert.equal(
+		deriveAvailableActions(state, 'opponent-1').some((available) => available.type === 'challenge'),
+		false,
+	)
+
+	state = dispatch(state, 'bid.raise', 'opponent-1', {
+		bid: { count: 2, face: 2 },
+	})
+	assert.equal(state.pendingLoad.playerId, 'local-player')
+	assert.equal(state.bidding.deferredLoad.playerId, 'opponent-1')
+	assert.deepEqual(state.bidding.reloadGate, { countdownSeconds: 3, epoch: 1 })
+	assert.equal(hudKind(state, 'local-player'), 'revolver_reload')
+	assert.equal(hudKind(state, 'opponent-1'), 'loading')
+	assert.equal(hudKind(state, 'opponent-2'), 'loading')
+	assert.deepEqual(deriveAvailableActions(state, 'opponent-2'), [])
+	assert.deepEqual(buildPublicSnapshot(state).bidding.reloadGate, {
+		countdownSeconds: 3,
+		epoch: 1,
+	})
+	assert.equal(automaticTransitionFor(state).type, 'bid.reload_timeout')
+	assert.equal(automaticTransitionFor(state).delayMs, 3_000)
+
+	state = dispatchAutomaticTransition(state, 'bid.reload_timeout')
+	assert.equal(state.pendingLoad.playerId, 'opponent-1')
+	assert.equal(state.players.byId['local-player'].cylinder.slots[0], true)
+	assert.equal(state.bidding.reloadGate, undefined)
+	assert.equal(hudKind(state, 'opponent-1'), 'revolver_reload')
+	assert.equal(hudKind(state, 'opponent-2'), 'bidding')
+	assert.equal(deriveAvailableActions(state, 'opponent-2')[0].type, 'bid')
+
+	state = dispatch(state, 'bullet.load', 'opponent-1', { slotIndex: 2 })
+	assert.equal(state.pendingLoad, undefined)
+	assert.equal(hudKind(state, 'opponent-1'), 'bidding')
 })
 
 test('duel bullet spender reloads after the next shake', () => {

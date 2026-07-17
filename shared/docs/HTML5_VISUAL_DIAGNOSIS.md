@@ -96,6 +96,8 @@ Editor/desktop visual sign-off is still worth doing after any GUI metadata chang
 
 If HTML5 regresses, run `node tools/html5-phase-check.mjs --shots .tmp/html5-bg-hud-shots` first. If the JSON `position_y` is correct but screenshot metrics fail, inspect upper GUI scenes for enabled alpha-zero `TYPE_BOX` nodes with non-zero size before changing camera/projection constants.
 
+The phase checker also submits a dev-only deterministic Skull bid (`spin_steps: 1`) after the first bidding checkpoint. It asserts the bidder's self-roulette hit, HP `3 → 2`, bullet consumption `3 → 2`, and the normal bid reload back to 3. The deterministic step override exists only in the `mode=dev` + `localSimulator=true` `QA_COMMAND` path; production Convex derives the spin from authoritative match RNG.
+
 ## How to rerun
 
 ```bash

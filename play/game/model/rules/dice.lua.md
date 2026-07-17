@@ -2,7 +2,7 @@
 주사위 굴림과 face 집계 규칙. face `1`은 해골로 취급한다. 비-해골 콜 판정에서는 해골을 와일드로 포함하고, 해골 콜에서는 해골만 센다.
 
 # 의존성
-- `game/model/reducers.lua`: `shake.roll`.
+- `game/model/reducers.lua`: `shake.complete` / `shake.timeout`에서 완료된 플레이어의 authoritative dice roll.
 - `game/model/selectors.lua`: `count_face`.
 - `game/model/rules/duel.lua`: bid face 실제 개수 계산.
 - `ui/common/dice_face`: face 표시 규칙.

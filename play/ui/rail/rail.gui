@@ -1,153 +1,551 @@
 script: "/ui/rail/rail.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/default.font"
+  font: "/assets/fonts/noto_serif_cjk_kr_semibold.font"
 }
 textures {
   name: "rail_default"
   texture: "/assets/atlases/rail_default.atlas"
 }
+textures {
+  name: "ui"
+  texture: "/assets/atlases/ui.atlas"
+}
 nodes {
-  position { x: 640.0 y: 360.0 z: 0.0 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 0.0 y: 0.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
+  position {
+    x: 640.0
+    y: 360.0
+  }
   type: TYPE_BOX
   id: "root"
+  alpha: 0.0
 }
 nodes {
-  position { x: 0.0 y: -52.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 1060.0 y: 170.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.95 }
+  type: TYPE_BOX
+  id: "rail_strip"
+  parent: "root"
+  alpha: 0.0
+}
+nodes {
+  position {
+    x: -1060.0
+    y: -52.0
+    z: 0.1
+  }
+  size {
+    x: 1060.0
+    y: 170.0
+  }
   type: TYPE_BOX
   texture: "rail_default/rail"
-  id: "track"
-  parent: "root"
+  id: "track_left"
+  parent: "rail_strip"
+  alpha: 0.95
 }
 nodes {
-  position { x: 0.0 y: -8.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 1060.0 y: 8.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    y: -52.0
+    z: 0.1
+  }
+  size {
+    x: 1060.0
+    y: 170.0
+  }
   type: TYPE_BOX
-  id: "rail_top"
-  parent: "root"
+  texture: "rail_default/rail"
+  id: "track_center"
+  parent: "rail_strip"
+  alpha: 0.95
 }
 nodes {
-  position { x: 0.0 y: -96.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 1060.0 y: 8.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: 1060.0
+    y: -52.0
+    z: 0.1
+  }
+  size {
+    x: 1060.0
+    y: 170.0
+  }
   type: TYPE_BOX
-  id: "rail_bottom"
-  parent: "root"
+  texture: "rail_default/rail"
+  id: "track_right"
+  parent: "rail_strip"
+  alpha: 0.95
 }
 nodes {
-  position { x: -474.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -636.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_1"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_1_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: -368.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -530.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_2"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_2_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: -262.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -424.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_3"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_3_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: -156.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -318.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_4"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_4_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: -50.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -212.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_5"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_5_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: 56.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: -106.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_6"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_6_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: 162.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_7"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_7_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: 268.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: 106.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_8"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_8_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: 374.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: 212.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_9"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_9_panel"
+  parent: "rail_strip"
 }
 nodes {
-  position { x: 480.0 y: -52.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 5.0 y: 86.0 z: 0.0 }
-  color { x: 0.58 y: 0.58 z: 0.58 w: 1.0 }
+  position {
+    x: 318.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
   type: TYPE_BOX
-  id: "divider_10"
-  parent: "root"
+  texture: "ui/bid_normal"
+  id: "cell_10_panel"
+  parent: "rail_strip"
 }
-nodes { position { x: -477.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "1" font: "system_font" id: "cell_1" parent: "root" }
-nodes { position { x: -371.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "2" font: "system_font" id: "cell_2" parent: "root" }
-nodes { position { x: -265.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "3" font: "system_font" id: "cell_3" parent: "root" }
-nodes { position { x: -159.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "4" font: "system_font" id: "cell_4" parent: "root" }
-nodes { position { x: -53.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "5" font: "system_font" id: "cell_5" parent: "root" }
-nodes { position { x: 53.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "6" font: "system_font" id: "cell_6" parent: "root" }
-nodes { position { x: 159.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "7" font: "system_font" id: "cell_7" parent: "root" }
-nodes { position { x: 265.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "8" font: "system_font" id: "cell_8" parent: "root" }
-nodes { position { x: 371.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "9" font: "system_font" id: "cell_9" parent: "root" }
-nodes { position { x: 477.0 y: -54.0 z: 0.3 } scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 } size { x: 70.0 y: 42.0 z: 0.0 } color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 } type: TYPE_TEXT text: "10" font: "system_font" id: "cell_10" parent: "root" }
 nodes {
-  position { x: 0.0 y: 4.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 28.0 z: 0.0 }
-  color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 }
+  position {
+    x: 424.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
+  type: TYPE_BOX
+  texture: "ui/bid_normal"
+  id: "cell_11_panel"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 530.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
+  type: TYPE_BOX
+  texture: "ui/bid_normal"
+  id: "cell_12_panel"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 636.0
+    y: -54.0
+    z: 0.25
+  }
+  size {
+    x: 70.0
+    y: 52.9
+  }
+  type: TYPE_BOX
+  texture: "ui/bid_normal"
+  id: "cell_13_panel"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -636.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_1"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -530.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_2"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -424.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_3"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -318.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_4"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -212.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_5"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: -106.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  font: "system_font"
+  id: "cell_6"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    y: 0.93
+    z: 0.68
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "cell_7"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 106.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "2"
+  font: "system_font"
+  id: "cell_8"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 212.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "3"
+  font: "system_font"
+  id: "cell_9"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 318.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "4"
+  font: "system_font"
+  id: "cell_10"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 424.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "5"
+  font: "system_font"
+  id: "cell_11"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 530.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "6"
+  font: "system_font"
+  id: "cell_12"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    x: 636.0
+    y: -54.0
+    z: 0.3
+  }
+  size {
+    x: 49.0
+    y: 29.4
+  }
+  color {
+    x: 0.72
+    y: 0.72
+    z: 0.72
+  }
+  type: TYPE_TEXT
+  text: "7"
+  font: "system_font"
+  id: "cell_13"
+  parent: "rail_strip"
+}
+nodes {
+  position {
+    y: 4.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 28.0
+  }
+  color {
+    x: 0.86
+    y: 0.76
+    z: 0.48
+  }
   type: TYPE_TEXT
   text: "v"
   font: "system_font"
@@ -155,10 +553,19 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 0.0 y: -112.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 28.0 z: 0.0 }
-  color { x: 0.55 y: 0.55 z: 0.55 w: 1.0 }
+  position {
+    y: -112.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 28.0
+  }
+  color {
+    x: 0.86
+    y: 0.76
+    z: 0.48
+  }
   type: TYPE_TEXT
   text: "^"
   font: "system_font"
@@ -166,43 +573,19 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 0.0 y: -54.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 74.0 y: 42.0 z: 0.0 }
-  color { x: 0.35 y: 0.35 z: 0.35 w: 0.0 }
-  type: TYPE_TEXT
-  text: "1"
-  font: "system_font"
-  id: "selected_count"
-  parent: "root"
-}
-nodes {
-  position { x: 0.0 y: -144.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 150.0 y: 24.0 z: 0.0 }
-  color { x: 0.52 y: 0.52 z: 0.52 w: 0.0 }
-  type: TYPE_TEXT
-  text: "2"
-  font: "system_font"
-  id: "selected_face"
-  parent: "root"
-}
-nodes {
-  position { x: -490.0 y: 4.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 24.0 z: 0.0 }
-  color { x: 0.52 y: 0.52 z: 0.52 w: 0.0 }
-  type: TYPE_TEXT
-  text: "1 - 10"
-  font: "system_font"
-  id: "range"
-  parent: "root"
-}
-nodes {
-  position { x: 245.0 y: 0.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 340.0 y: 28.0 z: 0.0 }
-  color { x: 0.45 y: 0.45 z: 0.45 w: 1.0 }
+  position {
+    x: 245.0
+    z: 0.4
+  }
+  size {
+    x: 340.0
+    y: 28.0
+  }
+  color {
+    x: 0.45
+    y: 0.45
+    z: 0.45
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"

@@ -11,8 +11,17 @@ export function createLadderService(client: ConvexClient) {
     async enterQueue(): Promise<LadderQueueState> {
       return await client.mutation(convexFunctions.ladder.enterQueue, {}) as LadderQueueState
     },
+    async heartbeatQueue(): Promise<LadderQueueState> {
+      return await client.mutation(convexFunctions.ladder.heartbeatQueue, {}) as LadderQueueState
+    },
     async leaveQueue(): Promise<LadderQueueState> {
       return await client.mutation(convexFunctions.ladder.leaveQueue, {}) as LadderQueueState
+    },
+    async acknowledgeMatchHandoff(matchId: string): Promise<{ ok: boolean; consumed: boolean }> {
+      return await client.mutation(
+        convexFunctions.ladder.acknowledgeMatchHandoff,
+        { matchId } as any,
+      ) as { ok: boolean; consumed: boolean }
     },
     async getOwnQueueState(): Promise<LadderQueueState> {
       return await client.query(convexFunctions.ladder.observeOwnQueue, {}) as LadderQueueState

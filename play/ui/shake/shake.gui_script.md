@@ -1,9 +1,10 @@
 # 개요
-shake 입력을 기존 `shake.roll` action으로 변환하고, 컵 배치와 주사위 확인 화면을 표시한다.
+shake 입력을 보이지 않는 로컬 0–100 gauge로 집계하고, 100에 도달했을 때 `shake.complete`를 한 번만 제출한다. 컵 배치와 주사위 확인 화면은 표시하지만 gauge 숫자나 bar는 표시하지 않는다.
 
 # 의존성
 - `game/model/store.lua`: dispatch/subscribe.
-- `game/model/actions.lua`: `shake.roll`.
+- `ui/shake/shake_gauge.lua`: impulse/decay/bounds 순수 계산.
+- `game/model/actions.lua`: local simulator용 `shake.complete`.
 - `game/model/selectors.lua`: local dice 조회.
 - `game/core/gestures.lua`: drag/space 정규화.
 - `game/core/audio.lua`: shake sound.
@@ -14,13 +15,14 @@ shake 입력을 기존 `shake.roll` action으로 변환하고, 컵 배치와 주
   - gesture: drag, shake key.
   - `turn`, `players` topics.
 - 출력:
-  - `shake.roll` action.
+  - local gauge update.
+  - 완료 시 `shake.complete` command/action 1회.
   - cup shake/lift animation.
-  - dice/result GUI update.
+  - dice/result GUI update. 컵 앞 테이블 주사위는 face별 `a1`–`a5` cosmetic angle, 하단 리스트는 정면 `a0`를 사용한다.
 
 # 의사코드
 ```lua
--- Pattern: View = Observer + gesture Adapter. space 또는 drag 거리 임계 -> shake.roll.
+-- Pattern: View = Observer + local gesture Aggregator.
 local store_mod = require("game.model.store")
 local selectors = require("game.model.selectors")
 local actions   = require("game.model.actions")
@@ -45,13 +47,14 @@ function on_input(self, action_id, action)
     local e = self.gest:feed(action_id, action)
     if e and e.kind == "shake" then
         audio.play_sfx("shake")
-        self.store:dispatch(actions.shake_roll(self.store:get_state().match.local_player_id))
+        gauge = shake_gauge.add(gauge)
+        if shake_gauge.complete(gauge) then submit_once("shake.complete") end
     end
 end
 
 function render(self, s)
     layout_cups(table_seat_layout.build(...))
-    render_progress(selectors.shake_status(s, s.match.local_player_id))
+    -- gauge is intentionally not rendered
     render_phase(s.flow.phase)
 end
 ```

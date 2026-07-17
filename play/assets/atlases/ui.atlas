@@ -1,1 +1,22 @@
+images {
+  image: "/assets/images/ui/arrows/down.png"
+}
+images {
+  image: "/assets/images/ui/arrows/up.png"
+}
+images {
+  image: "/assets/images/ui/buttons/bid_button.png"
+}
+images {
+  image: "/assets/images/ui/buttons/challenge_button.png"
+}
+images {
+  image: "/assets/images/ui/rail/bid_normal.png"
+}
+images {
+  image: "/assets/images/ui/rail/bid_skull.png"
+}
+images {
+  image: "/assets/images/ui/turn_indicator/turn_indicator.png"
+}
 extrude_borders: 2

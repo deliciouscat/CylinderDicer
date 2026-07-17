@@ -12,6 +12,10 @@ local tests = {
 	require("game.model.tests.cylinder_interaction_test"),
 	require("game.model.tests.local_permissions_test"),
 	require("game.model.tests.flow_contract_test"),
+	require("game.model.tests.server_snapshot_identity_test"),
+	require("game.model.tests.rail_layout_test"),
+	require("game.model.tests.dice_art_test"),
+	require("game.model.tests.i18n_test"),
 }
 
 local total = 0

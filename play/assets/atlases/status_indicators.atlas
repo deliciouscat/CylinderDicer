@@ -1,0 +1,7 @@
+images {
+  image: "/assets/images/icons/bullet_indicator.png"
+}
+images {
+  image: "/assets/images/icons/hp_indicator.png"
+}
+extrude_borders: 2

@@ -93,6 +93,14 @@
     "screenLabel": "CylinderDicer 로비",
     "titleAlt": "CylinderDicer",
     "mainMenuLabel": "주 메뉴",
+    "signIn": "로그인",
+    "signUp": "회원가입",
+    "localeLabel": "언어 선택",
+    "locales": {
+      "en": "English",
+      "ko": "한국어",
+      "ja": "日本語"
+    },
     "menu": {
       "ladder": "래더",
       "customGame": "커스텀 게임",

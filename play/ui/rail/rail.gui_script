@@ -4,31 +4,103 @@ local actions = require("game.model.actions")
 local gestures = require("game.core.gestures")
 local gui_util = require("ui.common.gui_util")
 local local_permissions = require("ui.common.local_permissions")
+local rail_layout = require("ui.rail.rail_layout")
 local visual_status = require("game.dev.visual_status")
 
 local PIXELS_PER_COUNT = 32
+local STRIP_X_PROPERTY = "position.x"
+local CENTER_TEXT_COLOR = vmath.vector4(1.0, 0.93, 0.68, 1.0)
+local DEFAULT_TEXT_COLOR = vmath.vector4(0.72, 0.72, 0.72, 1.0)
+
+local animate_to_target
+
+local function reset_strip(self)
+	gui.set_position(self.rail_strip, vmath.vector3(0.0, 0.0, 0.0))
+end
+
+local function render_cells(center_count)
+	for index = 1, rail_layout.CELL_COUNT do
+		local value = rail_layout.value_for_index(center_count, index)
+		gui_util.set_enabled("cell_" .. tostring(index) .. "_panel", value ~= nil)
+		gui_util.set_text("cell_" .. tostring(index), value or "")
+		gui_util.set_color(
+			"cell_" .. tostring(index),
+			index == rail_layout.CENTER_INDEX and CENTER_TEXT_COLOR or DEFAULT_TEXT_COLOR
+		)
+	end
+end
+
+local function snap_to_count(self, count)
+	self.is_animating = false
+	self.displayed_count = count
+	self.target_count = count
+	reset_strip(self)
+	render_cells(count)
+end
+
+animate_to_target = function(self)
+	if self.is_animating or not self.is_visible or not self.displayed_count or not self.target_count then
+		return
+	end
+
+	local delta = self.target_count - self.displayed_count
+	if math.abs(delta) > rail_layout.MAX_ANIMATED_STEP then
+		self.displayed_count = self.target_count - (delta > 0 and 1 or -1)
+		reset_strip(self)
+		render_cells(self.displayed_count)
+	end
+
+	local step = rail_layout.step_to_target(self.displayed_count, self.target_count)
+	if step == 0 then
+		return
+	end
+
+	self.is_animating = true
+	gui.animate(
+		self.rail_strip,
+		STRIP_X_PROPERTY,
+		-step * rail_layout.CELL_SPACING,
+		gui.EASING_INOUTQUAD,
+		rail_layout.animation_duration(step),
+		0.0,
+		function()
+			self.displayed_count = self.displayed_count + step
+			self.is_animating = false
+			reset_strip(self)
+			render_cells(self.displayed_count)
+			if self.is_visible then
+				animate_to_target(self)
+			else
+				snap_to_count(self, self.target_count)
+			end
+		end
+	)
+end
 
 local function render(self, state)
-	local lo, hi = selectors.visible_rail_range(state)
 	local bid = state.bidding.my_bid
 	local current = state.bidding.current_bid
 	local visible = selectors.is_hud(state, "bidding")
+	local target_count = bid.count
+	local half = rail_layout.CENTER_INDEX - 1
 
 	visual_status.set("rail", {
 		phase = selectors.phase(state),
 		hud = selectors.hud_kind(state),
 		visible = visible,
-		lo = lo,
-		hi = hi,
+		lo = math.max(rail_layout.MIN_COUNT, target_count - half),
+		hi = math.min(rail_layout.MAX_COUNT, target_count + half),
+		selected_count = target_count,
 		current_bid = current,
 	})
 	gui_util.set_enabled("root", visible)
-	gui_util.set_text("range", tostring(lo) .. " - " .. tostring(hi))
-	gui_util.set_text("selected_count", bid.count)
-	gui_util.set_text("selected_face", bid.face)
+	self.is_visible = visible
 
-	for index = 1, 10 do
-		gui_util.set_text("cell_" .. tostring(index), lo + index - 1)
+	if not self.displayed_count or (not visible and not self.is_animating) then
+		snap_to_count(self, target_count)
+	else
+		self.target_count = target_count
+		animate_to_target(self)
 	end
 
 	if current then
@@ -48,7 +120,7 @@ end
 
 local function select_delta(self, delta)
 	local state = self.store:get_state()
-	if not local_permissions.can_bid(state) then
+	if not local_permissions.can_bid(state) or delta == 0 then
 		return
 	end
 	local next_count = state.bidding.my_bid.count + delta
@@ -79,6 +151,11 @@ function init(self)
 	self.gesture = gestures.new(nil)
 	self.subs = {}
 	self.needs_render = false
+	self.rail_strip = gui.get_node("rail_strip")
+	self.displayed_count = nil
+	self.target_count = nil
+	self.is_animating = false
+	self.is_visible = false
 	if gui and gui.set_render_order then
 		gui.set_render_order(7)
 	end
@@ -110,6 +187,8 @@ function on_message(self, message_id, message)
 		if state and local_permissions.can_bid(state) then
 			self.store:dispatch(actions.bid_select_count(message.count))
 		end
+	elseif message_id == hash("locale_changed") then
+		request_render(self)
 	end
 end
 

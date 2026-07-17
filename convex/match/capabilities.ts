@@ -48,7 +48,7 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 			return [{
 				type: 'shake_complete',
 				command: 'shake.complete',
-				remaining: Math.max(0, shake.required - shake.count),
+				remaining: 1,
 			}]
 		}
 	}
@@ -61,6 +61,9 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 	}
 
 	if (state.flow.phase === 'bidding' && playerId === state.turn.activePlayerId) {
+		if (state.bidding.reloadGate) {
+			return []
+		}
 		const actions: AvailableAction[] = [{
 			type: 'bid',
 			min_count: 1,
@@ -69,7 +72,7 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 			max_face: 6,
 			suggested: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
 		}]
-		if (state.bidding.currentBid) {
+		if (!state.pendingLoad && state.bidding.currentBid) {
 			actions.push({ type: 'challenge' })
 		}
 		return actions

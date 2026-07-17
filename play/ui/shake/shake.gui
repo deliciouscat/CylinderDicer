@@ -1,7 +1,7 @@
 script: "/ui/shake/shake.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/default.font"
+  font: "/assets/fonts/noto_serif_cjk_kr_semibold.font"
 }
 textures {
   name: "props_default"
@@ -16,24 +16,9 @@ nodes {
     x: 640.0
     y: 360.0
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
-  size {
-    x: 0.0
-    y: 0.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.0
-  }
   type: TYPE_BOX
   id: "root"
+  alpha: 0.0
 }
 nodes {
   position {
@@ -41,26 +26,15 @@ nodes {
     y: 150.0
     z: 0.2
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 118.0
     y: 133.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.96
   }
   type: TYPE_BOX
   texture: "props_default/cup"
   id: "cup_seat_1"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
   position {
@@ -68,52 +42,30 @@ nodes {
     y: 220.0
     z: 0.2
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 118.0
     y: 133.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.96
   }
   type: TYPE_BOX
   texture: "props_default/cup"
   id: "cup_seat_2"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
   position {
     y: 275.0
     z: 0.2
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 118.0
     y: 133.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.96
   }
   type: TYPE_BOX
   texture: "props_default/cup"
   id: "cup_seat_3"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
   position {
@@ -121,26 +73,15 @@ nodes {
     y: 220.0
     z: 0.2
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 118.0
     y: 133.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.96
   }
   type: TYPE_BOX
   texture: "props_default/cup"
   id: "cup_seat_4"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
   position {
@@ -148,46 +89,24 @@ nodes {
     y: 150.0
     z: 0.2
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 118.0
     y: 133.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.96
   }
   type: TYPE_BOX
   texture: "props_default/cup"
   id: "cup_seat_5"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
   position {
     y: 8.0
     z: 0.4
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 270.0
     y: 304.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "props_default/cup"
@@ -200,23 +119,12 @@ nodes {
     y: -83.0
     z: 0.3
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 48.0
     y: 52.0
   }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
   type: TYPE_BOX
-  texture: "dice_default/f1_a0"
+  texture: "dice_default/f1_a1"
   id: "reveal_dice_1"
   parent: "root"
 }
@@ -226,23 +134,12 @@ nodes {
     y: -64.0
     z: 0.31
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 48.0
     y: 52.0
   }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
   type: TYPE_BOX
-  texture: "dice_default/f2_a0"
+  texture: "dice_default/f2_a2"
   id: "reveal_dice_2"
   parent: "root"
 }
@@ -251,23 +148,12 @@ nodes {
     y: -87.0
     z: 0.32
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 48.0
     y: 52.0
   }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
   type: TYPE_BOX
-  texture: "dice_default/f3_a0"
+  texture: "dice_default/f3_a3"
   id: "reveal_dice_3"
   parent: "root"
 }
@@ -277,23 +163,12 @@ nodes {
     y: -65.0
     z: 0.33
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 48.0
     y: 52.0
   }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
   type: TYPE_BOX
-  texture: "dice_default/f4_a0"
+  texture: "dice_default/f4_a4"
   id: "reveal_dice_4"
   parent: "root"
 }
@@ -303,23 +178,12 @@ nodes {
     y: -84.0
     z: 0.34
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 48.0
     y: 52.0
   }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-  }
   type: TYPE_BOX
-  texture: "dice_default/f5_a0"
+  texture: "dice_default/f5_a5"
   id: "reveal_dice_5"
   parent: "root"
 }
@@ -328,45 +192,19 @@ nodes {
     y: -232.0
     z: 0.5
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
-  size {
-    x: 0.0
-    y: 0.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 0.0
-  }
   type: TYPE_BOX
   id: "dice_tray"
   parent: "root"
+  alpha: 0.0
 }
 nodes {
   position {
     x: -204.0
     z: 0.1
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 78.0
     y: 82.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "dice_default/f1_a0"
@@ -378,20 +216,9 @@ nodes {
     x: -102.0
     z: 0.1
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 78.0
     y: 82.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "dice_default/f2_a0"
@@ -402,20 +229,9 @@ nodes {
   position {
     z: 0.1
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 78.0
     y: 82.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "dice_default/f3_a0"
@@ -427,20 +243,9 @@ nodes {
     x: 102.0
     z: 0.1
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 78.0
     y: 82.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "dice_default/f4_a0"
@@ -452,20 +257,9 @@ nodes {
     x: 204.0
     z: 0.1
   }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
   size {
     x: 78.0
     y: 82.0
-  }
-  color {
-    x: 1.0
-    y: 1.0
-    z: 1.0
   }
   type: TYPE_BOX
   texture: "dice_default/f5_a0"
@@ -474,41 +268,8 @@ nodes {
 }
 nodes {
   position {
-    y: -196.0
-    z: 0.6
-  }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
-  }
-  size {
-    x: 220.0
-    y: 34.0
-  }
-  color {
-    x: 0.92
-    y: 0.86
-    z: 0.72
-    w: 1.0
-  }
-  type: TYPE_TEXT
-  text: "0 / 6"
-  font: "system_font"
-  id: "progress"
-  parent: "root"
-}
-nodes {
-  position {
     y: -314.0
     z: 0.6
-  }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
   }
   size {
     x: 860.0
@@ -518,22 +279,16 @@ nodes {
     x: 0.86
     y: 0.86
     z: 0.86
-    w: 0.78
   }
   type: TYPE_BOX
   id: "hint_panel"
   parent: "root"
+  alpha: 0.78
 }
 nodes {
   position {
     y: -314.0
     z: 0.7
-  }
-  scale {
-    x: 1.0
-    y: 1.0
-    z: 1.0
-    w: 1.0
   }
   size {
     x: 820.0
@@ -543,14 +298,13 @@ nodes {
     x: 0.05
     y: 0.05
     z: 0.05
-    w: 1.0
   }
   type: TYPE_TEXT
   text: "[Space] repeatedly or drag the mouse to shake"
   font: "system_font"
   id: "hint"
-  parent: "root"
   line_break: true
+  parent: "root"
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

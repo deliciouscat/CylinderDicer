@@ -1,7 +1,7 @@
 script: "/ui/player_carousel/player_carousel.gui_script"
 fonts {
   name: "system_font"
-  font: "/builtins/fonts/default.font"
+  font: "/assets/fonts/noto_serif_cjk_kr_semibold.font"
 }
 textures {
   name: "rosemund"
@@ -19,58 +19,68 @@ textures {
   name: "zippo_jay"
   texture: "/assets/atlases/charcters/zippo-jay.atlas"
 }
+textures {
+  name: "calamity_kate"
+  texture: "/assets/atlases/charcters/calamity-kate.atlas"
+}
+textures {
+  name: "the_kid"
+  texture: "/assets/atlases/charcters/the-kid.atlas"
+}
+textures {
+  name: "status"
+  texture: "/assets/atlases/status_indicators.atlas"
+}
 nodes {
-  position { x: 640.0 y: 360.0 z: 0.0 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 0.0 y: 0.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.0 }
+  position {
+    x: 640.0
+    y: 368.0
+  }
   type: TYPE_BOX
   id: "root"
+  alpha: 0.0
 }
 nodes {
-  position { x: 0.0 y: 238.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 1040.0 y: 22.0 z: 0.0 }
-  color { x: 0.64 y: 0.64 z: 0.64 w: 0.0 }
-  type: TYPE_TEXT
-  text: "players"
-  font: "system_font"
-  id: "players"
-  parent: "root"
-}
-nodes {
-  position { x: -560.0 y: 150.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 170.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.78 }
+  position {
+    x: -560.0
+    y: 158.0
+    z: 0.1
+  }
+  size {
+    x: 120.0
+    y: 170.0
+  }
   type: TYPE_BOX
   texture: "rosemund/front"
   id: "slot1_body"
   parent: "root"
+  alpha: 0.78
 }
 nodes {
-  position { x: -560.0 y: 246.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 52.0 y: 52.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.95 }
+  position {
+    x: -598.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
-  id: "slot1_head"
-  parent: "root"
-}
-nodes {
-  position { x: -598.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 0.42 y: 0.42 z: 0.42 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot1_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: -598.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -598.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -78,19 +88,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -545.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: -545.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot1_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: -545.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -545.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -98,10 +119,20 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -560.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 94.0 y: 26.0 z: 0.0 }
-  color { x: 0.34 y: 0.34 z: 0.34 w: 1.0 }
+  position {
+    x: -560.0
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 94.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -109,49 +140,67 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -560.0 y: 158.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 104.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    x: -560.0
+    y: 166.0
+    z: 0.45
+  }
+  size {
+    x: 104.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot1_marker"
   parent: "root"
+  alpha: 0.75
 }
 nodes {
-  position { x: -330.0 y: 150.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 170.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.78 }
+  position {
+    x: -330.0
+    y: 158.0
+    z: 0.1
+  }
+  size {
+    x: 120.0
+    y: 170.0
+  }
   type: TYPE_BOX
   texture: "hush_feather/front"
   id: "slot2_body"
   parent: "root"
+  alpha: 0.78
 }
 nodes {
-  position { x: -330.0 y: 246.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 52.0 y: 52.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.95 }
+  position {
+    x: -368.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
-  id: "slot2_head"
-  parent: "root"
-}
-nodes {
-  position { x: -368.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 0.42 y: 0.42 z: 0.42 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot2_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: -368.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -368.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -159,19 +208,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -315.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: -315.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot2_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: -315.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -315.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -179,10 +239,20 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -330.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 94.0 y: 26.0 z: 0.0 }
-  color { x: 0.34 y: 0.34 z: 0.34 w: 1.0 }
+  position {
+    x: -330.0
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 94.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -190,49 +260,67 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -330.0 y: 158.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 104.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    x: -330.0
+    y: 166.0
+    z: 0.45
+  }
+  size {
+    x: 104.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot2_marker"
   parent: "root"
+  alpha: 0.75
 }
 nodes {
-  position { x: -105.0 y: 165.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 140.0 y: 200.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.96 }
+  position {
+    x: -175.0
+    y: 128.0
+    z: 0.1
+  }
+  size {
+    x: 140.0
+    y: 200.0
+  }
   type: TYPE_BOX
   texture: "samuel_saber/front"
   id: "slot3_body"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
-  position { x: -105.0 y: 278.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 58.0 y: 58.0 z: 0.0 }
-  color { x: 0.56 y: 0.56 z: 0.56 w: 1.0 }
+  position {
+    x: -294.0
+    y: 236.0
+    z: 0.3
+  }
+  size {
+    x: 46.0
+    y: 46.0
+  }
   type: TYPE_BOX
-  id: "slot3_head"
-  parent: "root"
-}
-nodes {
-  position { x: -148.0 y: 278.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 46.0 y: 46.0 z: 0.0 }
-  color { x: 0.36 y: 0.36 z: 0.36 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot3_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: -148.0 y: 278.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 34.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -294.0
+    y: 238.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 34.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -240,19 +328,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -94.0 y: 278.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 46.0 y: 46.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: -240.0
+    y: 236.0
+    z: 0.3
+  }
+  size {
+    x: 46.0
+    y: 46.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot3_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: -94.0 y: 278.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 34.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: -240.0
+    y: 238.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 34.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -260,10 +359,20 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -105.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 112.0 y: 26.0 z: 0.0 }
-  color { x: 0.22 y: 0.22 z: 0.22 w: 1.0 }
+  position {
+    x: -175.0
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 112.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -271,49 +380,66 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: -105.0 y: 180.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 118.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    x: -175.0
+    y: 148.0
+    z: 0.45
+  }
+  size {
+    x: 118.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot3_marker"
   parent: "root"
+  alpha: 0.75
 }
 nodes {
-  position { x: 70.0 y: 180.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 150.0 y: 230.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 0.96 }
+  position {
+    y: 138.0
+    z: 0.1
+  }
+  size {
+    x: 150.0
+    y: 230.0
+  }
   type: TYPE_BOX
   texture: "zippo_jay/front"
   id: "slot4_body"
   parent: "root"
+  alpha: 0.96
 }
 nodes {
-  position { x: 70.0 y: 308.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 64.0 y: 64.0 z: 0.0 }
-  color { x: 0.50 y: 0.50 z: 0.50 w: 1.0 }
+  position {
+    x: 68.0
+    y: 236.0
+    z: 0.3
+  }
+  size {
+    x: 46.0
+    y: 46.0
+  }
   type: TYPE_BOX
-  id: "slot4_head"
-  parent: "root"
-}
-nodes {
-  position { x: 28.0 y: 282.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 46.0 y: 46.0 z: 0.0 }
-  color { x: 0.36 y: 0.36 z: 0.36 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot4_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: 28.0 y: 282.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 34.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 68.0
+    y: 238.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 34.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -321,19 +447,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 82.0 y: 282.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 46.0 y: 46.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: 122.0
+    y: 236.0
+    z: 0.3
+  }
+  size {
+    x: 46.0
+    y: 46.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot4_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: 82.0 y: 282.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 42.0 y: 34.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 122.0
+    y: 238.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 34.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -341,10 +478,19 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 70.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 26.0 z: 0.0 }
-  color { x: 0.22 y: 0.22 z: 0.22 w: 1.0 }
+  position {
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 120.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -352,48 +498,70 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 70.0 y: 190.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 124.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    y: 153.0
+    z: 0.45
+  }
+  size {
+    x: 124.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot4_marker"
   parent: "root"
+  alpha: 0.75
 }
 nodes {
-  position { x: 330.0 y: 150.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 170.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.82 }
+  position {
+    x: 330.0
+    y: 158.0
+    z: 0.1
+  }
+  size {
+    x: 120.0
+    y: 170.0
+  }
+  color {
+    x: 0.84
+    y: 0.84
+    z: 0.84
+  }
   type: TYPE_BOX
   id: "slot5_body"
   parent: "root"
+  alpha: 0.82
 }
 nodes {
-  position { x: 330.0 y: 246.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 52.0 y: 52.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.95 }
+  position {
+    x: 292.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
-  id: "slot5_head"
-  parent: "root"
-}
-nodes {
-  position { x: 292.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 0.42 y: 0.42 z: 0.42 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot5_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: 292.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 292.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -401,19 +569,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 345.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: 345.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot5_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: 345.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 345.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -421,10 +600,20 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 330.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 94.0 y: 26.0 z: 0.0 }
-  color { x: 0.34 y: 0.34 z: 0.34 w: 1.0 }
+  position {
+    x: 330.0
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 94.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -432,48 +621,71 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 330.0 y: 158.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 104.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    x: 330.0
+    y: 166.0
+    z: 0.45
+  }
+  size {
+    x: 104.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot5_marker"
   parent: "root"
+  alpha: 0.75
 }
 nodes {
-  position { x: 560.0 y: 150.0 z: 0.1 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 120.0 y: 170.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.82 }
+  position {
+    x: 560.0
+    y: 158.0
+    z: 0.1
+  }
+  size {
+    x: 120.0
+    y: 170.0
+  }
+  color {
+    x: 0.84
+    y: 0.84
+    z: 0.84
+  }
   type: TYPE_BOX
   id: "slot6_body"
   parent: "root"
+  alpha: 0.82
 }
 nodes {
-  position { x: 560.0 y: 246.0 z: 0.2 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 52.0 y: 52.0 z: 0.0 }
-  color { x: 0.84 y: 0.84 z: 0.84 w: 0.95 }
+  position {
+    x: 522.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
-  id: "slot6_head"
-  parent: "root"
-}
-nodes {
-  position { x: 522.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 0.42 y: 0.42 z: 0.42 w: 1.0 }
-  type: TYPE_BOX
+  texture: "status/bullet_indicator"
   id: "slot6_bullet_badge"
   parent: "root"
 }
 nodes {
-  position { x: 522.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 522.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -481,19 +693,30 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 575.0 y: 72.0 z: 0.3 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 44.0 y: 44.0 z: 0.0 }
-  color { x: 1.0 y: 0.66 z: 0.75 w: 1.0 }
+  position {
+    x: 575.0
+    y: 80.0
+    z: 0.3
+  }
+  size {
+    x: 44.0
+    y: 44.0
+  }
   type: TYPE_BOX
+  texture: "status/hp_indicator"
   id: "slot6_hp_badge"
   parent: "root"
 }
 nodes {
-  position { x: 575.0 y: 72.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 40.0 y: 32.0 z: 0.0 }
-  color { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
+  position {
+    x: 575.0
+    y: 82.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 32.0
+  }
   type: TYPE_TEXT
   text: "0"
   font: "system_font"
@@ -501,10 +724,20 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 560.0 y: 34.0 z: 0.4 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 94.0 y: 26.0 z: 0.0 }
-  color { x: 0.34 y: 0.34 z: 0.34 w: 1.0 }
+  position {
+    x: 560.0
+    y: 42.0
+    z: 0.4
+  }
+  size {
+    x: 94.0
+    y: 26.0
+  }
+  color {
+    x: 0.9490196
+    y: 0.9607843
+    z: 0.9372549
+  }
   type: TYPE_TEXT
   text: "-"
   font: "system_font"
@@ -512,15 +745,25 @@ nodes {
   parent: "root"
 }
 nodes {
-  position { x: 560.0 y: 158.0 z: 0.45 }
-  scale { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
-  size { x: 104.0 y: 28.0 z: 0.0 }
-  color { x: 0.20 y: 0.20 z: 0.20 w: 0.75 }
+  position {
+    x: 560.0
+    y: 166.0
+    z: 0.45
+  }
+  size {
+    x: 104.0
+    y: 28.0
+  }
+  color {
+    x: 0.2
+    y: 0.2
+    z: 0.2
+  }
   type: TYPE_TEXT
-  text: ""
   font: "system_font"
   id: "slot6_marker"
   parent: "root"
+  alpha: 0.75
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

@@ -52,11 +52,33 @@ export default defineSchema({
     userId: v.id('users'),
     status: v.union(v.literal('waiting'), v.literal('matched'), v.literal('cancelled')),
     matchId: v.optional(v.id('matches')),
+    qaRevision: v.optional(v.number()),
+    qaPendingCount: v.optional(v.number()),
+    lastSeenAt: v.optional(v.number()),
     joinedAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_user', ['userId'])
-    .index('by_status_and_joined_at', ['status', 'joinedAt']),
+    .index('by_status_and_joined_at', ['status', 'joinedAt'])
+    .index('by_status_and_last_seen_at', ['status', 'lastSeenAt']),
+
+  ladderQaOpponents: defineTable({
+    queueEntryId: v.id('ladderQueueEntries'),
+    virtualOpponentId: v.id('virtualOpponents'),
+    seatIndex: v.number(),
+    addedByUserId: v.id('users'),
+    createdAt: v.number(),
+  })
+    .index('by_queue_entry_and_seat_index', ['queueEntryId', 'seatIndex'])
+    .index('by_queue_entry_and_virtual_opponent', ['queueEntryId', 'virtualOpponentId']),
+
+  ladderQaWaitingOpponents: defineTable({
+    poolKey: v.string(),
+    virtualOpponentId: v.id('virtualOpponents'),
+    seatIndex: v.number(),
+    addedByUserId: v.id('users'),
+    createdAt: v.number(),
+  }).index('by_pool_key_and_created_at', ['poolKey', 'createdAt']),
 
   inventories: defineTable({
     userId: v.id('users'),

@@ -29,7 +29,7 @@ local HUD_BY_PHASE = {
 
 local BACKGROUND_BY_HUD = {
 	revolver_reload = "bidding",
-	loading = "shaking",
+	loading = "bidding",
 	cup_shake = "shaking",
 	bidding = "bidding",
 	duel = "dualing",
@@ -47,6 +47,15 @@ end
 
 local function hud(state)
 	local current_phase = phase(state)
+	if current_phase == "bidding" and state.pending_load and state.pending_load.source == "bid" then
+		if is_local_pending_load(state) then
+			return "revolver_reload"
+		end
+		if state.bidding and state.bidding.reload_gate then
+			return "loading"
+		end
+		return "bidding"
+	end
 	if current_phase == "revolver_reload" and state.pending_load and not is_local_pending_load(state) then
 		return "loading"
 	end
@@ -57,6 +66,8 @@ function M.describe(state)
 	local hud_kind = hud(state)
 	local cylinder_anchor = "offscreen"
 	if state.pending_load and hud_kind == "revolver_reload" then
+		cylinder_anchor = "focal"
+	elseif hud_kind == "loading" then
 		cylinder_anchor = "focal"
 	elseif hud_kind == "bidding" then
 		cylinder_anchor = "hud"

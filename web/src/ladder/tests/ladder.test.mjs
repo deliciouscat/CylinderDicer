@@ -8,6 +8,17 @@ const {
   normalizePlacement,
 } = require('../../../../.tmp/ladder-test/shared/ladder/placement.js')
 const {
+  canFinalizeLadderQaRoster,
+  nextLadderQaPlayerCount,
+  nextLadderQaWaitingBotCount,
+  shouldResumeReadyLadderMatch,
+} = require('../../../../.tmp/ladder-test/shared/ladder/qa.js')
+const {
+  decideLadderMatch,
+  estimateLadderArrivalRate,
+  ladderMmrBand,
+} = require('../../../../.tmp/ladder-test/shared/ladder/matchmaking.js')
+const {
   MAX_FIDGET_CHIPS,
   applyFidgetOutcome,
   formatPlacement,
@@ -110,4 +121,84 @@ test('match found can hand off only once until an explicit handoff failure', () 
   assert.equal(handingOff.phase, 'handing_off')
   assert.equal(duplicate, handingOff)
   assert.equal(reduceLadderRuntime(handingOff, { type: 'handoff_failed' }).phase, 'roster')
+})
+
+test('Ladder QA clicks build only 2–6 player rosters', () => {
+  assert.equal(nextLadderQaPlayerCount(0), 2)
+  assert.equal(nextLadderQaPlayerCount(2), 4)
+  assert.equal(nextLadderQaPlayerCount(4), 6)
+  assert.equal(nextLadderQaPlayerCount(5), null)
+  assert.equal(nextLadderQaPlayerCount(-1), null)
+  assert.equal(nextLadderQaPlayerCount(1.5), null)
+})
+
+test('Ladder QA bots can wait before the human player joins', () => {
+  assert.equal(nextLadderQaWaitingBotCount(0), 1)
+  assert.equal(nextLadderQaWaitingBotCount(4), 5)
+  assert.equal(nextLadderQaWaitingBotCount(5), null)
+  assert.equal(nextLadderQaWaitingBotCount(-1), null)
+})
+
+test('only the latest waiting QA revision can finalize', () => {
+  assert.equal(canFinalizeLadderQaRoster({
+    status: 'waiting', qaRevision: 3, expectedQaRevision: 3, pendingOpponentCount: 3,
+  }), true)
+  assert.equal(canFinalizeLadderQaRoster({
+    status: 'waiting', qaRevision: 4, expectedQaRevision: 3, pendingOpponentCount: 3,
+  }), false)
+  assert.equal(canFinalizeLadderQaRoster({
+    status: 'cancelled', qaRevision: 3, expectedQaRevision: 3, pendingOpponentCount: 3,
+  }), false)
+  assert.equal(canFinalizeLadderQaRoster({
+    status: 'waiting', qaRevision: 3, expectedQaRevision: 3, pendingOpponentCount: 0,
+  }), false)
+})
+
+test('only recent dev matches resume while ranked matches remain recoverable', () => {
+  assert.equal(shouldResumeReadyLadderMatch({ mode: 'dev', ageMs: 30_000 }), true)
+  assert.equal(shouldResumeReadyLadderMatch({ mode: 'dev', ageMs: 5 * 60_000 + 1 }), false)
+  assert.equal(shouldResumeReadyLadderMatch({ mode: 'ranked', ageMs: 24 * 60 * 60_000 }), true)
+  assert.equal(shouldResumeReadyLadderMatch({ mode: 'dev', ageMs: Number.NaN }), false)
+})
+
+test('matchmaking waits for six when the projected fill fits inside the wait budget', () => {
+  const now = 20_000
+  const decision = decideLadderMatch([
+    { joinedAt: 10_000, mmr: 1000 },
+    { joinedAt: 15_000, mmr: 1050 },
+    { joinedAt: 20_000, mmr: 950 },
+  ], now)
+  assert.equal(decision.shouldStart, false)
+  assert.equal(decision.playerCount, 3)
+  assert.equal(decision.reason, 'waiting')
+})
+
+test('matchmaking starts a partial roster when fill is projected past max wait', () => {
+  const decision = decideLadderMatch([
+    { joinedAt: 0, mmr: 1000 },
+    { joinedAt: 20_000, mmr: 1100 },
+  ], 20_000)
+  assert.equal(decision.shouldStart, true)
+  assert.equal(decision.playerCount, 2)
+  assert.equal(decision.reason, 'projected_slow_fill')
+})
+
+test('matchmaking starts six immediately and widens MMR only with wait time', () => {
+  const full = Array.from({ length: 6 }, (_, index) => ({
+    joinedAt: index * 500,
+    mmr: 1000 + index * 10,
+  }))
+  assert.equal(decideLadderMatch(full, 3_000).reason, 'full')
+  assert.equal(ladderMmrBand(0), 150)
+  assert.equal(ladderMmrBand(45_000), 400)
+  assert.equal(estimateLadderArrivalRate([0, 20_000]), 0.05)
+})
+
+test('MMR outliers do not count toward a partial roster before the band widens', () => {
+  const decision = decideLadderMatch([
+    { joinedAt: 0, mmr: 1000 },
+    { joinedAt: 12_000, mmr: 1300 },
+  ], 12_000)
+  assert.equal(decision.playerCount, 1)
+  assert.equal(decision.shouldStart, false)
 })

@@ -93,6 +93,14 @@
     "screenLabel": "CylinderDicer lobby",
     "titleAlt": "CylinderDicer",
     "mainMenuLabel": "Main menu",
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "localeLabel": "Select language",
+    "locales": {
+      "en": "English",
+      "ko": "한국어",
+      "ja": "日本語"
+    },
     "menu": {
       "ladder": "Ladder",
       "customGame": "Custom Game",

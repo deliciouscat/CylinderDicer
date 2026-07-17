@@ -5,4 +5,11 @@
   --color-text-status-host: #E57386;
   --color-text-status-ready: #ACE573;
   --color-textbox-bg: #140C06;  /* alpha 60%, inner shadow */
+  --color-locale-border: #C89A5B;
+  --color-locale-border-soft: rgb(200 154 91 / 38%);
+  --color-locale-surface: rgb(24 16 11 / 86%);
+  --color-locale-surface-deep: rgb(10 7 5 / 96%);
+  --color-locale-accent: rgb(178 103 44 / 42%);
+  --color-locale-text: #FFF5E4;
+  --color-locale-muted: #D8C2A4;
 }

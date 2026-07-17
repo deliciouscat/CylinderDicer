@@ -2,11 +2,13 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import type {
   CommandRejectedPayload,
+  GameLocale,
   GameBridgeMessage,
+  SetLocalePayload,
   ServerSnapshotPayload,
   StartMatchPayload,
 } from '@shared/protocol/game-bridge'
-import { t } from '../i18n'
+import { activeLocale, t } from '../i18n'
 import { listenFromDefold, listenFromDefoldFrame, sendToDefold } from './gameBridge'
 
 const props = defineProps<{
@@ -48,6 +50,16 @@ function sendStartMatch(force = false) {
   })
 }
 
+function sendLocale(locale: GameLocale = activeLocale.value, force = false) {
+  if (!force && !isDefoldReady.value) {
+    return
+  }
+  send({
+    type: 'SET_LOCALE',
+    payload: { locale } satisfies SetLocalePayload,
+  })
+}
+
 function sendServerSnapshot(snapshot: ServerSnapshotPayload | null | undefined, force = false) {
   if ((!force && !isDefoldReady.value) || !snapshot) {
     return
@@ -69,6 +81,7 @@ function sendCommandRejected(rejected: CommandRejectedPayload | null | undefined
 }
 
 function sendInitialState(force = false) {
+  sendLocale(activeLocale.value, force)
   sendStartMatch(force)
   sendServerSnapshot(props.serverSnapshot, force)
   sendCommandRejected(props.commandRejected, force)
@@ -130,6 +143,7 @@ function handleMessage(message: GameBridgeMessage) {
     sendInitialState()
   } else if (
     message.type === 'MATCH_READY' ||
+    message.type === 'LOCALE_APPLIED' ||
     message.type === 'SERVER_SNAPSHOT_RECEIVED' ||
     message.type === 'PLAYER_COMMAND'
   ) {
@@ -148,6 +162,11 @@ onUnmounted(() => {
   stopFrameListening?.()
   stopReadyRetry()
 })
+
+watch(
+  () => activeLocale.value,
+  (locale) => sendLocale(locale),
+)
 
 watch(
   () => props.match,

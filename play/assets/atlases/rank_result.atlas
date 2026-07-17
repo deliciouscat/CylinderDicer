@@ -1,0 +1,10 @@
+images {
+  image: "/assets/images/ui/results/rank_1.png"
+}
+images {
+  image: "/assets/images/ui/results/rank_2_3.png"
+}
+images {
+  image: "/assets/images/ui/results/rank_4_6.png"
+}
+extrude_borders: 2

@@ -1,6 +1,8 @@
 # 개요
 베팅 유효성 규칙. 이전 bid보다 높은 bid인지 판단하고 rail/count/face 범위를 검증한다.
 
+face `1`(Skull)의 자기 Russian roulette는 유효성 비교 이후 `game/model/reducers.lua`가 처리한다. 입찰자 자신의 실린더를 회전해 1회 격발하고, 생존한 경우에만 candidate를 `current_bid`로 확정한다. 치명타이면 candidate는 버리고 기존 `current_bid`를 유지한 채 탈락자를 건너뛴다.
+
 # 의존성
 - `game/model/reducers.lua`: `bid.raise`, `bid.select_*` 처리.
 - `game/model/selectors.lua`: pass button 활성화 판단.
@@ -37,4 +39,3 @@ end
 
 return M
 ```
-

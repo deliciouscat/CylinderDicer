@@ -125,25 +125,29 @@ local function resolve_duel_shots(state, duel_state)
 	local judge = duel_state.judge
 	local challenger_id = duel_state.challenger_id
 	local previous_id = duel_state.previous_bidder_id
-	local target_id = previous_id
+	local shooter_id = previous_id
+	local target_id = challenger_id
 
 	if judge.verdict == M.VERDICT.SHORT then
-		target_id = challenger_id
+		shooter_id = challenger_id
+		target_id = previous_id
 	end
 
+	local shooter = state.players.by_id[shooter_id]
 	local target = state.players.by_id[target_id]
 	local steps = {}
 	local hp_changes = {}
 
-	if target then
-		local next_cylinder, shots = cylinder.trigger(target.cylinder, judge.delta)
-		target.cylinder = next_cylinder
+	if shooter and target then
+		local next_cylinder, shots = cylinder.trigger(shooter.cylinder, judge.delta)
+		shooter.cylinder = next_cylinder
 
 		for _, shot in ipairs(shots) do
 			steps[#steps + 1] = {
 				kind = "roulette",
+				shooter_id = shooter_id,
 				target_id = target_id,
-				roulette_subject_id = target_id,
+				roulette_subject_id = shooter_id,
 				hit = shot.hit,
 				slot_index = shot.slot_index,
 				consumed = shot.consumed,
@@ -160,8 +164,9 @@ local function resolve_duel_shots(state, duel_state)
 		verdict = judge.verdict,
 		challenger_id = challenger_id,
 		previous_bidder_id = previous_id,
+		shooter_id = shooter_id,
 		target_id = target_id,
-		roulette_subject_id = target_id,
+		roulette_subject_id = shooter_id,
 		steps = steps,
 		hp_changes = hp_changes,
 	}

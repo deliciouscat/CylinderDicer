@@ -3,12 +3,21 @@ local flow_contract = require("game.flow_contract")
 local store_mod = require("game.model.store")
 
 local ACTION_BY_TYPE = {
+	["shake.timeout"] = actions.shake_timeout,
 	["bidding.open"] = actions.bidding_open,
+	["bid.reload_timeout"] = actions.bid_reload_timeout,
 	["duel.execute"] = actions.duel_execute,
 	["round.advance"] = actions.round_advance,
 }
 
 local function state_signature(state, transition)
+	if transition and transition.type == "shake.timeout" then
+		return table.concat({
+			transition.type,
+			tostring(state.flow and state.flow.phase or "waiting"),
+			tostring(state.turn and state.turn.round_index or 0),
+		}, ":")
+	end
 	local duel = state.duel or {}
 	return table.concat({
 		tostring(transition and transition.type or "none"),

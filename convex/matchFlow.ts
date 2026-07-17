@@ -42,10 +42,13 @@ export const advanceMatchFlow = internalMutationGeneric({
 			return { ok: false, code: 'ACTOR_NOT_FOUND' }
 		}
 
+		const isPhaseWideShakeTimeout = type === 'shake.timeout'
 		return await applyMatchCommand(ctx, {
 			matchId: args.matchId,
-			commandId: `system:${args.expectedEpoch}:${args.expectedRevision}:${type}`,
-			revision: args.expectedRevision,
+			commandId: isPhaseWideShakeTimeout
+				? `system:${args.expectedEpoch}:${type}`
+				: `system:${args.expectedEpoch}:${args.expectedRevision}:${type}`,
+			revision: isPhaseWideShakeTimeout ? state.revision : args.expectedRevision,
 			type,
 			actorPlayerId,
 			source: 'system',

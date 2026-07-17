@@ -33,7 +33,9 @@ export type PlayerMatchCommandType =
   | 'bid.challenge'
 
 export type AutomaticMatchCommandType =
-  | 'bidding.open'
+	| 'shake.timeout'
+	| 'bidding.open'
+	| 'bid.reload_timeout'
   | 'duel.execute'
   | 'round.advance'
 

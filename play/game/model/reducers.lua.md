@@ -49,17 +49,19 @@ handlers[actions.types.MATCH_INIT] = function(state, a)
     return next, { "match", "players", "turn", "flow", "shake", "ui" }
 end
 
-handlers[actions.types.SHAKE_ROLL] = function(state, a)
+handlers[actions.types.SHAKE_COMPLETE] = function(state, a)
     local next = clone(state)
-    -- shake.roll은 주사위 즉시 굴림이 아니라 shake 입력 1회.
-    next.shake.counts[a.payload.player_id] = (next.shake.counts[a.payload.player_id] or 0) + 1
-    if next.shake.counts[a.payload.player_id] < 6 then return next, { "shake", "ui" } end
-    -- 6회 완료 시 전원 dice roll.
+    -- 로컬 gauge 완료 checkpoint. actor만 완료 표시하고 actor dice만 roll.
+    next.shake.counts[a.payload.player_id] = 6
     -- 최초 shake면 dice_check로.
     -- 이후 shake면 shake.reload_player_id가 있을 때 해당 플레이어 1발 reload 후 dice_check로.
     -- 결투 후 shake인데 reload_player_id가 없으면 추가 reload 없이 dice_check로.
     -- transition: cup_shake -> shake_complete_first/shake_complete_reload/shake_complete_no_reload
     return next, { "players", "turn", "flow", "shake", "ui" }
+end
+
+handlers[actions.types.SHAKE_TIMEOUT] = function(state, a)
+    -- 6초 phase timeout. 아직 완료하지 않은 생존 플레이어만 완료/roll하고 다음 phase로 전환.
 end
 
 handlers[actions.types.DICE_CHECK] = function(state, a)

@@ -27,6 +27,7 @@ import {
 import { requireCurrentUser, requireExistingCurrentUser, type GenericCtx } from './users'
 import type { MatchCommandType } from './protocol/commands'
 import type { MatchState } from './match/state'
+import { getLadderQaAdminState, stageLadderQaOpponent } from './ladder'
 
 const DEFAULT_ADMIN_MATCH_LIMIT = 20
 const MAX_ADMIN_MATCH_LIMIT = 50
@@ -282,6 +283,45 @@ function isTerminalMatchState(state: MatchState) {
 		state.turn.kind === 'complete'
 }
 
+async function completeAndDismissReadyDevMatch(ctx: GenericCtx, match: any, now: number) {
+	const linkedRooms = await getLinkedCustomGameRooms(ctx, match._id)
+	let nextRevision = match.revision
+	let snapshotsDeleted = 0
+	const state = await getLatestMatchState(ctx, match._id)
+	if (state && !isTerminalMatchState(state)) {
+		const nextState = await completeLatestMatchState(ctx, state, now)
+		nextRevision = nextState.revision
+	} else if (state) {
+		nextRevision = state.revision
+		await ctx.db.patch(match._id, {
+			status: 'complete',
+			revision: state.revision,
+			updatedAt: now,
+		})
+	} else {
+		snapshotsDeleted = await deletePublicMatchSnapshots(ctx, match._id)
+		await ctx.db.patch(match._id, {
+			status: 'complete',
+			updatedAt: now,
+		})
+	}
+	const participantsCompleted = await markMatchParticipantsComplete(ctx, match._id, now)
+	let roomsCompleted = 0
+	for (const room of linkedRooms) {
+		if (room.status === 'started') {
+			roomsCompleted += 1
+			await ctx.db.patch(room._id, { status: 'completed', updatedAt: now })
+		}
+	}
+	return {
+		matchId: match._id,
+		revision: nextRevision,
+		snapshotsDeleted,
+		participantsCompleted,
+		roomsCompleted,
+	}
+}
+
 async function deletePublicMatchSnapshots(ctx: GenericCtx, matchId: string) {
 	const snapshots = await ctx.db
 		.query('matchSnapshots')
@@ -406,6 +446,38 @@ export const createDevMatchWithBots = mutationGeneric({
 			requiresSetupLoad: args.requiresSetupLoad,
 			reuseActive: args.reuseActive ?? true,
 		})
+	},
+})
+
+export const getLatestLadderQaSessionForAdmin = queryGeneric({
+	args: {},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx) => {
+		await requireAdminIdentity(ctx)
+		return await getLadderQaAdminState(ctx)
+	},
+})
+
+export const addLadderQaOpponent = mutationGeneric({
+	args: {},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx) => {
+		const adminUser = await requireAdminUser(ctx)
+		const result = await stageLadderQaOpponent(ctx, adminUser._id)
+		const auditId = await insertAdminAudit(ctx, {
+			adminUserId: adminUser._id,
+			targetVirtualOpponentId: result.ok ? result.virtualOpponentId : undefined,
+			commandType: 'ladder.qa.add_opponent',
+			payload: result.ok
+				? {
+					queueEntryId: result.queueEntryId,
+					playerCount: result.playerCount,
+					waitingForPlayer: result.waitingForPlayer,
+				}
+				: {},
+			result,
+		})
+		return { ...result, auditId }
 	},
 })
 
@@ -691,6 +763,36 @@ export const closeStartedCustomGameRoom = mutationGeneric({
 			...result,
 			auditId,
 		}
+	},
+})
+
+export const dismissReadyDevMatch = mutationGeneric({
+	args: { matchId: v.id('matches') },
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: { matchId: string }) => {
+		const adminUser = await requireAdminUser(ctx)
+		const match = await ctx.db.get(args.matchId)
+		if (!match) {
+			return { ok: false, matchId: args.matchId, code: 'MATCH_NOT_FOUND' }
+		}
+		if (match.mode !== 'dev') {
+			return { ok: false, matchId: args.matchId, code: 'MATCH_MODE_FORBIDDEN' }
+		}
+		if (match.status !== 'ready') {
+			return { ok: true, matchId: args.matchId, removed: false, code: 'MATCH_NOT_READY' }
+		}
+		const result = {
+			ok: true,
+			removed: true,
+			...(await completeAndDismissReadyDevMatch(ctx, match, Date.now())),
+		}
+		const auditId = await insertAdminAudit(ctx, {
+			adminUserId: adminUser._id,
+			matchId: args.matchId,
+			commandType: 'admin.dismiss_ready_dev_match',
+			result,
+		})
+		return { ...result, auditId }
 	},
 })
 

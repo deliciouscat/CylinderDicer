@@ -11,7 +11,7 @@ import process from 'node:process'
 
 const root = process.cwd()
 
-const REQUIRED_ADMIN_FUNCTIONS = [
+const REQUIRED_PHASE4_FUNCTIONS = [
   'adminMatches.js:createDevMatchWithBots',
   'adminMatches.js:listAdminDevMatches',
   'adminMatches.js:getAdminMatchState',
@@ -19,6 +19,11 @@ const REQUIRED_ADMIN_FUNCTIONS = [
   'adminMatches.js:probeAdminAccess',
   'adminMatches.js:listRecentAdminAudit',
   'adminMatches.js:setCustomGameOpponentReady',
+  'adminMatches.js:getLatestLadderQaSessionForAdmin',
+  'adminMatches.js:addLadderQaOpponent',
+  'adminMatches.js:dismissReadyDevMatch',
+  'ladder.js:heartbeatQueue',
+  'ladder.js:acknowledgeMatchHandoff',
 ]
 
 function fileExists(relativePath) {
@@ -95,6 +100,12 @@ check(
   'Register admin functions in web/src/services/convex/functionReferences.ts.',
 )
 check(
+  'web registry exposes Ladder QA admin functions',
+  functionReferences.includes('getLatestLadderQaSessionForAdmin')
+    && functionReferences.includes('addLadderQaOpponent'),
+  'Register Ladder QA admin functions in web/src/services/convex/functionReferences.ts.',
+)
+check(
   'shared docs describe Clerk admin claim',
   readTextFile('shared/docs/CONVEX_IMPLEMENTATION.md').includes('"role": "admin"'),
   'Document Clerk admin claim in shared/docs/CONVEX_IMPLEMENTATION.md.',
@@ -112,7 +123,7 @@ check(
 let liveFunctionCheck = {
   attempted: false,
   passed: false,
-  missing: REQUIRED_ADMIN_FUNCTIONS,
+  missing: REQUIRED_PHASE4_FUNCTIONS,
 }
 
 if (deployment || convexUrl) {
@@ -127,7 +138,7 @@ if (deployment || convexUrl) {
     try {
       const spec = JSON.parse(result.stdout)
       const identifiers = new Set((spec.functions ?? []).map((fn) => fn.identifier))
-      const missing = REQUIRED_ADMIN_FUNCTIONS.filter((name) => !identifiers.has(name))
+      const missing = REQUIRED_PHASE4_FUNCTIONS.filter((name) => !identifiers.has(name))
       liveFunctionCheck = {
         attempted: true,
         passed: missing.length === 0,
@@ -188,6 +199,7 @@ console.log('  4. Create/Reuse dev match, Open Play with same matchId')
 console.log('  5. Submit opponent load/shake/check/bid via admin UI')
 console.log('  6. Confirm play tab snapshot updates + adminAudit rows appear')
 console.log('  7. Non-admin account receives UNAUTHORIZED on admin queries')
+console.log('  8. Before opening Ladder, click Add Ladder Opponent 1–5 times; then join /play/ladder and confirm one 2–6 player dev roster')
 
 if (missing.length > 0) {
   console.log('')

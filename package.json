@@ -7,7 +7,7 @@
     "convex:codegen": "convex codegen",
     "convex:typecheck": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --strict --skipLibCheck convex/**/*.ts",
     "convex:domain-test": "rm -rf .tmp/convex-domain && tsc --outDir .tmp/convex-domain --target ES2022 --module CommonJS --moduleResolution Node --ignoreDeprecations 6.0 --strict --skipLibCheck convex/match/*.ts convex/protocol/*.ts && node -e \"require('fs').writeFileSync('.tmp/convex-domain/package.json', JSON.stringify({ type: 'commonjs' }))\" && node --test convex/match/tests/*.test.mjs",
-    "ladder:test": "rm -rf .tmp/ladder-test && tsc --outDir .tmp/ladder-test --target ES2022 --module CommonJS --moduleResolution Node --ignoreDeprecations 6.0 --strict --skipLibCheck shared/ladder/placement.ts web/src/ladder/ladder.types.ts web/src/ladder/ladder.logic.ts && node -e \"require('fs').writeFileSync('.tmp/ladder-test/package.json', JSON.stringify({ type: 'commonjs' }))\" && node --test web/src/ladder/tests/*.test.mjs",
+    "ladder:test": "rm -rf .tmp/ladder-test && tsc --outDir .tmp/ladder-test --target ES2022 --module CommonJS --moduleResolution Node --ignoreDeprecations 6.0 --strict --skipLibCheck shared/ladder/placement.ts shared/ladder/qa.ts shared/ladder/matchmaking.ts web/src/ladder/ladder.types.ts web/src/ladder/ladder.logic.ts && node -e \"require('fs').writeFileSync('.tmp/ladder-test/package.json', JSON.stringify({ type: 'commonjs' }))\" && node --test web/src/ladder/tests/*.test.mjs",
     "defold:web:bundle": "node tools/bundle-defold-web.mjs",
     "defold:web:build": "node tools/bundle-defold-web.mjs --sync",
     "defold:web:sync": "node tools/sync-defold-web-bundle.mjs",

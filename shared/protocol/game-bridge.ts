@@ -8,6 +8,8 @@ export type GameBridgeMessageType =
   | 'SERVER_EVENT'
   | 'COMMAND_REJECTED'
   | 'COMMAND_REJECTED_RECEIVED'
+  | 'SET_LOCALE'
+  | 'LOCALE_APPLIED'
   | 'SET_COSMETICS'
   | 'COSMETICS_APPLIED'
   | 'SUBMIT_MATCH_RESULT'
@@ -32,6 +34,17 @@ export interface StartMatchPayload {
   mode: 'dev' | 'casual' | 'ranked'
   cosmetics?: CosmeticsPayload
   localSimulator?: boolean
+}
+
+export type GameLocale = 'en' | 'ko' | 'ja'
+
+export interface SetLocalePayload {
+  locale: GameLocale
+}
+
+export interface LocaleAppliedPayload {
+  locale: GameLocale
+  applied: boolean
 }
 
 export type PlayerCommandType =
@@ -95,9 +108,26 @@ export interface MatchPublicView {
     hp: number
     bullets: number
     eliminated: boolean
+    skin?: string
+    portraitState?: string
     isActive: boolean
     isLocal?: boolean
   }>
+	bidding?: {
+		currentBid?: {
+			playerId: string
+			count: number
+			face: number
+		}
+		suggestedBid: {
+			count: number
+			face: number
+		}
+		reloadGate?: {
+			countdownSeconds: number
+			epoch: number
+		}
+	}
   shake?: MatchShakeView
 }
 

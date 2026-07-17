@@ -1,5 +1,6 @@
 local selectors = require("game.model.selectors")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local shake_gauge = require("ui.shake.shake_gauge")
 
 local M = {}
 
@@ -29,6 +30,26 @@ function M.test_shake_status_clamps_ratio()
 	assert_eq(status.required, 6, "required")
 	assert_eq(status.ratio, 1.0, "ratio")
 	assert_eq(status.complete, true, "complete")
+end
+
+function M.test_local_shake_gauge_is_bounded_and_decays_by_dt()
+	local value = shake_gauge.add(0)
+	assert_eq(value, 24, "first impulse")
+	value = shake_gauge.add(value)
+	assert_eq(value, 48, "second impulse")
+	value = shake_gauge.decay(value, 0.5)
+	assert_eq(value, 42, "half-second decay")
+	assert_eq(shake_gauge.decay(value, 100), 0, "lower bound")
+	assert_eq(shake_gauge.add(99, 24), 100, "upper bound")
+end
+
+function M.test_five_rapid_shakes_complete_local_gauge()
+	local value = 0
+	for _ = 1, 5 do
+		value = shake_gauge.add(value)
+	end
+	assert_eq(value, 100, "full gauge")
+	assert_eq(shake_gauge.complete(value), true, "complete")
 end
 
 function M.test_single_opponent_is_centered()

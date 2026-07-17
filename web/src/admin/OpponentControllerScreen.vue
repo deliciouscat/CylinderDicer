@@ -8,6 +8,7 @@ import {
   type AdminCustomGameParticipant,
   type AdminCustomGameRoomView,
   type AdminDevMatchRow,
+  type AdminLadderQaSession,
   type AdminAccessProbe,
   type AdminAuditRow,
   type AdminMatchState,
@@ -34,6 +35,7 @@ const roomMatchId = ref('')
 const status = ref('Loading admin controller...')
 const errorMessage = ref('')
 const busy = ref(false)
+const ladderQaBusy = ref(false)
 const bidCount = ref(1)
 const bidFace = ref(2)
 const bidFaceOptions = [
@@ -47,7 +49,7 @@ const bidFaceOptions = [
 const lastCommandLine = ref('')
 const adminAccess = ref<AdminAccessProbe | null>(null)
 const auditRows = ref<AdminAuditRow[]>([])
-const shakeProgressByKey = ref<Record<string, number>>({})
+const ladderQaSession = ref<AdminLadderQaSession | null>(null)
 const initialMatchId = new URLSearchParams(window.location.search).get('matchId') ?? ''
 const initialRoomId = new URLSearchParams(window.location.search).get('roomId') ?? ''
 
@@ -55,6 +57,11 @@ let loadedOnce = false
 let commandCounter = 0
 let matchUnsubscribe: (() => void) | undefined
 let roomUnsubscribe: (() => void) | undefined
+let ladderQaUnsubscribe: (() => void) | undefined
+let matchDetailRequest = 0
+let pendingMatchDetailId = ''
+
+const DEV_MATCH_PURGE_MAX_ATTEMPTS = 24
 
 const isSignedIn = computed(() => auth.isSignedIn.value === true)
 const canUseAdmin = computed(() => auth.isLoaded.value && isSignedIn.value && adminAccess.value?.authorized === true)
@@ -135,6 +142,13 @@ const qaSteps = computed(() => {
     { id: 'complete', label: 'Gameplay: match complete', done: phase === 'complete' || detail.value?.state?.match?.status === 'complete' },
   ]
 })
+const ladderQaCanAdd = computed(() => {
+  const session = ladderQaSession.value
+  if (!session) return false
+  return session.status === 'waiting_for_player'
+    ? session.pendingOpponents.length < session.maxPlayerCount - 1
+    : session.playerCount < session.maxPlayerCount
+})
 const playMatchUrl = computed(() => {
   if (!activeMatchId.value) {
     return ''
@@ -213,6 +227,13 @@ function applyRoomDetail(next: AdminCustomGameRoomView | null) {
     }
   } else if (selectedRoomPlayerId.value && !selectedPlayerId.value) {
     selectedPlayerId.value = selectedRoomPlayerId.value
+  }
+
+  const linkedMatchId = next.room?.status === 'started' ? next.room.matchId ?? '' : ''
+  if (linkedMatchId
+    && detail.value?.match?._id !== linkedMatchId
+    && pendingMatchDetailId !== linkedMatchId) {
+    void loadDetail(linkedMatchId)
   }
 }
 
@@ -357,6 +378,29 @@ async function loadAuditRows() {
   }
 }
 
+function subscribeLadderQaSession() {
+  ladderQaUnsubscribe?.()
+  ladderQaUnsubscribe = adminService.subscribeLatestLadderQaSession(
+    (session) => {
+      ladderQaSession.value = session
+    },
+    (error) => {
+      errorMessage.value = error.message
+    },
+  )
+}
+
+async function loadLadderQaSession() {
+  if (!adminAccess.value?.authorized) {
+    ladderQaSession.value = null
+    ladderQaUnsubscribe?.()
+    ladderQaUnsubscribe = undefined
+    return
+  }
+  ladderQaSession.value = await adminService.getLatestLadderQaSession()
+  subscribeLadderQaSession()
+}
+
 async function loadMatches() {
   if (!adminAccess.value?.authorized) {
     return
@@ -391,8 +435,9 @@ async function loadCustomRooms() {
   }
 }
 
-async function loadDetail() {
-  const matchId = activeMatchId.value
+async function loadDetail(requestedMatchId = activeMatchId.value) {
+  const matchId = requestedMatchId
+  const request = ++matchDetailRequest
   if (!matchId || !adminAccess.value?.authorized) {
     detail.value = null
     matchUnsubscribe?.()
@@ -401,8 +446,19 @@ async function loadDetail() {
   }
 
   errorMessage.value = ''
-  applyMatchDetail(await adminService.getAdminMatchState(matchId))
-  subscribeMatchDetail(matchId)
+  pendingMatchDetailId = matchId
+  try {
+    const next = await adminService.getAdminMatchState(matchId)
+    if (request !== matchDetailRequest || activeMatchId.value !== matchId) {
+      return
+    }
+    applyMatchDetail(next)
+    subscribeMatchDetail(matchId)
+  } finally {
+    if (request === matchDetailRequest) {
+      pendingMatchDetailId = ''
+    }
+  }
 }
 
 async function loadRoomDetail() {
@@ -443,6 +499,75 @@ async function createOrReuseDevMatch() {
   }
 }
 
+async function dismissDevMatch(matchId: string, bulk = false) {
+  if (!adminAccess.value?.authorized || !matchId) {
+    return false
+  }
+  if (!bulk && !window.confirm('Permanently remove this ready dev match and its QA game data?')) {
+    return false
+  }
+  busy.value = true
+  errorMessage.value = ''
+  try {
+    const completion = await adminService.dismissReadyDevMatch(matchId)
+    if (completion.ok === false) {
+      errorMessage.value = `${completion.code ?? 'DEV_MATCH_REMOVE_REJECTED'}`
+      return false
+    }
+
+    let purgeResult: Awaited<ReturnType<typeof adminService.purgeCompletedDevMatchData>> | null = null
+    for (let attempt = 0; attempt < DEV_MATCH_PURGE_MAX_ATTEMPTS; attempt += 1) {
+      purgeResult = await adminService.purgeCompletedDevMatchData({ matchId })
+      if (purgeResult.ok === false) {
+        errorMessage.value = `${purgeResult.code ?? 'DEV_MATCH_PURGE_REJECTED'}`
+        return false
+      }
+      if (!purgeResult.mayHaveMore) {
+        break
+      }
+    }
+
+    if (!purgeResult || purgeResult.mayHaveMore || !purgeResult.parentDeleted?.match) {
+      errorMessage.value = 'DEV_MATCH_PURGE_INCOMPLETE'
+      return false
+    }
+
+    if (selectedMatchId.value === matchId) {
+      selectedMatchId.value = ''
+      detail.value = null
+      matchUnsubscribe?.()
+      matchUnsubscribe = undefined
+    }
+    status.value = 'Dev match and QA game data permanently removed'
+    lastCommandLine.value = `purge dev match ok · completion audit ${completion.auditId ?? '-'} · purge audit ${purgeResult.auditId ?? '-'}`
+    await loadMatches()
+    await loadDetail()
+    await loadAuditRows()
+    return true
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
+async function dismissAllDevMatches() {
+  if (matches.value.length === 0) {
+    return
+  }
+  if (!window.confirm(`Permanently remove all ${matches.value.length} ready dev matches and their QA game data?`)) {
+    return
+  }
+  const matchIds = matches.value.map((row) => row.match._id)
+  for (const matchId of matchIds) {
+    const removed = await dismissDevMatch(matchId, true)
+    if (!removed) {
+      break
+    }
+  }
+}
+
 async function refreshAll() {
   busy.value = true
   errorMessage.value = ''
@@ -459,6 +584,7 @@ async function refreshAll() {
       return
     }
     await loadCustomRooms()
+    await loadLadderQaSession()
     await loadMatches()
     await loadRoomDetail()
     await loadDetail()
@@ -467,6 +593,32 @@ async function refreshAll() {
     errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
     busy.value = false
+  }
+}
+
+async function addLadderQaOpponent() {
+  if (!ladderQaCanAdd.value || !adminAccess.value?.authorized) {
+    return
+  }
+  ladderQaBusy.value = true
+  errorMessage.value = ''
+  try {
+    const result = await adminService.addLadderQaOpponent()
+    if (result.ok === false) {
+      errorMessage.value = `${result.code ?? 'LADDER_QA_REJECTED'}`
+      lastCommandLine.value = `ladder opponent rejected · ${result.code ?? 'error'}`
+    } else {
+      status.value = result.waitingForPlayer
+        ? `${result.playerCount} Ladder QA bots waiting for a player`
+        : `Ladder QA roster staged with ${result.playerCount} players`
+      lastCommandLine.value = `ladder opponent added · ${result.opponentDisplayName} · audit ${result.auditId ?? '-'}`
+    }
+    await loadLadderQaSession()
+    await loadAuditRows()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    ladderQaBusy.value = false
   }
 }
 
@@ -567,24 +719,6 @@ function commandTypeForLoad() {
   return pendingLoad.value?.source === 'setup' ? 'setup.load_initial' : 'bullet.load'
 }
 
-function shakeProgressKey() {
-  return [
-    activeMatchId.value,
-    selectedPlayerId.value,
-    detail.value?.state?.revision ?? 0,
-  ].join(':')
-}
-
-function shakeRequiredForAction(action: Extract<AvailableAction, { type: 'shake_complete' }>) {
-  return Math.max(1, Number(action.remaining ?? 6))
-}
-
-function shakeButtonLabel(action: Extract<AvailableAction, { type: 'shake_complete' }>) {
-  const required = shakeRequiredForAction(action)
-  const progress = Math.min(required - 1, shakeProgressByKey.value[shakeProgressKey()] ?? 0)
-  return `Shake ${progress + 1} / ${required}`
-}
-
 async function submitCommand(type: string, payload?: unknown) {
   const matchId = activeMatchId.value
   if (!detail.value?.state || !matchId || !selectedPlayerId.value) {
@@ -672,20 +806,6 @@ function submitAction(action: AvailableAction) {
   if (action.type === 'load_all') {
     void submitLoadAll()
   } else if (action.type === 'shake_complete') {
-    const key = shakeProgressKey()
-    const required = shakeRequiredForAction(action)
-    const progress = (shakeProgressByKey.value[key] ?? 0) + 1
-    if (progress < required) {
-      shakeProgressByKey.value = {
-        ...shakeProgressByKey.value,
-        [key]: progress,
-      }
-      lastCommandLine.value = `shake ${progress}/${required} staged`
-      return
-    }
-    const nextProgress = { ...shakeProgressByKey.value }
-    delete nextProgress[key]
-    shakeProgressByKey.value = nextProgress
     void submitCommand(action.command)
 	} else if (action.type === 'check') {
 	  void submitCommand('dice.check')
@@ -784,6 +904,7 @@ onMounted(() => {
 onUnmounted(() => {
   matchUnsubscribe?.()
   roomUnsubscribe?.()
+  ladderQaUnsubscribe?.()
 })
 </script>
 
@@ -829,6 +950,33 @@ onUnmounted(() => {
       </ul>
     </section>
 
+    <section v-if="adminAccess?.authorized" class="opponent-controller__qa opponent-controller__ladder-qa" data-testid="ladder-qa-panel">
+      <div>
+        <p class="opponent-controller__group-label">Ladder QA</p>
+        <p v-if="ladderQaSession?.status === 'player_joined'" class="opponent-controller__ladder-copy" data-testid="ladder-qa-session">
+          {{ ladderQaSession.displayName }} · {{ ladderQaSession.playerCount }}/{{ ladderQaSession.maxPlayerCount }} players staged
+        </p>
+        <p v-else-if="ladderQaSession" class="opponent-controller__ladder-copy" data-testid="ladder-qa-pool">
+          {{ ladderQaSession.pendingOpponents.length }}/5 virtual opponents waiting · player joins after them
+        </p>
+        <p v-else class="opponent-controller__ladder-copy">
+          Loading Ladder QA queue…
+        </p>
+        <p class="opponent-controller__empty">
+          Add bots before or after opening Ladder. The next player claims the waiting bots; Match Found starts 1.5 seconds later.
+        </p>
+      </div>
+      <button
+        class="opponent-controller__button opponent-controller__button--primary"
+        data-testid="add-ladder-opponent"
+        type="button"
+        :disabled="ladderQaBusy || !ladderQaCanAdd"
+        @click="addLadderQaOpponent"
+      >
+        Add Ladder Opponent
+      </button>
+    </section>
+
     <section class="opponent-controller__layout">
       <aside class="opponent-controller__matches">
         <p class="opponent-controller__group-label">Custom Rooms (composing)</p>
@@ -861,20 +1009,38 @@ onUnmounted(() => {
         </button>
 
         <p class="opponent-controller__group-label">Dev Matches</p>
-        <p class="opponent-controller__empty">
-          Create Dev Match is a direct admin QA shortcut. It does not create a Custom Game room.
-        </p>
-        <button
-          v-for="row in matches"
-          :key="row.match._id"
-          class="opponent-controller__match"
-          :class="{ 'is-selected': selectedMatchId === row.match._id }"
-          type="button"
-          @click="selectMatch(row.match._id)"
-        >
-          <span>{{ matchLabel(row) }}</span>
-          <small>{{ row.participants.length }} players</small>
-        </button>
+        <div class="opponent-controller__list-actions">
+          <p class="opponent-controller__empty">
+            Create Dev Match is a direct admin QA shortcut. It does not create a Custom Game room.
+          </p>
+          <button
+            class="opponent-controller__button opponent-controller__button--danger"
+            type="button"
+            :disabled="busy || matches.length === 0"
+            @click="dismissAllDevMatches"
+          >
+            Remove All ({{ matches.length }})
+          </button>
+        </div>
+        <div v-for="row in matches" :key="row.match._id" class="opponent-controller__match-row">
+          <button
+            class="opponent-controller__match"
+            :class="{ 'is-selected': selectedMatchId === row.match._id }"
+            type="button"
+            @click="selectMatch(row.match._id)"
+          >
+            <span>{{ matchLabel(row) }}</span>
+            <small>{{ row.participants.length }} players</small>
+          </button>
+          <button
+            class="opponent-controller__button opponent-controller__button--danger opponent-controller__remove-match"
+            type="button"
+            :disabled="busy"
+            @click="dismissDevMatch(row.match._id)"
+          >
+            Remove
+          </button>
+        </div>
       </aside>
 
       <section v-if="selectedRoomId" class="opponent-controller__detail">
@@ -1068,7 +1234,7 @@ onUnmounted(() => {
                 :disabled="busy"
                 @click="submitAction(action)"
               >
-                {{ shakeButtonLabel(action) }}
+                Complete Shake
               </button>
 
               <button
@@ -1180,7 +1346,7 @@ onUnmounted(() => {
               :disabled="busy"
               @click="submitAction(action)"
             >
-              {{ shakeButtonLabel(action) }}
+              Complete Shake
             </button>
 
             <button
@@ -1293,6 +1459,18 @@ onUnmounted(() => {
   background: rgb(39 116 99 / 28%);
 }
 
+.opponent-controller__ladder-qa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.opponent-controller__ladder-copy {
+  margin: 6px 0 2px;
+  color: #d8f5ec;
+}
+
 .opponent-controller__audit {
   margin-top: 14px;
   border: 1px solid rgb(255 255 255 / 10%);
@@ -1333,6 +1511,24 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.opponent-controller__list-actions,
+.opponent-controller__match-row {
+  display: grid;
+  gap: 8px;
+}
+
+.opponent-controller__list-actions {
+  margin-bottom: 4px;
+}
+
+.opponent-controller__match-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.opponent-controller__remove-match {
+  min-width: 76px;
 }
 
 .opponent-controller__layout {
@@ -1496,6 +1692,11 @@ onUnmounted(() => {
 
   .opponent-controller__header {
     display: grid;
+  }
+
+  .opponent-controller__ladder-qa {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .opponent-controller__matches,

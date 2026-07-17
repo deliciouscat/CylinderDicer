@@ -64,10 +64,11 @@ Defold GUI input
 
 High-frequency examples:
 
-- Cup shake gesture: Defold/Vue count local shake motion and send one `shake.complete` command, not six `shake.roll` mutations.
+- Cup shake gesture: Defold/Vue maintain a bounded local gauge and send one `shake.complete` command at 100; no per-tick mutation exists.
 - Count/face spinner repeat: client keeps local draft value and sends only final `bid.raise`.
 - Duel animation: server returns ordered resolution steps once; Defold plays timing, easing, hit flashes, vibration, and camera effects locally.
-- Delayed phase progression: Convex schedules `bidding.open`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
+- SHORT/OVER duel ownership: verdict는 `actual - bid` 기준이다. `SHORT`에서는 challenger가 previous bidder를, `OVER`에서는 previous bidder가 challenger를 공격한다. 각 step의 `shooterId`와 `rouletteSubjectId`는 공격자 및 소모할 실린더를, `targetId`는 HP가 감소할 피격자를 뜻한다.
+- Delayed phase progression: Convex schedules `bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
 - Pointer hover/drag, HUD open/close, disabled-button feedback: local only.
 
 ## Responsibility split
@@ -76,7 +77,7 @@ High-frequency examples:
 
 Convex owns:
 
-- Ladder queue entry lifecycle, indexed FIFO match formation, and stable Ladder stat summaries
+- Ladder queue lease lifecycle, adaptive 2–6 player match formation, and stable Ladder stat summaries
 - match creation and participants
 - seat/order
 - turn/phase FSM
@@ -152,14 +153,14 @@ Send one server command per rule checkpoint:
 
 | UX action | Client responsibility | Convex command |
 | --- | --- | --- |
-| Cup shake motion | Count/animate local shake input until complete | `shake.complete` |
+| Cup shake motion | 0–100 local gauge (`+24/input`, `-12/second`)를 animate하고 100에서 완료 | `shake.complete` |
 | Dice check reveal | Show local reveal affordance | `dice.check` |
 | Count/face up/down | Maintain local draft bid | `bid.raise` only on submit |
 | Bullet slot hover/click | Show local targeting feedback | `bullet.load` on chosen slot |
 | Duel request | Button feedback and local pending state | `bid.challenge` |
 | Duel animation | Play returned steps locally | none; server schedules execute/advance |
 
-Legacy/local simulator code may still expose `shake.roll` for Defold tests, but Convex production flow should not send one mutation per shake tick.
+Shake tick과 local gauge 값은 Convex state/snapshot에 저장하지 않는다. Defold local simulator도 같은 checkpoint-level `shake.complete`와 phase-level `shake.timeout` action을 사용한다.
 
 ### Snapshot policy
 
@@ -612,9 +613,13 @@ type MatchCommand = {
 };
 ```
 
-`shake.roll` may remain in the local Defold simulator and Lua tests, but Convex production protocol should use `shake.complete`.
+Defold local simulator and Convex production both use `shake.complete`; `shake.roll` is no longer part of the active domain protocol.
 
-`bidding.open`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions.
+`bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions.
+
+Bid reloads are pipelined inside the authoritative `bidding` phase. `pendingLoad` is the player currently loading, while `bidding.deferredLoad` holds at most one reload created by the next accepted bid. Before that next bid, the active player may bid while the previous loader acts; challenge remains unavailable until the reload queue is empty. If the next bid arrives first, `bidding.reloadGate` freezes further bidding for three seconds and is projected publicly for the loader countdown/loading-wheel HUD. The guarded `bid.reload_timeout` loads the current player's first empty slot and promotes `deferredLoad`; a manual load changes revision and invalidates the scheduled timeout.
+
+A face-1 Skull `bid.raise` is still a single player intent, but the authoritative reducer resolves a self Russian-roulette attempt before accepting it. Convex derives the spin from match RNG, triggers the bidder's own cylinder once, consumes any fired bullet, and applies one HP damage on a hit. A surviving bidder's Skull bid is accepted and enters the normal bid-reload pipeline. A lethal attempt is rejected without replacing the prior `currentBid`; the eliminated bidder is skipped, or the match completes when one player remains. The public snapshot projects `bidding.skullRoulette` with a monotonic sequence and the hit/HP outcome so Defold can animate the affected portrait without client-authored damage.
 
 Scheduler payloads contain only `matchId`, transition type, expected phase, expected revision, and expected epoch. Timing metadata such as `delayMs` is used by `runAfter` but is not passed to the internal mutation validator. The web reconnect path calls `resumeMatchFlow`, which only re-schedules the guarded internal transition; it never applies phase changes directly.
 
@@ -670,22 +675,35 @@ return accepted/rejected result
 
 Backend ownership:
 
-- `ladderQueueEntries`: high-churn operational row. `by_user`로 own state를 읽고 `by_status_and_joined_at`로 bounded FIFO 후보 2명만 읽는다.
+- `ladderQueueEntries`: high-churn operational row. `by_user`로 own state를 읽고 `by_status_and_last_seen_at`로 최근 20초 안에 heartbeat가 있는 active 후보만 최대 24명 읽은 뒤 `joinedAt` FIFO로 정렬한다. 비정상 종료된 stale waiting row는 match 후보와 admin QA target에서 제외한다.
 - `ladderStats`: stable per-user MMR/recent placement summary. queue refresh와 분리해 subscription/write contention을 만들지 않는다.
-- `ladder.enterQueue`: idempotent enter/re-enter 후 첫 slice의 2-human FIFO match를 만든다.
+- `ladder.enterQueue`: idempotent enter/re-enter와 lease 시작을 소유한다. `ladder.heartbeatQueue`는 searching 동안 8초마다 lease를 갱신하고 같은 adaptive policy를 재평가한다.
 - `ladder.leaveQueue`: waiting row만 cancelled로 바꾸며 반복 호출해도 안전하다. 이미 matched라면 matched state를 반환해 cancel race에서 match-found가 사라지지 않는다.
 - `ladder.observeOwnQueue`: own queue, self stats, matchId, 2–6 seat-ordered roster를 한 subscription shape로 제공한다.
+- `shared/ladder/matchmaking.ts`가 production policy의 server/test 공통 SSOT다. 목표는 6명, 최소 시작은 2명, hard max wait는 45초다. MMR 허용 폭은 oldest player 기준 ±150에서 ±400까지 시간에 따라 넓어진다. 현재 active/eligible cohort의 join 간격으로 arrival rate를 추정하고, 10초 이후 예상 full-roster 시간이 남은 wait budget을 넘으면 현재 2–5명으로 시작한다. 6명이 모이면 즉시 시작하고, 45초에는 eligible 2명 이상이면 partial roster로 시작한다.
 - match-found는 새 gameplay reducer를 만들지 않고 기존 `matches`, `matchParticipants`, `createInitialMatchState`, public/private snapshot 계약으로 `ranked` match를 생성한다.
+- `/admin/opponents`의 Ladder QA는 admin claim으로 보호된 `getLatestLadderQaSessionForAdmin` / `addLadderQaOpponent`만 사용한다. 가장 최근 waiting entry와 현재 staged count를 live query로 보여 주며 각 click은 기존 `virtualOpponents` catalog의 한 명을 추가한다.
+- human session이 아직 없으면 각 click은 `ladderQaWaitingOpponents`의 indexed `default` QA pool에 최대 5명까지 bot을 먼저 넣는다. 다음 authenticated `enterQueue` transaction이 pool을 해당 queue entry의 `ladderQaOpponents`로 atomically claim하고 pool row를 삭제한다. `qaPendingCount > 0`인 entry는 production adaptive matcher에서 제외되므로 QA finalizer와 human matcher가 같은 player를 동시에 claim하지 않는다.
+- staged bot은 `ladderQaOpponents`에 queue entry별 child row로 저장한다. `by_queue_entry_and_seat_index`로 최대 5개만 읽으며 stable profile/stat row와 분리한다. 마지막 click 뒤 1.5초 동안 새 click이 없을 때만 `qaRevision` guard를 통과한 internal finalizer가 human + staged bots로 단 하나의 `dev` match를 만든다.
+- cancel, production match, re-enter는 staged child row를 idempotently 삭제하고 revision을 무효화한다. 따라서 scheduled QA finalizer는 cancel race나 이미 성사된 production match를 덮어쓰지 않는다.
 
 Web ownership:
 
 - `LadderShell`만 Convex auth/queue subscription과 searching → roster → handing_off를 소유한다.
 - fidget chips/die는 server write가 없는 local-only state다.
-- roster 종료 후 `App.vue`가 matchId prop으로 기존 `ConvexPlayScreen`을 mount한다. GameBridge protocol과 Defold transport는 변경하지 않았다.
+- roster 종료 후 `LadderShell`이 `acknowledgeMatchHandoff`로 queue row를 consume하고, `App.vue`가 같은 route를 `/play/ladder?matchId=...`로 replace한 뒤 기존 `ConvexPlayScreen`을 mount한다. refresh는 query matchId로 current match를 복원하고, Back → Lobby → Ladder는 새 waiting session을 만든다. GameBridge 메시지 종류와 transport는 그대로 사용한다.
+
+Gameplay character identity는 authoritative player state가 소유한다. 초기 seat 순서의 기본 skin은 Rosmund, Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid이며 caller가 명시한 skin은 이를 덮어쓴다. Public player snapshot은 `skin`과 `portraitState`를 포함하고 Vue는 같은 `SERVER_SNAPSHOT`으로 전달한다. Defold reducer는 두 필드를 render cache에 병합하므로 carousel과 duel이 player id/challenger id를 임의의 fallback portrait와 혼동하지 않는다.
 
 Placement normalization은 `shared/ladder/placement.ts`의 단일 구현을 Web/Convex가 같이 import한다. 1인전은 1.0, 그 외는 `(place - 1) / (playerCount - 1) * 5 + 1`이며 표시만 소수 1자리로 반올림한다.
 
 현재 `ladderStats`는 신규 사용자를 MMR 1000 / placement 없음으로 초기화한다. ranked match result에서 MMR/placement를 writeback하는 정책, tier, season, leaderboard는 별도 제품 결정 전까지 구현하지 않는다.
+
+Opponent Controller staging은 QA/dev 전용이며 생성 match mode도 `dev`다. Production matchmaking policy, MMR, placement, opponent selection을 검증하거나 대체하지 않는다. 운영 순서는 [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md)의 `Ladder QA`를 따른다.
+
+Admin cleanup은 `adminMatches.dismissReadyDevMatch`와 `purgeCompletedDevMatchData`가 소유한다. Opponent Controller의 individual/bulk Remove는 ready `dev` match를 먼저 terminal authoritative state로 전환하고, bounded hard purge를 `mayHaveMore === false`까지 반복해 match child graph와 linked custom rooms를 제거한다. Ranked/casual data와 `adminAudit` history는 대상이 아니다.
+
+Arrival-rate estimate는 현재 active/eligible cohort만 사용한다. 장기 historical arrival telemetry, region/platform segmentation, percentile 기반 wait budget tuning은 실제 traffic data가 생긴 뒤 calibration할 항목이며 현재 정책 숫자에 fake production confidence를 부여하지 않는다.
 
 ## Vue integration target
 
@@ -742,12 +760,16 @@ export type GameBridgeMessageType =
   | "SERVER_SNAPSHOT"
   | "SERVER_EVENT"
   | "COMMAND_REJECTED"
+  | "SET_LOCALE"
+  | "LOCALE_APPLIED"
   | "SET_COSMETICS"
   | "COSMETICS_APPLIED"
   | "PING"
   | "PONG"
   | "UNKNOWN_MESSAGE";
 ```
+
+`SET_LOCALE { locale: "en" | "ko" | "ja" }`는 Vue의 저장된 locale을 iframe 내부 Defold로 전달한다. `DefoldCanvas`는 ready retry의 initial state에 locale을 포함하고 실행 중 변경도 다시 전송한다. Defold는 허용 locale만 적용하고 현재 HUD를 다시 렌더한 뒤 `LOCALE_APPLIED`로 확인한다. 이 신호는 match authority나 snapshot revision을 변경하지 않는다.
 
 Defold migration rule:
 
@@ -782,9 +804,11 @@ opponent-controller / bot
 
 Current Phase 4/5 admin UI uses explicit list refresh for sidebars, plus live subscriptions for the selected match or custom room. `/admin/opponents` subscribes to `getAdminMatchState` or `getAdminCustomGameRoom`, submits opponent commands through `submitOpponentCommand`, and reloads audit/list context after mutations.
 
-For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-player turns. Each alive player must complete their own `shake.complete` and `dice.check`; virtual opponent actions are submitted through the opponent controller and human actions through each player's play client. `turn.activePlayerId` remains the next bidding starter and must not gate these checkpoint capabilities.
+For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-player turns. Each alive player may complete their own `shake.complete` and must complete `dice.check`; virtual opponent shake actions are immediate checkpoint submissions through the opponent controller and human shake motion is locally aggregated in each player's play client. `turn.activePlayerId` remains the next bidding starter and must not gate these checkpoint capabilities.
 
 Each accepted `shake.complete` rolls only the actor's private dice. The phase remains `cup_shake` until every alive player has completed it, then enters reload/dice check once. Tests must assert the intermediate one-player-complete state so a regression where one actor rolls the whole table cannot pass a final-phase-only test.
+
+`cup_shake` phase 진입 시 Convex flow scheduler는 6초짜리 `shake.timeout`을 예약한다. 이 guard는 개별 `shake.complete`가 revision을 올려도 phase/epoch 기준으로 유지되며, 만료 시 미완료 생존 플레이어만 자동 완료하고 dice를 굴린다. 이미 완료한 플레이어의 dice는 다시 굴리지 않는다. Opponent Controller의 `Complete Shake`는 이 제한시간을 기다리지 않고 bot checkpoint를 즉시 제출한다.
 
 Convex snapshot keys are camelCase and the Defold model is snake_case. `play/game/model/reducers.lua` normalizes nested keys through `KEY_MAP`; structured fields such as `shake.requiredCount` must have explicit protocol types and adapter assertions. Otherwise a missing map entry can silently activate a Lua fallback while server state remains correct.
 
@@ -823,12 +847,14 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 
 - Ladder normalized placement 1–6 formula and invalid edges.
 - Ladder fidget Skull/chip cap, queue/cancel/match-found state precedence, 2–6 roster order/density, stat fallback, duplicate handoff guard.
-- Two authenticated humans can enter the indexed FIFO queue and receive the same ranked matchId (manual multi-account E2E; deterministic fixture does not prove this).
+- Two to six authenticated humans can enter the active leased queue and receive the same ranked matchId after adaptive fill/timeout evaluation (manual multi-account E2E; deterministic fixture does not prove this).
 
 - Clerk-authenticated user can create profile.
 - User can create dev match.
 - Legal command appends event and updates snapshot.
 - `shake.complete` is one mutation per completed shake, not one mutation per shake tick.
+- phase-entry `shake.timeout` fires after six seconds without being reset by partial player completions.
+- timeout rolls only unfinished alive players; completed players are not rerolled.
 - Every alive player has an independent shake/check capability; one player's completion cannot advance the phase or roll another player's dice.
 - Illegal command returns structured rejection.
 - Duplicate `commandId` is idempotent.

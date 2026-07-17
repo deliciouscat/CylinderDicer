@@ -348,10 +348,11 @@ def DuelTurnBlock():
 def DuelResolution(duel, judge):
     # README '데미지 정책' 분기를 그대로 따른다.
     if judge.verdict in (SHORT, OVER):
-        # |실제−콜|만큼 russian roulette. SHORT→도전자, OVER→직전 콜러가 맞음.
+        # |실제−콜|번 공격. SHORT→도전자가 직전 콜러에게, OVER→직전 콜러가 도전자에게 격발.
         # 리볼버이므로 장전 위치에 따라 일부만/안 나갈 수 있음.
         return duelShots(
-            target  = duel.challenger if judge.verdict == SHORT else duel.previousBidder,
+            shooter = duel.challenger if judge.verdict == SHORT else duel.previousBidder,
+            target  = duel.previousBidder if judge.verdict == SHORT else duel.challenger,
             count   = abs(judge.actual - duel.bid.count),
         )
     else:  # EXACT(정확히 맞춤)
