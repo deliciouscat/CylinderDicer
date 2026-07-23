@@ -108,6 +108,10 @@
       "settings": "설정"
     }
   },
+  "music": {
+    "turnOn": "음악 켜기",
+    "turnOff": "음악 끄기"
+  },
   "playWrapper": {
     "canvasTitle": "CylinderDicer 플레이 캔버스"
   }

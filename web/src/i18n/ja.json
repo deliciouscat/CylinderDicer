@@ -108,6 +108,10 @@
       "settings": "設定"
     }
   },
+  "music": {
+    "turnOn": "音楽をオンにする",
+    "turnOff": "音楽をオフにする"
+  },
   "playWrapper": {
     "canvasTitle": "CylinderDicer プレイキャンバス"
   }

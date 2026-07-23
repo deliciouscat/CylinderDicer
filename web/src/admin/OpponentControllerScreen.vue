@@ -963,7 +963,7 @@ onUnmounted(() => {
           Loading Ladder QA queue…
         </p>
         <p class="opponent-controller__empty">
-          Add bots before or after opening Ladder. The next player claims the waiting bots; Match Found starts 1.5 seconds later.
+          Add bots before or after opening Ladder. Six players start immediately; smaller QA rosters wait up to 40 seconds from player arrival.
         </p>
       </div>
       <button

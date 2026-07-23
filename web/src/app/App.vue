@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import OpponentControllerScreen from '../admin/OpponentControllerScreen.vue'
 import CustomGameScreen from '../custom-game/CustomGameScreen.vue'
 import LadderShell from '../ladder/LadderShell.vue'
 import LobbyScreen from '../lobby/LobbyScreen.vue'
 import ConvexPlayScreen from '../play-wrapper/ConvexPlayScreen.vue'
+import BackgroundMusic, { type BackgroundMusicMode } from '../play-wrapper/BackgroundMusic.vue'
 import LocalPlayScreen from '../play-wrapper/LocalPlayScreen.vue'
+import { installButtonClickSound } from '../services/audio/buttonClickSound'
 import SignInView from '../views/sign-in.vue'
 import SignUpView from '../views/sign-up.vue'
 
@@ -19,6 +21,7 @@ const ladderHandoffMatchId = ref<string | null>(
   ladderMatchIdFromUrl(window.location.pathname, window.location.search),
 )
 const useLocalDefoldSimulator = import.meta.env.VITE_USE_LOCAL_DEFOLD_SIMULATOR === 'true'
+let removeButtonClickSound: (() => void) | null = null
 const activeScreen = computed(() => {
   if (currentPath.value === '/play/custom-game') {
     return 'custom-game'
@@ -43,6 +46,13 @@ const activeScreen = computed(() => {
   }
   return 'lobby'
 })
+const backgroundMusicMode = computed<BackgroundMusicMode>(() =>
+  activeScreen.value === 'ladder-play' ||
+  activeScreen.value === 'convex-play' ||
+  activeScreen.value === 'local-play'
+    ? 'battle'
+    : 'lobby',
+)
 
 function navigate(path: string) {
   const target = new URL(path, window.location.origin)
@@ -61,9 +71,19 @@ window.addEventListener('popstate', () => {
   ladderHandoffMatchId.value = ladderMatchIdFromUrl(window.location.pathname, window.location.search)
   currentPath.value = window.location.pathname
 })
+
+onMounted(() => {
+  removeButtonClickSound = installButtonClickSound()
+})
+
+onBeforeUnmount(() => {
+  removeButtonClickSound?.()
+  removeButtonClickSound = null
+})
 </script>
 
 <template>
+  <BackgroundMusic :mode="backgroundMusicMode" />
   <OpponentControllerScreen v-if="activeScreen === 'admin-opponents'" @back="navigate('/')" />
   <CustomGameScreen v-else-if="activeScreen === 'custom-game'" @back="navigate('/')" />
   <LadderShell

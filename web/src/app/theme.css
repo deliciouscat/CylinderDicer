@@ -12,4 +12,7 @@
   --color-locale-accent: rgb(178 103 44 / 42%);
   --color-locale-text: #FFF5E4;
   --color-locale-muted: #D8C2A4;
+  --color-music-border: rgb(210 164 96 / 72%);
+  --color-music-surface: rgb(24 16 11 / 82%);
+  --color-music-icon: #FFE9BE;
 }

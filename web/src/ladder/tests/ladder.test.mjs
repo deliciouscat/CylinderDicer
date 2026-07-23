@@ -9,6 +9,7 @@ const {
 } = require('../../../../.tmp/ladder-test/shared/ladder/placement.js')
 const {
   canFinalizeLadderQaRoster,
+  ladderQaFinalizeDelayMs,
   nextLadderQaPlayerCount,
   nextLadderQaWaitingBotCount,
   shouldResumeReadyLadderMatch,
@@ -139,6 +140,21 @@ test('Ladder QA bots can wait before the human player joins', () => {
   assert.equal(nextLadderQaWaitingBotCount(-1), null)
 })
 
+test('Ladder QA waits from player arrival for a partial roster but starts six immediately', () => {
+  assert.equal(ladderQaFinalizeDelayMs({
+    joinedAt: 10_000, now: 10_000, pendingOpponentCount: 1,
+  }), 40_000)
+  assert.equal(ladderQaFinalizeDelayMs({
+    joinedAt: 10_000, now: 35_000, pendingOpponentCount: 3,
+  }), 15_000)
+  assert.equal(ladderQaFinalizeDelayMs({
+    joinedAt: 10_000, now: 50_000, pendingOpponentCount: 1,
+  }), 0)
+  assert.equal(ladderQaFinalizeDelayMs({
+    joinedAt: 10_000, now: 10_000, pendingOpponentCount: 5,
+  }), 0)
+})
+
 test('only the latest waiting QA revision can finalize', () => {
   assert.equal(canFinalizeLadderQaRoster({
     status: 'waiting', qaRevision: 3, expectedQaRevision: 3, pendingOpponentCount: 3,
@@ -173,11 +189,21 @@ test('matchmaking waits for six when the projected fill fits inside the wait bud
   assert.equal(decision.reason, 'waiting')
 })
 
-test('matchmaking starts a partial roster when fill is projected past max wait', () => {
+test('matchmaking never starts a partial roster before the 40 second hold', () => {
   const decision = decideLadderMatch([
     { joinedAt: 0, mmr: 1000 },
     { joinedAt: 20_000, mmr: 1100 },
-  ], 20_000)
+  ], 39_999)
+  assert.equal(decision.shouldStart, false)
+  assert.equal(decision.playerCount, 2)
+  assert.equal(decision.reason, 'waiting')
+})
+
+test('matchmaking starts a partial roster after 40 seconds when fill is still too slow', () => {
+  const decision = decideLadderMatch([
+    { joinedAt: 0, mmr: 1000 },
+    { joinedAt: 20_000, mmr: 1100 },
+  ], 40_000)
   assert.equal(decision.shouldStart, true)
   assert.equal(decision.playerCount, 2)
   assert.equal(decision.reason, 'projected_slow_fill')

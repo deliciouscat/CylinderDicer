@@ -108,6 +108,10 @@
       "settings": "Settings"
     }
   },
+  "music": {
+    "turnOn": "Turn music on",
+    "turnOff": "Turn music off"
+  },
   "playWrapper": {
     "canvasTitle": "CylinderDicer play canvas"
   }
