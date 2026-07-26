@@ -26,15 +26,24 @@ export async function ensureVirtualOpponent(
 	key: string,
 	displayName: string,
 	archetype?: string,
+	catalogScope: 'gameplay' | 'qa_fixture' = 'gameplay',
 ) {
 	const now = Date.now()
 	const existing = await getVirtualOpponentByKey(ctx, key)
 	const fields = {
 		displayName,
 		archetype,
+		catalogScope,
 		updatedAt: now,
 	}
 	if (existing) {
+		if (
+			existing.displayName === displayName
+			&& existing.archetype === archetype
+			&& existing.catalogScope === catalogScope
+		) {
+			return existing
+		}
 		await ctx.db.patch(existing._id, fields)
 		return {
 			...existing,
@@ -46,6 +55,7 @@ export async function ensureVirtualOpponent(
 		key,
 		displayName,
 		archetype,
+		catalogScope,
 		createdAt: now,
 		updatedAt: now,
 	})
@@ -59,7 +69,13 @@ export async function ensureVirtualOpponent(
 export async function ensureDefaultVirtualOpponents(ctx: GenericCtx) {
 	const opponents = []
 	for (const spec of DEFAULT_VIRTUAL_OPPONENT_SPECS) {
-		opponents.push(await ensureVirtualOpponent(ctx, spec.key, spec.displayName, spec.archetype))
+		opponents.push(await ensureVirtualOpponent(
+			ctx,
+			spec.key,
+			spec.displayName,
+			spec.archetype,
+			'gameplay',
+		))
 	}
 	return opponents
 }
@@ -78,10 +94,11 @@ export const listVirtualOpponents = queryGeneric({
 	returns: v.any(),
 	handler: async (ctx: GenericCtx) => {
 		await requireExistingCurrentUser(ctx)
-		return await ctx.db
+		const opponents = await ctx.db
 			.query('virtualOpponents')
 			.withIndex('by_key')
 			.order('asc')
-			.collect()
+			.take(32)
+		return opponents.filter((opponent: any) => opponent.catalogScope !== 'qa_fixture')
 	},
 })

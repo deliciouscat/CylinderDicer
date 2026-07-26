@@ -46,5 +46,17 @@
   "reload.next.bid": "다음: 입찰을 계속합니다.",
   "reload.next.shake": "다음: 주사위를 확인합니다.",
   "reload.next.exact_duel": "다음: 새 흔들기 라운드로 이동합니다.",
-  "reload.click_hint": "오른쪽 실린더의 빈 칸을 클릭하세요."
+  "reload.click_hint": "오른쪽 실린더의 빈 칸을 클릭하세요.",
+  "result.victory": "승리",
+  "result.congratulations": "축하합니다!",
+  "result.place.2": "2위",
+  "result.place.3": "3위",
+  "result.place.4": "4위",
+  "result.place.5": "5위",
+  "result.place.6": "6위",
+  "result.rating": "ELO 점수",
+  "result.unrated": "비랭크 매치",
+  "result.rating_pending": "최종 점수는 매치 종료 후 집계됩니다",
+  "result.lobby": "로비로 나가기",
+  "result.spectate": "관전하기"
 }

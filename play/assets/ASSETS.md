@@ -22,6 +22,13 @@ Defold 프로젝트 루트는 `play/`. 이 문서는 **턴 진행(bidding/shakin
 - 원본: https://github.com/notofonts/noto-cjk/tree/main/Serif/OTF/Korean
 - Defold의 TTF/OTF font resource 사용법: https://defold.com/manuals/font/
 
+## HTML5 엔진 로딩 화면
+
+- 원본은 `assets/images/background.png`와 `assets/images/logo.png`이다.
+- `html5/loading.css`가 두 이미지를 배경과 중앙 로고 레이어로 표시한다. 이는 게임 collection이 뜨기 전 Defold HTML5 engine loader 화면이며 gameplay atlas와 별개다.
+- `npm run defold:web:bundle` 및 `npm run defold:web:build`는 두 원본을 `html5/bundle_resources/web/`에 자동 복사한 뒤 Bob을 실행한다. 해당 중간 디렉터리와 최종 `wasm-web/`, `web/public/play/` 출력은 직접 편집하지 않는다.
+- 원본을 교체한 뒤에는 release HTML5 bundle 재생성·sync와 브라우저 강력 새로고침이 필요하다.
+
 ## 디렉토리 구조
 ```
 play/
@@ -66,7 +73,7 @@ play/
 - 리볼버: `revolver/<skinId>/{revolver,cylinder,bullet}.png` (총기 전체 / 약실 뷰 / 총알)
 - 레일/배경(맵, 테마 종속): `rail/<mapId>/{track,cell,cell_selected,skull}.png`, `backgrounds/<mapId>/panorama.png`
 - 아이콘: `icons/<name>.png`
-- 오디오: `sounds/sfx/<name>.{wav,ogg}`, `sounds/bgm/<name>.ogg`, `sounds/voice/<charId>/<event>.ogg`
+- 오디오: `sounds/sfx/<name>.{wav,ogg}` + 같은 이름의 `.sound`, `sounds/bgm/<name>.ogg`, `sounds/voice/<charId>/<event>.ogg`
   - 짧은 효과음은 wav, 길거나 음악/음성은 ogg 권장. Defold에서 각 파일을 `.sound` 컴포넌트가 참조.
 
 ## DISPLAY.md 요소 ↔ 에셋 매핑
@@ -82,8 +89,20 @@ play/
 | cylinderOverlay | `revolver/<skinId>/cylinder.png` + `bullet_bottom` (장전된 약실) + `bullet_unloaded` (재장전 대기 탄환) |
 | 배경 | backgrounds/<mapId>/* |
 
+## 적용된 효과음
+
+- 원본 master MP3: `art-source/sounds/sfx/`
+- Defold runtime: `assets/sounds/sfx/`의 16-bit PCM WAV + `.sound`
+- `start_bell`: match 시작
+- `roll` / `drop`: 로컬 shake 입력 / authoritative `dice_check` phase 진입(컵이 올라가 주사위가 보이는 시점)
+- `reload` / `clasp`: 장전 / 마지막 pending bullet 장전
+- `tick` / `bang`: 결투 격발 miss / hit
+- `victory` / `placement`: local winner / 나머지 순위 종료
+- `button_click`: Defold bidding control. 같은 원본을 Vue button SFX도 사용한다.
+
 ## 미정 (전투 씬 와이어프레임 후 추가)
-- 결투 FX/사운드(`철컥`/`탕`), PerfectDuel 지목·응사 UI, 데미지 플로팅, 승/패 화면.
+
+- PerfectDuel 지목·응사 UI, 데미지 플로팅, 승/패 결과 화면.
 
 ## 적용된 HUD 자산
 
@@ -92,5 +111,5 @@ play/
 - `assets/atlases/status_indicators.atlas`: `player_carousel`과 `duel`의 장탄·HP 배지.
 - `assets/atlases/cylinder_default.atlas`: `cylinder_overlay`의 실린더 본체. HTML5에서도 실린더 투명 영역을 독립 texture page로 유지한다.
 - `assets/atlases/revolver_default.atlas`: `cylinder_overlay`의 장전된 약실과 재장전 대기 탄환.
-- `assets/atlases/rank_result.atlas`: `rank_{1,2_3,4_6}` 순위 프레임. 결과 HUD가 아직 없으므로 atlas만 준비되었고 화면에는 아직 연결하지 않는다.
+- `assets/atlases/rank_result.atlas`: `result` HUD의 `rank_{1,2_3,4_6}` 순위 프레임. 1위 승리, 2–3위, 4–6위 결과 panel에 연결한다.
 - 모든 gameplay GUI의 `system_font` mapping은 `assets/fonts/noto_serif_cjk_kr_semibold.font`를 사용한다.

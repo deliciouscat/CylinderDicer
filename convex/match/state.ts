@@ -31,6 +31,7 @@ import type { MatchPhase } from '../protocol/snapshots'
 
 export type MatchMode = 'dev' | 'casual' | 'ranked'
 export type MatchStatus = 'idle' | 'ready' | 'complete'
+export type ParticipantControlMode = 'human' | 'qa_manual' | 'server_bot'
 export type TurnKind = 'setup' | 'shaking' | 'bidding' | 'dualing' | 'complete'
 export type PendingLoadSource = 'setup' | 'shake' | 'bid' | 'duel' | 'exact_duel'
 
@@ -181,6 +182,23 @@ export interface MatchMetaState {
 	turnCount: number
 	eventsHash: string
 	winnerId?: string
+	result?: MatchResultState
+}
+
+export interface MatchResultEntry {
+	playerId: string
+	place: number
+	playerCount: number
+	rated: boolean
+	mmrBefore?: number
+	mmrAfter?: number
+	mmrDelta?: number
+}
+
+export interface MatchResultState {
+	playerCount: number
+	placements: MatchResultEntry[]
+	rated: boolean
 }
 
 export interface MatchState {
@@ -193,6 +211,7 @@ export interface MatchState {
 		order: string[]
 		byId: Record<string, PlayerState>
 	}
+	eliminationOrder: string[]
 	turn: TurnState
 	bidding: BiddingState
 	flow: FlowState
@@ -221,12 +240,17 @@ export interface CreateInitialStateInput {
 		userId?: string
 		virtualOpponentId?: string
 		participantKind?: 'human' | 'virtual'
+		controlMode?: ParticipantControlMode
+		botProfileId?: string
+		botStrategyVersion?: string
+		botParameters?: Record<string, unknown>
 		name: string
 		skin?: string
 		portraitState?: string
 		hp?: number
 		diceCount?: number
 		initialLoadedSlots?: number[]
+		startingMmr?: number
 	}>
 }
 
@@ -307,6 +331,7 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 			order,
 			byId: playersById,
 		},
+		eliminationOrder: [],
 		turn: {
 			kind: 'setup',
 			activePlayerId,

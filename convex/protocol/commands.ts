@@ -34,6 +34,8 @@ export type PlayerMatchCommandType =
 
 export type AutomaticMatchCommandType =
 	| 'shake.timeout'
+	| 'dice.check.timeout'
+	| 'bidding.timeout'
 	| 'bidding.open'
 	| 'bid.reload_timeout'
   | 'duel.execute'

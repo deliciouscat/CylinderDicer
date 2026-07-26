@@ -7,6 +7,7 @@ local ALL_COMPONENTS = {
 	"/ui#local_hud",
 	"/ui#bid_controls",
 	"/ui#duel",
+	"/ui#result",
 }
 
 local COMPONENTS_BY_HUD = {
@@ -14,7 +15,7 @@ local COMPONENTS_BY_HUD = {
 	cup_shake = { "/ui#shake", "/ui#player_carousel" },
 	bidding = { "/ui#player_carousel", "/ui#rail", "/ui#local_hud", "/ui#bid_controls" },
 	duel = { "/ui#duel" },
-	complete = { "/ui#duel" },
+	complete = { "/ui#result" },
 }
 
 local HUD_BY_PHASE = {
@@ -62,8 +63,23 @@ local function hud(state)
 	return HUD_BY_PHASE[current_phase] or state.turn.kind
 end
 
+local function local_player_eliminated(state)
+	local local_player_id = state.match and state.match.local_player_id
+	local player = local_player_id and state.players and state.players.by_id[local_player_id]
+	return player and (player.eliminated == true or (player.hp or 0) <= 0)
+end
+
 function M.describe(state)
 	local hud_kind = hud(state)
+	local result_visible = hud_kind == "complete"
+		or (local_player_eliminated(state) and not (state.ui and state.ui.spectating))
+	local components = {}
+	for _, component in ipairs(COMPONENTS_BY_HUD[hud_kind] or {}) do
+		components[#components + 1] = component
+	end
+	if result_visible and hud_kind ~= "complete" then
+		components[#components + 1] = "/ui#result"
+	end
 	local cylinder_anchor = "offscreen"
 	if state.pending_load and hud_kind == "revolver_reload" then
 		cylinder_anchor = "focal"
@@ -76,9 +92,11 @@ function M.describe(state)
 	return {
 		phase = phase(state),
 		hud = hud_kind,
-		components = COMPONENTS_BY_HUD[hud_kind] or {},
+		components = components,
 		background = BACKGROUND_BY_HUD[hud_kind] or "shaking",
 		cylinder_anchor = cylinder_anchor,
+		show_turn_indicator = hud_kind ~= "complete",
+		result_visible = result_visible,
 	}
 end
 

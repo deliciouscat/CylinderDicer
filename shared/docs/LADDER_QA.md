@@ -18,14 +18,16 @@ Vite URL은 보통 `http://localhost:5173` 또는 `http://127.0.0.1:5173`이다.
 2. MMR과 `Finding a match…`가 표시되는지 확인한다.
 3. refresh 후에도 searching과 같은 self stats가 복원되는지 확인한다.
 4. Cancel을 누르고 queue leave가 끝난 뒤 `/`로 돌아가는지 확인한다.
-5. 실제 match-found를 검증하려면 서로 다른 Clerk 사용자 2–6명이 동시에 `/play/ladder`에 들어간다. 6명은 즉시 시작하고, 2–5명은 arrival-rate projection 또는 45초 max wait에서 partial roster로 시작한다. 참가 화면은 같은 ranked matchId를 받아야 한다.
+5. 실제 match-found를 검증하려면 서로 다른 Clerk 사용자 2–6명이 동시에 `/play/ladder`에 들어간다. 6 human은 즉시 같은 `ranked` matchId를 받는다. 2–5 human은 최소 40초 동안 추가 인원을 기다린 뒤 arrival-rate projection으로 start를 판단하며, 45초 max wait에는 반드시 start한다. 이 경우 gameplay bot이 roster를 6명까지 채우고 모든 human 화면은 같은 `casual`/unrated matchId를 받아야 한다.
 6. handoff 뒤 URL이 `/play/ladder?matchId=...`인지 확인한다. Back → Lobby → Ladder는 이전 match를 다시 열지 않고 새 `Finding a match…` session을 만들어야 한다.
+7. Bot-filled roster에서는 `matchParticipants.controlMode`이 human/server_bot으로 나뉘고, bot이 fake `ladderQueueEntries` row를 만들지 않는지 확인한다.
 
 ## Deterministic dev fixture
 
 Fixture는 roster/responsive/handoff QA 전용이다. production matching이나 rating policy 검증이 아니다.
 
 ```bash
+npx convex env set QA_TOOLS_ENABLED true
 npx convex env set LADDER_DEV_FIXTURES true
 ```
 
@@ -46,20 +48,41 @@ QA 후 fixture gate를 닫는다.
 
 ```bash
 npx convex env remove LADDER_DEV_FIXTURES
+npx convex env remove QA_TOOLS_ENABLED
 ```
 
 ## Opponent Controller QA roster
 
-기존 virtual opponent + authoritative match path를 사용하는 수동 shortcut이며 별도 fixture env가 필요하지 않다. Admin claim은 필수다.
+기존 virtual opponent + authoritative match path를 사용하는 수동 shortcut이다. Admin claim과 `QA_TOOLS_ENABLED=true`가 필요하다.
 
 1. authenticated admin tab에서 `/admin/opponents`를 먼저 연다.
 2. Player가 없는 `0/5 virtual opponents waiting` 상태에서 `Add Ladder Opponent`가 enabled인지 확인한다.
 3. 버튼을 1회, 3회, 또는 5회 눌러 bot-first pool을 만든다.
 4. authenticated player tab에서 `/play/ladder`를 나중에 연다.
 5. pool이 zero가 되고 player + bots 기준 2/4/6 roster가 생성되는지 확인한다.
-6. claim 1.5초 뒤 roster/countdown/handoff를 확인한다.
+6. 총 6명이면 즉시, 그보다 적으면 player 입장 40초 뒤 roster/countdown/handoff를 확인한다.
 
-이 경로는 `dev` match를 만들며 production matchmaking 검증이 아니다. Production adaptive 2–6 policy는 위의 `실제 queue smoke` 절차로 별도 검증한다. 자세한 admin access/audit 설명은 [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md)의 `Ladder QA`를 따른다.
+이 경로는 `qa_manual` participant를 가진 `dev` match를 만들며 production matchmaking/gameplay bot 검증이 아니다. Production humans-first six-seat policy는 위의 `실제 queue smoke` 절차로 별도 검증한다. 자세한 admin access/audit 설명은 [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md)의 `Ladder QA`를 따른다.
+
+## Result HUD fixture
+
+release HTML5 bundle의 결과 연출/입력만 빠르게 확인한다. 이 fixture는 standalone local simulator이므로 production Convex rating write나 matchmaking을 검증하지 않는다.
+
+```bash
+npm run defold:web:build
+cd web && npm run dev -- --host 127.0.0.1
+node ../tools/html5-result-check.mjs http://127.0.0.1:5173/play/index.html
+```
+
+스크립트는 1280×720에서 4위 탈락 HUD와 `Spectate`, 최종 1위 HUD의 0.5초 hold/eased Elo reel과 `EXIT_TO_LOBBY`를 확인하고, 375×812 및 1440×900 결과 screenshot도 저장한다. 출력은 `.tmp/html5-result-shots/`에 있다.
+
+실제 ranked QA에서는 다음을 별도로 확인한다.
+
+1. 로컬 HP가 0이 되는 authoritative snapshot 직후 gameplay 위에 확정 등수 HUD가 뜬다.
+2. `Spectate`는 route/iframe/match subscription을 교체하지 않고 HUD만 닫으며 남은 플레이를 계속 갱신한다.
+3. match complete에서 최종 HUD가 다시 열리고 Elo before/after/delta가 보인다.
+4. `Return to Lobby`는 iframe을 하나만 해제하고 lobby로 돌아간다.
+5. 같은 completion command나 refresh가 `ladderStats` rating/placement를 두 번 반영하지 않는다.
 
 ## Viewports / acceptance
 

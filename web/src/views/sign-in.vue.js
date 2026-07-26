@@ -1,0 +1,39 @@
+/// <reference types="../../node_modules/.vue-global-types/vue_3.5_0_0_0.d.ts" />
+import { SignIn } from '@clerk/vue';
+debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
+const __VLS_ctx = {};
+let __VLS_components;
+let __VLS_directives;
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "auth-screen" },
+});
+const __VLS_0 = {}.SignIn;
+/** @type {[typeof __VLS_components.SignIn, ]} */ ;
+// @ts-ignore
+const __VLS_1 = __VLS_asFunctionalComponent(__VLS_0, new __VLS_0({
+    routing: "path",
+    path: "/sign-in",
+    signUpUrl: "/sign-up",
+    fallbackRedirectUrl: "/",
+}));
+const __VLS_2 = __VLS_1({
+    routing: "path",
+    path: "/sign-in",
+    signUpUrl: "/sign-up",
+    fallbackRedirectUrl: "/",
+}, ...__VLS_functionalComponentArgsRest(__VLS_1));
+/** @type {__VLS_StyleScopedClasses['auth-screen']} */ ;
+var __VLS_dollars;
+const __VLS_self = (await import('vue')).defineComponent({
+    setup() {
+        return {
+            SignIn: SignIn,
+        };
+    },
+});
+export default (await import('vue')).defineComponent({
+    setup() {
+        return {};
+    },
+});
+; /* PartiallyEnd: #4569/main.vue */

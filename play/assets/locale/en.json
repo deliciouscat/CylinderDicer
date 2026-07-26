@@ -46,5 +46,17 @@
   "reload.next.bid": "Next: bidding continues.",
   "reload.next.shake": "Next: check dice.",
   "reload.next.exact_duel": "Next: new shake round.",
-  "reload.click_hint": "Click an empty cylinder slot."
+  "reload.click_hint": "Click an empty cylinder slot.",
+  "result.victory": "Victory",
+  "result.congratulations": "Congratulations!",
+  "result.place.2": "2nd Place",
+  "result.place.3": "3rd Place",
+  "result.place.4": "4th Place",
+  "result.place.5": "5th Place",
+  "result.place.6": "6th Place",
+  "result.rating": "ELO Rating",
+  "result.unrated": "Unrated Match",
+  "result.rating_pending": "Final rating is calculated when the match ends",
+  "result.lobby": "Return to Lobby",
+  "result.spectate": "Spectate"
 }

@@ -342,7 +342,8 @@ try {
 					&& !s.pending_load
 					&& s.visual?.rail?.visible === true
 					&& s.visual?.bid_controls?.can_drive === false
-					&& s.visual?.bid_controls?.visible === false
+					&& s.visual?.bid_controls?.visible === true
+					&& Number(s.visual?.bid_controls?.display_face) === 1
 					&& s.visual?.player_carousel?.active_player_id === "opponent-1"
 					&& Number(s.visual?.player_carousel?.active_position_x) === 0,
 				5000,
@@ -350,7 +351,27 @@ try {
 		),
 	);
 	phases.after_skull_reload.screenshot = await screenshotMetrics(page, "after_skull_reload");
-	await page.evaluate(() => window.__cdHarness.qa("challenge", "opponent-1"));
+	await page.evaluate(() => window.__cdHarness.qa("bid", "opponent-1", {
+		count: 1,
+		face: 2,
+	}));
+	phases.opponent_bid_visible = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => s.phase === "bidding"
+					&& s.turn?.active_player_id === "opponent-2"
+					&& s.bidding?.current_bid?.player_id === "opponent-1"
+					&& Number(s.bidding?.current_bid?.face) === 2
+					&& s.visual?.bid_controls?.visible === true
+					&& s.visual?.bid_controls?.can_drive === false
+					&& Number(s.visual?.bid_controls?.display_face) === 2,
+				5000,
+			),
+		),
+	);
+	phases.opponent_bid_visible.screenshot = await screenshotMetrics(page, "opponent_bid_visible");
+	await page.evaluate(() => window.__cdHarness.qa("load_all", "opponent-1"));
+	await page.evaluate(() => window.__cdHarness.qa("challenge", "opponent-2"));
 	phases.duel_reveal = await page.evaluate(async () =>
 		window.__cdHarness.summarize(
 			await window.__cdHarness.waitStatus(
@@ -383,6 +404,22 @@ try {
 			await window.__cdHarness.waitStatus(
 				(s) => s.turn?.round_index >= 1 && s.phase !== "duel",
 				12000,
+			),
+		),
+	);
+	if (phases.next_round?.phase === "revolver_reload" && phases.next_round?.pending?.player_id) {
+		await page.evaluate(
+			(playerId) => window.__cdHarness.qa("load_all", playerId),
+			phases.next_round.pending.player_id,
+		);
+	}
+	phases.post_duel_shake = await page.evaluate(async () =>
+		window.__cdHarness.summarize(
+			await window.__cdHarness.waitStatus(
+				(s) => Number(s.turn?.round_index ?? 0) >= 1
+					&& s.phase === "cup_shake"
+					&& !s.pending_load,
+				8000,
 			),
 		),
 	);
@@ -470,17 +507,38 @@ try {
 		&& phases.after_skull_reload?.players?.find((player) => player.id === "local-player")?.bullets === 3
 		&& phases.after_skull_reload?.rail?.visible === true
 		&& phases.after_skull_reload?.bid_controls?.can_drive === false
-		&& phases.after_skull_reload?.bid_controls?.visible === false
+		&& phases.after_skull_reload?.bid_controls?.visible === true
+		&& Number(phases.after_skull_reload?.bid_controls?.display_face) === 1
 		&& phases.after_skull_reload?.carousel?.active_player_id === "opponent-1"
 		&& Number(phases.after_skull_reload?.carousel?.active_position_x) === 0;
+	checks.opponent_bid_visible = {
+		ok: phases.opponent_bid_visible?.bidding?.current_bid?.player_id === "opponent-1"
+			&& Number(phases.opponent_bid_visible?.bidding?.current_bid?.face) === 2
+			&& phases.opponent_bid_visible?.bid_controls?.visible === true
+			&& phases.opponent_bid_visible?.bid_controls?.can_drive === false
+			&& Number(phases.opponent_bid_visible?.bid_controls?.display_face) === 2,
+		expected_face: 2,
+		current_bid: phases.opponent_bid_visible?.bidding?.current_bid ?? null,
+		bid_controls: phases.opponent_bid_visible?.bid_controls ?? null,
+	};
 	checks.next_round = {
-		ok: Number(phases.next_round?.round_index ?? 0) >= 1 && phases.next_round?.phase !== "duel",
+		ok: Number(phases.next_round?.round_index ?? 0) >= 1
+			&& phases.next_round?.phase === "revolver_reload"
+			&& phases.next_round?.pending?.source === "duel",
 		expected_round_index: 1,
+		expected_phase: "revolver_reload",
 		phase: phases.next_round?.phase ?? null,
 		round_index: phases.next_round?.round_index ?? null,
 	};
+	checks.post_duel_shake = {
+		ok: phases.post_duel_shake?.phase === "cup_shake"
+			&& !phases.post_duel_shake?.pending,
+		expected_phase: "cup_shake",
+		phase: phases.post_duel_shake?.phase ?? null,
+		pending: phases.post_duel_shake?.pending ?? null,
+	};
 	checks.shake_timeout = {
-		ok: phases.next_round_timeout?.phase === "revolver_reload"
+		ok: phases.next_round_timeout?.phase === "dice_check"
 			&& Number(phases.next_round_timeout?.elapsed_ms ?? 0) >= 5_500
 			&& phases.next_round_timeout?.players
 				?.filter((player) => !player.eliminated)

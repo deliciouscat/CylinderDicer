@@ -5,6 +5,7 @@
 /play/build
 /play/.deps/**
 /play/wasm-web/
+/play/html5/bundle_resources/
 /web/node_modules
 /node_modules
 /web/dist
@@ -39,4 +40,5 @@ builtins
 !/convex/.env.example
 .agents/
 .claude/
+.review/
 convex/_generated/

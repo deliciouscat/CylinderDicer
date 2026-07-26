@@ -22,6 +22,7 @@ const REQUIRED_PHASE4_FUNCTIONS = [
   'adminMatches.js:getLatestLadderQaSessionForAdmin',
   'adminMatches.js:addLadderQaOpponent',
   'adminMatches.js:dismissReadyDevMatch',
+  'customGames.js:addMyCustomGameOpponent',
   'ladder.js:heartbeatQueue',
   'ladder.js:acknowledgeMatchHandoff',
 ]
@@ -104,6 +105,11 @@ check(
   functionReferences.includes('getLatestLadderQaSessionForAdmin')
     && functionReferences.includes('addLadderQaOpponent'),
   'Register Ladder QA admin functions in web/src/services/convex/functionReferences.ts.',
+)
+check(
+  'web registry exposes Custom Game bot composition',
+  functionReferences.includes('addMyCustomGameOpponent'),
+  'Register addMyCustomGameOpponent in web/src/services/convex/functionReferences.ts.',
 )
 check(
   'shared docs describe Clerk admin claim',
@@ -192,14 +198,14 @@ if (liveFunctionCheck.attempted) {
 
 console.log('')
 console.log('Manual Phase 4 E2E checklist:')
-console.log('  1. Clerk JWT template "convex" includes {"role":"admin"}')
-console.log('  2. Sign out/in, open /admin/opponents')
-console.log('  3. probe shows AUTHORIZED')
-console.log('  4. Create/Reuse dev match, Open Play with same matchId')
-console.log('  5. Submit opponent load/shake/check/bid via admin UI')
-console.log('  6. Confirm play tab snapshot updates + adminAudit rows appear')
+console.log('  1. Set QA_TOOLS_ENABLED=true on the QA deployment')
+console.log('  2. Clerk JWT template "convex" includes {"role":"admin"}')
+console.log('  3. Sign out/in, open /admin/opponents, and confirm AUTHORIZED')
+console.log('  4. Create a standalone dev match and submit qa_manual opponent commands')
+console.log('  5. Confirm play snapshot updates + adminAudit rows appear')
+console.log('  6. Confirm a server_bot participant rejects controller commands')
 console.log('  7. Non-admin account receives UNAUTHORIZED on admin queries')
-console.log('  8. Before opening Ladder, click Add Ladder Opponent 1–5 times; then join /play/ladder and confirm one 2–6 player dev roster')
+console.log('  8. Use Add Ladder Opponent only for a 2–6 player dev roster fixture')
 
 if (missing.length > 0) {
   console.log('')

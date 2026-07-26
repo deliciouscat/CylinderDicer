@@ -7,6 +7,7 @@ local gui_util = require("ui.common.gui_util")
 local table_seat_layout = require("ui.common.table_seat_layout")
 local dice_art = require("ui.common.dice_art")
 local shake_gauge = require("ui.shake.shake_gauge")
+local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local visual_status = require("game.dev.visual_status")
 
@@ -14,9 +15,11 @@ local MAX_OPPONENTS = 5
 local DICE_COUNT = 5
 local DRAG_DISTANCE_PER_SHAKE = 72.0
 local LOCAL_CUP_CLOSED_Y = 8.0
-local LOCAL_CUP_REVEAL_Y = 48.0
+local LOCAL_CUP_REVEAL_Y = 88.0
+local LOCAL_CUP_REVEAL_ALPHA = 0.88
 local CUP_WIDTH = 220.0
 local CUP_HEIGHT = 248.0
+local LOCAL_CUP_Z = 0.2
 local PHASE_CUP_SHAKE = "cup_shake"
 local PHASE_DICE_CHECK = "dice_check"
 local PHASE_BIDDING_GAP = "bidding_gap"
@@ -117,6 +120,8 @@ local function render(self, state)
 	local local_player = selectors.local_player(state)
 	local status = selectors.shake_status(state, local_player_id)
 	local reveal = phase == PHASE_DICE_CHECK or phase == PHASE_BIDDING_GAP
+	local local_cup_target_y = reveal and LOCAL_CUP_REVEAL_Y or LOCAL_CUP_CLOSED_Y
+	local local_cup_alpha = reveal and LOCAL_CUP_REVEAL_ALPHA or 1.0
 	local token = shake_round_token(state)
 	if phase == PHASE_CUP_SHAKE and self.gauge_token ~= token then
 		self.gauge_token = token
@@ -125,6 +130,12 @@ local function render(self, state)
 	elseif status.complete then
 		self.gauge = shake_gauge.MAX
 		self.shake_submitted = true
+	end
+	if phase == PHASE_DICE_CHECK and self.dice_check_token ~= token then
+		self.dice_check_token = token
+		self.dice_check_submitted = state.shake
+			and state.shake.checked
+			and state.shake.checked[local_player_id] == true
 	end
 	visual_status.set("shake", {
 		phase = phase,
@@ -136,15 +147,17 @@ local function render(self, state)
 		submitted = self.shake_submitted == true,
 		server_complete = status.complete,
 		local_player_id = local_player_id,
+		local_cup_target_y = local_cup_target_y,
+		local_cup_alpha = local_cup_alpha,
 	})
 
 	if self.last_shake_count and status.count > self.last_shake_count then
 		self.shake_impulse = 0.18
 	end
 	self.last_shake_count = status.count
-	self.local_cup_target_y = reveal and LOCAL_CUP_REVEAL_Y or LOCAL_CUP_CLOSED_Y
+	self.local_cup_target_y = local_cup_target_y
 
-	gui_util.set_alpha("cup_local", reveal and 0.78 or 1.0)
+	gui_util.set_alpha("cup_local", local_cup_alpha)
 	gui_util.set_text("hint", hint_for_phase(phase))
 
 	set_dice_visible(reveal)
@@ -190,6 +203,7 @@ local function dispatch_shake(self)
 
 	self.gauge = shake_gauge.add(self.gauge)
 	self.shake_impulse = 0.18
+	audio.play_sfx("roll")
 	if shake_gauge.complete(self.gauge) then
 		submit_shake_complete(self, state, player_id)
 	end
@@ -201,16 +215,21 @@ local function dispatch_dice_check(self)
 	if not self.store then
 		return false
 	end
+	if self.dice_check_submitted then
+		return false
+	end
 	local state = self.store:get_state()
 	if selectors.phase(state) ~= PHASE_DICE_CHECK then
 		return false
 	end
 	local submission = server_command.submit(state, "dice.check")
 	if submission.status ~= "local" then
-		return submission.status == "sent"
+		self.dice_check_submitted = submission.status == "sent"
+		return self.dice_check_submitted
 	end
 	local result = self.store:dispatch(actions.dice_check(state.match.local_player_id))
-	return result and result.ok == true
+	self.dice_check_submitted = result and result.ok == true
+	return self.dice_check_submitted
 end
 
 local function consume_drag(self, event)
@@ -244,7 +263,7 @@ local function update_local_cup(self, dt)
 	gui.set_position(self.local_cup_node, vmath.vector3(
 		(self.local_cup_base_x or 0.0) + offset_x,
 		self.local_cup_y,
-		0.4
+		LOCAL_CUP_Z
 	))
 	gui.set_rotation(self.local_cup_node, vmath.quat_rotation_z(rotation))
 end
@@ -283,6 +302,8 @@ function init(self)
 	self.gauge = shake_gauge.MIN
 	self.gauge_token = nil
 	self.shake_submitted = false
+	self.dice_check_token = nil
+	self.dice_check_submitted = false
 	self.local_cup_node = gui.get_node("cup_local")
 
 	gui.set_render_order(4)

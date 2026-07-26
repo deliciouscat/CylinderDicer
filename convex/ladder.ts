@@ -1,15 +1,14 @@
 import { internalMutationGeneric, mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
-import { env } from './_generated/server'
 import {
 	averageNormalizedPlacement,
 	type LadderPlacement,
 } from '../shared/ladder/placement'
 import {
 	canFinalizeLadderQaRoster,
-	LADDER_QA_FINALIZE_DELAY_MS,
 	LADDER_QA_MAX_PLAYER_COUNT,
+	ladderQaFinalizeDelayMs,
 	nextLadderQaPlayerCount,
 	nextLadderQaWaitingBotCount,
 	shouldResumeReadyLadderMatch,
@@ -17,7 +16,9 @@ import {
 import {
 	decideLadderMatch,
 	eligibleLadderCandidates,
+	ladderBotFillCount,
 	LADDER_MAX_WAIT_MS,
+	LADDER_MIN_WAIT_MS,
 	LADDER_QUEUE_LEASE_MS,
 } from '../shared/ladder/matchmaking'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
@@ -34,6 +35,9 @@ import {
 	type GenericCtx,
 } from './users'
 import { ensureVirtualOpponent } from './virtualOpponents'
+import { qaToolsEnabled, requireQaToolsEnabled } from './qa/guards'
+import { selectGameplayBots } from './bots/catalog'
+import { scheduleNextBotAction } from './bots/scheduling'
 
 const DEFAULT_MMR = 1000
 const MAX_ROSTER_SIZE = LADDER_QA_MAX_PLAYER_COUNT
@@ -147,6 +151,7 @@ async function qaOpponentViews(ctx: GenericCtx, rows: any[]) {
 }
 
 export async function getLatestLadderQaSession(ctx: GenericCtx) {
+	requireQaToolsEnabled()
 	const active = await activeWaitingEntries(ctx, Date.now(), true)
 	const entry = active[active.length - 1]
 	if (!entry) {
@@ -172,6 +177,7 @@ export async function getLatestLadderQaSession(ctx: GenericCtx) {
 }
 
 export async function getLadderQaAdminState(ctx: GenericCtx) {
+	requireQaToolsEnabled()
 	const session = await getLatestLadderQaSession(ctx)
 	if (session) {
 		return { ...session, status: 'player_joined' as const }
@@ -190,6 +196,7 @@ export async function getLadderQaAdminState(ctx: GenericCtx) {
 }
 
 export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string) {
+	requireQaToolsEnabled()
 	const session = await getLatestLadderQaSession(ctx)
 	if (!session) {
 		const waiting = await getQaWaitingOpponents(ctx)
@@ -207,6 +214,7 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 			`ladder-fixture-${opponentIndex + 1}`,
 			LADDER_QA_OPPONENT_NAMES[opponentIndex],
 			'ladder-fixture',
+			'qa_fixture',
 		)
 		await ctx.db.insert('ladderQaWaitingOpponents', {
 			poolKey: LADDER_QA_POOL_KEY,
@@ -240,6 +248,7 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 		`ladder-fixture-${opponentIndex + 1}`,
 		LADDER_QA_OPPONENT_NAMES[opponentIndex],
 		'ladder-fixture',
+		'qa_fixture',
 	)
 	const entry = await ctx.db.get(session.queueEntryId)
 	if (!entry || entry.status !== 'waiting') {
@@ -259,7 +268,12 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 		qaPendingCount: opponentIndex + 1,
 		updatedAt: now,
 	})
-	await ctx.scheduler!.runAfter(LADDER_QA_FINALIZE_DELAY_MS, internal.ladder.finalizeQaRoster, {
+	const finalizeDelayMs = ladderQaFinalizeDelayMs({
+		joinedAt: entry.joinedAt,
+		now,
+		pendingOpponentCount: opponentIndex + 1,
+	})
+	await ctx.scheduler!.runAfter(finalizeDelayMs, internal.ladder.finalizeQaRoster, {
 		queueEntryId: entry._id,
 		expectedQaRevision: qaRevision,
 	})
@@ -270,11 +284,12 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 		opponentDisplayName: opponent.displayName,
 		playerCount: nextPlayerCount,
 		maxPlayerCount: MAX_ROSTER_SIZE,
-		finalizeDelayMs: LADDER_QA_FINALIZE_DELAY_MS,
+		finalizeDelayMs,
 	}
 }
 
 async function claimQaWaitingOpponents(ctx: GenericCtx, entry: any, now: number) {
+	if (!qaToolsEnabled()) return 0
 	const waiting = await getQaWaitingOpponents(ctx)
 	if (waiting.length === 0) return 0
 	for (const [index, row] of waiting.entries()) {
@@ -293,7 +308,12 @@ async function claimQaWaitingOpponents(ctx: GenericCtx, entry: any, now: number)
 		qaPendingCount: waiting.length,
 		updatedAt: now,
 	})
-	await ctx.scheduler!.runAfter(LADDER_QA_FINALIZE_DELAY_MS, internal.ladder.finalizeQaRoster, {
+	const finalizeDelayMs = ladderQaFinalizeDelayMs({
+		joinedAt: entry.joinedAt,
+		now,
+		pendingOpponentCount: waiting.length,
+	})
+	await ctx.scheduler!.runAfter(finalizeDelayMs, internal.ladder.finalizeQaRoster, {
 		queueEntryId: entry._id,
 		expectedQaRevision: qaRevision,
 	})
@@ -324,6 +344,7 @@ async function createAuthoritativeMatch(
 		players,
 	})
 	await writeStateAndPublicView(ctx, state)
+	await scheduleNextBotAction(ctx, state)
 	return { matchId, state }
 }
 
@@ -341,13 +362,20 @@ async function buildRoster(ctx: GenericCtx, matchId: string, viewerUserId: strin
 			? await ctx.db.get(participant.virtualOpponentId)
 			: null
 		const row = participant.userId ? await getStatsRow(ctx, participant.userId) : null
+		const botProfile = participant.botProfileId
+			? await ctx.db.get(participant.botProfileId)
+			: null
 		roster.push({
 			playerId: participant.playerId,
 			displayName: user?.displayName ?? virtualOpponent?.displayName ?? `Player ${participant.seatIndex + 1}`,
 			seatIndex: participant.seatIndex,
 			isSelf: participant.userId === viewerUserId,
 			characterKey: CHARACTER_KEYS[participant.seatIndex % CHARACTER_KEYS.length],
-			stats: statsView(row),
+			stats: row
+				? statsView(row)
+				: botProfile
+					? { ...emptyStats(), mmr: botProfile.baseMmr }
+					: emptyStats(),
 		})
 	}
 	return roster
@@ -414,7 +442,7 @@ async function matchWaitingRoster(ctx: GenericCtx, now: number) {
 		return null
 	}
 
-	const players = []
+	const players: CreateInitialStateInput['players'] = []
 	for (const [seatIndex, candidate] of eligible.entries()) {
 		const entry = candidate.entry
 		const user = await ctx.db.get(entry.userId)
@@ -426,11 +454,40 @@ async function matchWaitingRoster(ctx: GenericCtx, now: number) {
 			userId: user._id,
 			participantKind: 'human' as const,
 			name: user.displayName ?? `Player ${seatIndex + 1}`,
+			startingMmr: candidate.mmr,
 			initialLoadedSlots: seatIndex === 0 ? undefined : [1, 3, 5],
 		})
 	}
 
-	const created = await createAuthoritativeMatch(ctx, players, 'ranked')
+	const botCount = ladderBotFillCount(decision)
+	if (botCount > 0) {
+		const anchorMmr = eligible.reduce((sum, candidate) => sum + candidate.mmr, 0) / eligible.length
+		const bots = await selectGameplayBots(ctx, botCount, anchorMmr)
+		for (const { opponent, profile } of bots) {
+			const seatIndex: number = players.length
+			players.push({
+				id: `player-${seatIndex + 1}`,
+				virtualOpponentId: opponent._id,
+				participantKind: 'virtual' as const,
+				controlMode: 'server_bot' as const,
+				botProfileId: profile._id,
+				botStrategyVersion: profile.strategyVersion,
+				botParameters: profile.parameters,
+				name: opponent.displayName,
+				startingMmr: profile.baseMmr,
+				initialLoadedSlots: [1, 3, 5],
+			})
+		}
+	}
+	if (players.length < MAX_ROSTER_SIZE) {
+		return null
+	}
+
+	const created = await createAuthoritativeMatch(
+		ctx,
+		players,
+		botCount > 0 ? 'casual' : 'ranked',
+	)
 	const matchedAt = Date.now()
 	for (const candidate of eligible) {
 		const entry = candidate.entry
@@ -453,7 +510,16 @@ export const evaluateWaitingRoster = internalMutationGeneric({
 		if (!entry || entry.status !== 'waiting') {
 			return { ok: true, matched: false }
 		}
-		const matchId = await matchWaitingRoster(ctx, Date.now())
+		const now = Date.now()
+		const matchId = await matchWaitingRoster(ctx, now)
+		if (!matchId) {
+			const remainingMs = LADDER_MAX_WAIT_MS - (now - entry.joinedAt)
+			if (remainingMs > 0) {
+				await ctx.scheduler!.runAfter(remainingMs, internal.ladder.evaluateWaitingRoster, {
+					queueEntryId: entry._id,
+				})
+			}
+		}
 		return { ok: true, matched: Boolean(matchId), matchId }
 	},
 })
@@ -502,7 +568,7 @@ export const enterQueue = mutationGeneric({
 				updatedAt: now,
 			})
 			if (shouldScheduleEvaluation) {
-				await ctx.scheduler!.runAfter(LADDER_MAX_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
+				await ctx.scheduler!.runAfter(LADDER_MIN_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
 					queueEntryId: existing._id,
 				})
 			}
@@ -516,7 +582,7 @@ export const enterQueue = mutationGeneric({
 				joinedAt: now,
 				updatedAt: now,
 			})
-			await ctx.scheduler!.runAfter(LADDER_MAX_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
+			await ctx.scheduler!.runAfter(LADDER_MIN_WAIT_MS, internal.ladder.evaluateWaitingRoster, {
 				queueEntryId,
 			})
 		}
@@ -594,6 +660,9 @@ export const finalizeQaRoster = internalMutationGeneric({
 	},
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: { queueEntryId: string; expectedQaRevision: number }) => {
+		if (!qaToolsEnabled()) {
+			return { ok: false, code: 'QA_TOOLS_DISABLED' }
+		}
 		const entry = await ctx.db.get(args.queueEntryId)
 		if (!entry || entry.status !== 'waiting' || entry.qaRevision !== args.expectedQaRevision) {
 			return { ok: false, code: 'LADDER_QA_FINALIZE_STALE' }
@@ -602,6 +671,15 @@ export const finalizeQaRoster = internalMutationGeneric({
 			ctx.db.get(entry.userId),
 			getQaOpponents(ctx, entry._id),
 		])
+		const remainingWaitMs = ladderQaFinalizeDelayMs({
+			joinedAt: entry.joinedAt,
+			now: Date.now(),
+			pendingOpponentCount: opponents.length,
+		})
+		if (remainingWaitMs > 0) {
+			await ctx.scheduler!.runAfter(remainingWaitMs, internal.ladder.finalizeQaRoster, args)
+			return { ok: true, matched: false, code: 'LADDER_QA_WAITING_FOR_FILL' }
+		}
 		if (!user || !canFinalizeLadderQaRoster({
 			status: entry.status,
 			qaRevision: entry.qaRevision,
@@ -649,9 +727,7 @@ export const createDevFixture = mutationGeneric({
 	args: { playerCount: v.number() },
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: { playerCount: number }) => {
-		if (env.LADDER_DEV_FIXTURES !== 'true') {
-			throw new Error('LADDER_DEV_FIXTURES_DISABLED')
-		}
+		requireQaToolsEnabled()
 		const currentUser = await requireCurrentUser(ctx)
 		const playerCount = Math.max(2, Math.min(MAX_ROSTER_SIZE, Math.floor(args.playerCount)))
 		const players: CreateInitialStateInput['players'] = [{
@@ -666,6 +742,7 @@ export const createDevFixture = mutationGeneric({
 				`ladder-fixture-${index}`,
 				LADDER_QA_OPPONENT_NAMES[index - 1],
 				'ladder-fixture',
+				'qa_fixture',
 			)
 			players.push({
 				id: `fixture-player-${index + 1}`,

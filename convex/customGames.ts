@@ -5,9 +5,13 @@
  */
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import {
+	MAX_CUSTOM_GAME_PARTICIPANTS,
+	planCustomGameBotAddition,
+} from '../shared/custom-game/composition'
+import { ensureGameplayBotCatalog } from './bots/catalog'
 import { createCustomMatchFromRoomParticipants } from './matches'
 import {
-	ensureDefaultVirtualOpponents,
 	getVirtualOpponentByKey,
 } from './virtualOpponents'
 import {
@@ -17,8 +21,7 @@ import {
 } from './users'
 
 const MAX_CUSTOM_OPPONENTS = 5
-const MAX_ROOM_PARTICIPANTS = 6
-const DEFAULT_CUSTOM_OPPONENT_KEYS = ['opponent-1', 'opponent-2', 'opponent-3']
+const MAX_ROOM_PARTICIPANTS = MAX_CUSTOM_GAME_PARTICIPANTS
 
 function toConvexValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
@@ -187,9 +190,9 @@ async function upsertRoomParticipants(
 	virtualOpponentKeys: string[] | undefined,
 ) {
 	const now = Date.now()
-	const requestedKeys = Array.from(new Set(virtualOpponentKeys ?? DEFAULT_CUSTOM_OPPONENT_KEYS))
+	const requestedKeys = Array.from(new Set(virtualOpponentKeys ?? []))
 		.slice(0, MAX_CUSTOM_OPPONENTS)
-	await ensureDefaultVirtualOpponents(ctx)
+	await ensureGameplayBotCatalog(ctx)
 
 	const existingRows = await ctx.db
 		.query('customGameParticipants')
@@ -263,7 +266,7 @@ async function upsertRoomParticipants(
 			playerId: `opponent-${index + 1}`,
 			displayName: opponent.displayName,
 			archetype: opponent.archetype,
-			ready: existing?.status === 'active' ? existing.ready === true : false,
+			ready: true,
 			seatIndex: index + 1,
 			status: 'active',
 			updatedAt: now,
@@ -292,14 +295,14 @@ async function upsertRoomParticipants(
 }
 
 export const ensureMyCustomGameRoom = mutationGeneric({
-	args: {
-		virtualOpponentKeys: v.optional(v.array(v.string())),
-	},
+	args: {},
 	returns: v.any(),
-	handler: async (ctx: GenericCtx, args: any) => {
+	handler: async (ctx: GenericCtx) => {
 		const hostUser = await requireCurrentUser(ctx)
 		const room = await ensureRoom(ctx, hostUser)
-		const update = await upsertRoomParticipants(ctx, room, hostUser, args.virtualOpponentKeys)
+		// Room creation is intentionally host-only. Gameplay bots are added one at
+		// a time through addMyCustomGameOpponent after the room exists.
+		const update = await upsertRoomParticipants(ctx, room, hostUser, [])
 		if (!update.ok) {
 			return update
 		}
@@ -566,6 +569,93 @@ export const setMyCustomGameOpponents = mutationGeneric({
 		if (!update.ok) {
 			return update
 		}
+		return await getCustomGameRoomView(ctx, args.roomId, hostUser._id)
+	},
+})
+
+export const addMyCustomGameOpponent = mutationGeneric({
+	args: {
+		roomId: v.id('customGameRooms'),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const hostUser = await requireCurrentUser(ctx)
+		const room = await ctx.db.get(args.roomId)
+		if (!room || room.hostUserId !== hostUser._id || room.status !== 'composing') {
+			return {
+				ok: false,
+				code: 'CUSTOM_ROOM_NOT_FOUND',
+				message: 'custom_room_not_found',
+			}
+		}
+
+		const participants = await activeRoomParticipants(ctx, args.roomId)
+		if (participants.length >= MAX_ROOM_PARTICIPANTS) {
+			return {
+				ok: false,
+				code: 'CUSTOM_ROOM_FULL',
+				message: 'custom_room_full',
+			}
+		}
+
+		const catalog = await ensureGameplayBotCatalog(ctx)
+		const enabledCatalog = catalog.filter(({ profile }) => profile.enabled)
+		const opponentKeys = new Map(
+			enabledCatalog.map(({ opponent }) => [String(opponent._id), opponent.key]),
+		)
+		const addition = planCustomGameBotAddition(
+			participants.map((participant: any) => ({
+				playerId: participant.playerId,
+				seatIndex: participant.seatIndex,
+				virtualOpponentKey: participant.virtualOpponentId
+					? opponentKeys.get(String(participant.virtualOpponentId))
+					: undefined,
+			})),
+			enabledCatalog.map(({ opponent }) => opponent.key),
+		)
+		if (!addition) {
+			return {
+				ok: false,
+				code: 'NO_AVAILABLE_BOTS',
+				message: 'no_available_bots',
+			}
+		}
+
+		const selected = enabledCatalog.find(({ opponent }) => opponent.key === addition.key)
+		if (!selected) {
+			return {
+				ok: false,
+				code: 'NO_AVAILABLE_BOTS',
+				message: 'no_available_bots',
+			}
+		}
+
+		const now = Date.now()
+		const existingRows = await ctx.db
+			.query('customGameParticipants')
+			.withIndex('by_room', (q: any) => q.eq('roomId', args.roomId))
+			.take(16)
+		const existing = existingRows.find(
+			(row: any) => row.virtualOpponentId === selected.opponent._id,
+		)
+		const values = {
+			roomId: args.roomId,
+			virtualOpponentId: selected.opponent._id,
+			participantKind: 'virtual' as const,
+			playerId: addition.playerId,
+			displayName: selected.opponent.displayName,
+			archetype: selected.opponent.archetype,
+			ready: true,
+			seatIndex: addition.seatIndex,
+			status: 'active' as const,
+			updatedAt: now,
+		}
+		if (existing) {
+			await ctx.db.patch(existing._id, values)
+		} else {
+			await ctx.db.insert('customGameParticipants', values)
+		}
+		await ctx.db.patch(args.roomId, { updatedAt: now })
 		return await getCustomGameRoomView(ctx, args.roomId, hostUser._id)
 	},
 })

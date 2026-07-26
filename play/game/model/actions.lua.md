@@ -25,6 +25,8 @@ M.types = {
     SHAKE_COMPLETE     = "shake.complete",
     SHAKE_TIMEOUT      = "shake.timeout",
     DICE_CHECK         = "dice.check",
+    DICE_CHECK_TIMEOUT = "dice.check.timeout",
+    BIDDING_TIMEOUT     = "bidding.timeout",
     BIDDING_OPEN       = "bidding.open",
     BULLET_LOAD        = "bullet.load",
     BID_SELECT_COUNT   = "bid.select_count",
@@ -43,6 +45,8 @@ function M.match_init(payload)        return action(M.types.MATCH_INIT, payload)
 function M.cosmetics_apply(cos)       return action(M.types.COSMETICS_APPLY, { cosmetics = cos }) end
 function M.shake_complete(player_id, rng) return action(M.types.SHAKE_COMPLETE, { player_id = player_id, rng = rng }) end
 function M.shake_timeout(rng) return action(M.types.SHAKE_TIMEOUT, { rng = rng }) end
+function M.dice_check_timeout() return action(M.types.DICE_CHECK_TIMEOUT) end
+function M.bidding_timeout() return action(M.types.BIDDING_TIMEOUT) end
 function M.dice_check(player_id)      return action(M.types.DICE_CHECK, { player_id = player_id }) end
 function M.bidding_open()             return action(M.types.BIDDING_OPEN) end
 function M.bullet_load(slot_index)    return action(M.types.BULLET_LOAD, { slot_index = slot_index }) end

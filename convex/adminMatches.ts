@@ -28,6 +28,7 @@ import { requireCurrentUser, requireExistingCurrentUser, type GenericCtx } from 
 import type { MatchCommandType } from './protocol/commands'
 import type { MatchState } from './match/state'
 import { getLadderQaAdminState, stageLadderQaOpponent } from './ladder'
+import { qaToolsEnabled, requireQaToolsEnabled } from './qa/guards'
 
 const DEFAULT_ADMIN_MATCH_LIMIT = 20
 const MAX_ADMIN_MATCH_LIMIT = 50
@@ -116,6 +117,7 @@ async function requireAdminIdentity(ctx: GenericCtx) {
 	if (!identityHasAdmin(identity as unknown as IdentityRecord)) {
 		throw new Error('UNAUTHORIZED')
 	}
+	requireQaToolsEnabled()
 	return identity
 }
 
@@ -931,6 +933,25 @@ export const submitOpponentCommand = mutationGeneric({
 			})
 			return result
 		}
+		if (participant.controlMode === 'server_bot') {
+			const result = {
+				ok: false,
+				matchId: args.matchId,
+				code: 'TARGET_CONTROLLED_BY_SERVER_BOT',
+				message: 'target_controlled_by_server_bot',
+			}
+			await insertAdminAudit(ctx, {
+				adminUserId: adminUser._id,
+				matchId: args.matchId,
+				targetVirtualOpponentId: participant.virtualOpponentId,
+				targetPlayerId: args.targetPlayerId,
+				commandId: args.commandId,
+				commandType: args.type,
+				payload: args.payload,
+				result,
+			})
+			return result
+		}
 
 		const input: ApplyMatchCommandInput = {
 			matchId: args.matchId,
@@ -1150,6 +1171,15 @@ export const probeAdminAccess = queryGeneric({
 				templateExample: { role: 'admin' },
 			}
 		}
+		if (!qaToolsEnabled()) {
+			return {
+				ok: false,
+				authorized: true,
+				qaEnabled: false,
+				code: 'QA_TOOLS_DISABLED',
+				message: 'qa_tools_disabled',
+			}
+		}
 
 		let user: any
 		try {
@@ -1161,6 +1191,7 @@ export const probeAdminAccess = queryGeneric({
 		return {
 			ok: true,
 			authorized: true,
+			qaEnabled: true,
 			code: 'AUTHORIZED',
 			clerkSubject: identity.subject,
 			userId: user?._id,

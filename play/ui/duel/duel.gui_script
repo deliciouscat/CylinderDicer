@@ -1,8 +1,11 @@
 local i18n = require("game.core.i18n")
 local flow_contract = require("game.flow_contract")
+local audio = require("game.core.audio")
 local store_mod = require("game.model.store")
 local gui_util = require("ui.common.gui_util")
+local dice_art = require("ui.common.dice_art")
 local table_seat_layout = require("ui.common.table_seat_layout")
+local duel_view = require("ui.duel.duel_view")
 local visual_status = require("game.dev.visual_status")
 
 local MAX_PLAYERS = 6
@@ -16,6 +19,8 @@ local EXECUTE_INTRO_SECONDS = flow_contract.DUEL_EXECUTE_INTRO_SECONDS
 local ROULETTE_STEP_SECONDS = flow_contract.DUEL_ROULETTE_STEP_SECONDS
 local PERFECT_DUEL_STEP_SECONDS = flow_contract.DUEL_PERFECT_STEP_SECONDS
 local HIT_APPLY_PROGRESS = 0.42
+local LOCAL_REVEAL_DICE_OFFSET_Y = 50.0
+local OPPONENT_REVEAL_DICE_OFFSET_Y = 64.0
 
 local TEXTURE_BY_SKIN = {
 	["rosemund"] = "rosemund",
@@ -195,14 +200,10 @@ local function hide_combat_nodes()
 	set_nodes_enabled(COMBAT_NODE_IDS, false)
 end
 
-local function dice_animation(face)
-	return "f" .. tostring(face or 1) .. "_a0"
-end
-
-local function render_player_dice(self, index, player, seat, is_local, progress)
+local function render_player_dice(self, index, player, seat, is_local, progress, round_index)
 	local scale = is_local and 0.86 or (0.64 + (seat.depth or 0.0) * -0.08)
 	local dice_size = is_local and 56.0 or 46.0
-	local anchor_y = seat.cup.y - (is_local and 78.0 or 64.0)
+	local anchor_y = seat.cup.y - (is_local and LOCAL_REVEAL_DICE_OFFSET_Y or OPPONENT_REVEAL_DICE_OFFSET_Y)
 	for dice_index = 1, DICE_COUNT do
 		local node = self.player_dice_nodes[index] and self.player_dice_nodes[index][dice_index]
 		local face = player.dice and player.dice[dice_index]
@@ -216,7 +217,11 @@ local function render_player_dice(self, index, player, seat, is_local, progress)
 			))
 			set_node_size(node, vmath.vector3(dice_size * scale, dice_size * scale, 0.0))
 			set_node_alpha(node, progress)
-			play_node_flipbook(node, dice_animation(face))
+			play_node_flipbook(node, dice_art.table_animation(
+				face,
+				(index - 1) * DICE_COUNT + dice_index,
+				round_index
+			))
 		end
 	end
 end
@@ -296,7 +301,7 @@ local function render_grid(self, state, order, players)
 			local col = (index - 1) % 6
 			local row = math.floor((index - 1) / 6)
 			set_node_position(node, vmath.vector3((col - 2.5) * 48.0, 54.0 - row * 44.0, 0.12))
-			play_node_flipbook(node, dice_animation(face))
+			play_node_flipbook(node, dice_art.front_animation(face))
 		end
 	end
 	return #faces
@@ -310,30 +315,39 @@ local function render_local_tray(self, state, players)
 		set_node_enabled(node, face ~= nil)
 		if face then
 			set_node_position(node, vmath.vector3((index - 3) * 110.0, 0.0, 0.1))
-			play_node_flipbook(node, dice_animation(face))
+			play_node_flipbook(node, dice_art.front_animation(face))
 		end
 	end
 end
 
-local function set_badges(prefix, player, hp_override)
-	gui_util.set_text(prefix .. "_bullets", player and (player.bullets or 0) or 0)
-	gui_util.set_text(prefix .. "_hp", hp_override ~= nil and hp_override or (player and (player.hp or 0) or 0))
-	gui_util.set_alpha(prefix .. "_bullet_badge", 1.0)
-	gui_util.set_alpha(prefix .. "_bullets", 1.0)
-	gui_util.set_alpha(prefix .. "_hp_badge", 1.0)
-	gui_util.set_alpha(prefix .. "_hp", 1.0)
+local function player_status_alpha(player, hp_override)
+	local visible_hp = hp_override ~= nil and hp_override or (player and player.hp or 0)
+	if visible_hp <= 0 then
+		return 0.5
+	end
+	return 1.0
 end
 
-local function set_portrait(prefix, player, side, hp_override, x_offset, entry_offset)
+local function set_badges(prefix, player, hp_override, bullets_override, alpha)
+	gui_util.set_text(prefix .. "_bullets", bullets_override ~= nil and bullets_override or (player and (player.bullets or 0) or 0))
+	gui_util.set_text(prefix .. "_hp", hp_override ~= nil and hp_override or (player and (player.hp or 0) or 0))
+	gui_util.set_alpha(prefix .. "_bullet_badge", alpha)
+	gui_util.set_alpha(prefix .. "_bullets", alpha)
+	gui_util.set_alpha(prefix .. "_hp_badge", alpha)
+	gui_util.set_alpha(prefix .. "_hp", alpha)
+end
+
+local function set_portrait(prefix, player, side, hp_override, bullets_override, x_offset, entry_offset)
 	local body_id = "combat_" .. prefix .. "_body"
+	local status_alpha = player_status_alpha(player, hp_override)
 	gui_util.set_texture(body_id, texture_name(player))
 	gui_util.play_flipbook(body_id, player and (player.portrait_state or "front") or "front")
 	gui_util.set_text("combat_" .. prefix .. "_name", player_name(player))
 	gui_util.set_alpha("combat_" .. prefix .. "_name", 1.0)
-	set_badges(prefix, player, hp_override)
+	set_badges(prefix, player, hp_override, bullets_override, status_alpha)
 	local x = side == "left" and -370.0 or 370.0
 	gui_util.set_position(body_id, vmath.vector3(x + (x_offset or 0.0) + (entry_offset or 0.0), -30.0, 0.84))
-	gui_util.set_alpha(body_id, 1.0)
+	gui_util.set_alpha(body_id, status_alpha)
 end
 
 local function execution_step_seconds(resolution)
@@ -363,14 +377,7 @@ local function current_execution_step(self, resolution)
 end
 
 local function combat_pair(state, resolution, step)
-	local left_id = state.duel.previous_bidder_id
-	local right_id = state.duel.challenger_id
-
-	if resolution and resolution.kind == "perfect_duel" then
-		left_id = resolution.actor_id or state.duel.previous_bidder_id
-		right_id = step and step.target_id or right_id
-	end
-
+	local left_id, right_id = duel_view.combat_pair_ids(state.duel, resolution, step)
 	return player_by_id(state, left_id), left_id, player_by_id(state, right_id), right_id
 end
 
@@ -421,35 +428,42 @@ end
 local function render_combat(self, state)
 	local duel = state.duel or {}
 	local resolution = duel.resolution or {}
-	local step, step_index, sequence_complete, step_progress, step_seconds = current_execution_step(self, resolution)
+	local step, step_index, sequence_complete, step_progress = current_execution_step(self, resolution)
 	local left, left_id, right, right_id = combat_pair(state, resolution, step)
 	local base_players = snapshot_by_id(duel)
-	local total = #(resolution.steps or {})
-	local verdict = duel.judge and duel.judge.verdict or "UNKNOWN"
-	local step_resolved = step and (sequence_complete or step_progress >= HIT_APPLY_PROGRESS)
-	local result_key = step_resolved and (step.hit and "duel.combat.hit" or "duel.combat.miss") or "duel.combat.ready"
-	local display_total = math.max(1, total)
-	local display_index = math.max(1, math.min(math.max(1, step_index), display_total))
 	local left_hp = visible_hp(left_id, left, base_players[left_id], resolution, step_index, step_progress, sequence_complete)
 	local right_hp = visible_hp(right_id, right, base_players[right_id], resolution, step_index, step_progress, sequence_complete)
+	local left_bullets = duel_view.visible_bullets(
+		left_id,
+		left,
+		base_players[left_id],
+		resolution,
+		step_index,
+		step_progress,
+		sequence_complete,
+		HIT_APPLY_PROGRESS
+	)
+	local right_bullets = duel_view.visible_bullets(
+		right_id,
+		right,
+		base_players[right_id],
+		resolution,
+		step_index,
+		step_progress,
+		sequence_complete,
+		HIT_APPLY_PROGRESS
+	)
+	local audio_key = tostring(self.execute_key) .. ":" .. tostring(step_index)
+	if step and step_progress >= HIT_APPLY_PROGRESS and self.last_execution_audio_key ~= audio_key then
+		self.last_execution_audio_key = audio_key
+		audio.play_sfx(step.hit == true and "bang" or "tick")
+	end
 
 	hide_reveal_nodes(self)
 	set_nodes_enabled(COMBAT_NODE_IDS, true)
-	set_portrait("left", left, "left", left_hp, shake_offset(left_id, step, step_progress), 0.0)
-	set_portrait("right", right, "right", right_hp, shake_offset(right_id, step, step_progress), entry_offset(resolution, "right", step_progress))
+	set_portrait("left", left, "left", left_hp, left_bullets, shake_offset(left_id, step, step_progress), 0.0)
+	set_portrait("right", right, "right", right_hp, right_bullets, shake_offset(right_id, step, step_progress), entry_offset(resolution, "right", step_progress))
 	render_hit_flash(step, step_progress)
-
-	gui_util.set_text("combat_status", i18n.t("duel.combat.status", {
-		verdict = i18n.t("duel.verdict." .. verdict),
-	}))
-	gui_util.set_text("combat_shot", i18n.t("duel.combat.shot", {
-		index = display_index,
-		total = display_total,
-	}))
-	gui_util.set_text("combat_result", i18n.t(result_key))
-	gui_util.set_alpha("combat_status", 1.0)
-	gui_util.set_alpha("combat_shot", 1.0)
-	gui_util.set_alpha("combat_result", 1.0)
 
 end
 
@@ -479,6 +493,7 @@ local function reset_execute_if_needed(self, state)
 	if self.execute_key ~= key then
 		self.execute_key = key
 		self.execute_elapsed = 0.0
+		self.last_execution_audio_key = nil
 	end
 end
 
@@ -493,10 +508,10 @@ local function render_reveal(self, state)
 	})
 	local opponent_seats = opponent_seats_by_id(layout)
 	local players = snapshot_by_id(state.duel)
+	local round_index = state.turn and state.turn.round_index or 0
 
 	set_nodes_enabled(REVEAL_NODE_IDS, true)
 	hide_combat_nodes()
-	gui_util.set_text("title", i18n.t("duel.reveal.title"))
 	gui_util.set_text("hint", all_revealed(self, order) and i18n.t("duel.reveal.hold") or i18n.t("duel.reveal.hint"))
 
 	for index, player_id in ipairs(order) do
@@ -506,7 +521,7 @@ local function render_reveal(self, state)
 		local progress = reveal_progress(self, index)
 		if player and seat then
 			render_player_cup(index, seat, is_local, progress)
-			render_player_dice(self, index, player, seat, is_local, progress)
+			render_player_dice(self, index, player, seat, is_local, progress, round_index)
 		else
 			hide_player_slot(self, index)
 		end
@@ -588,6 +603,7 @@ function init(self)
 	self.execute_elapsed = 0.0
 	self.duel_key = nil
 	self.execute_key = nil
+	self.last_execution_audio_key = nil
 	gui.set_render_order(15)
 	build_runtime_nodes(self)
 	gui_util.set_enabled("root", false)

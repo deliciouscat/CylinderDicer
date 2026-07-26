@@ -54,8 +54,8 @@ handlers[actions.types.SHAKE_COMPLETE] = function(state, a)
     -- 로컬 gauge 완료 checkpoint. actor만 완료 표시하고 actor dice만 roll.
     next.shake.counts[a.payload.player_id] = 6
     -- 최초 shake면 dice_check로.
-    -- 이후 shake면 shake.reload_player_id가 있을 때 해당 플레이어 1발 reload 후 dice_check로.
-    -- 결투 후 shake인데 reload_player_id가 없으면 추가 reload 없이 dice_check로.
+    -- 결투에서 소모된 탄환은 round.advance 직후 먼저 reload하므로, 이후 shake 완료 시 바로 dice_check로.
+    -- shake.reload_player_id는 이전 상태와의 호환을 위한 legacy 경로로만 유지.
     -- transition: cup_shake -> shake_complete_first/shake_complete_reload/shake_complete_no_reload
     return next, { "players", "turn", "flow", "shake", "ui" }
 end
@@ -64,10 +64,14 @@ handlers[actions.types.SHAKE_TIMEOUT] = function(state, a)
     -- 6초 phase timeout. 아직 완료하지 않은 생존 플레이어만 완료/roll하고 다음 phase로 전환.
 end
 
+handlers[actions.types.DICE_CHECK_TIMEOUT] = function(state, a)
+    -- 6초 phase timeout. 아직 확인하지 않은 생존 플레이어만 자동 확인 처리하고 bidding_gap으로 전환.
+end
+
 handlers[actions.types.DICE_CHECK] = function(state, a)
     local next = clone(state)
     -- local player가 본인 dice 확인. 현재 mock/dev path에서는 non-local check를 이미 완료 처리한다.
-    -- all checked면 bidding_gap으로 전환. GUI timer나 테스트가 bidding.open을 보낸다.
+    -- all checked면 bidding_gap으로 전환. 6초 dice.check.timeout은 미확인 생존자를 자동 확인한다.
     -- transition: dice_check -> all_checked
     return next, { "turn", "flow", "shake", "ui" }
 end
@@ -96,9 +100,9 @@ handlers[actions.types.BULLET_LOAD] = function(state, a)
     pending_player.cylinder = (cylinder.load(pending_player.cylinder, a.payload.slot_index)) -- 빈 칸만
     next.pending_load = cylinder.consume_pending(next.pending_load)
     -- setup -> cup_shake
-    -- shake/duel reload -> dice_check
+    -- shake reload -> dice_check
     -- bid reload -> bidding
-    -- exact_duel reload -> cup_shake
+    -- duel/exact_duel reload -> cup_shake
     -- transition: revolver_reload -> reload_complete_*
     return next, { "players", "turn", "flow", "shake", "ui" }
 end
@@ -115,7 +119,8 @@ end
 handlers[actions.types.ROUND_ADVANCE] = function(state, a)
     local next = clone(state)
     local resolution = duel.resolve(next, next.duel) -- cylinder consume + hp changes를 여기서 한 번만 수행
-    -- SHORT/OVER: 바로 cup_shake. 실제 총알이 소진됐다면 다음 shake 후 소진한 플레이어만 duel reload 1발.
+    -- SHORT/OVER: 실제 총알이 소진됐다면 소진한 플레이어만 duel reload 1발 후 cup_shake.
+    -- 총알이 소진되지 않았다면 바로 cup_shake.
     -- EXACT: 맞춘 사람(previous_bidder)만 3발 reload 후 cup_shake. 이후 active player 추가 reload는 없음.
     -- 생존자가 1명 이하이면 complete.
     -- transition: duel -> match_complete/exact_reload/round_shake

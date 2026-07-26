@@ -6,6 +6,7 @@ local store_mod = require("game.model.store")
 local match_adapter = require("game.net.match_adapter")
 local i18n = require("game.core.i18n")
 local qa_cli = require("game.dev.qa_cli")
+local presentation = require("game.presentation")
 
 local LOCALE_TARGETS = {
 	"/ui#turn_indicator",
@@ -15,6 +16,7 @@ local LOCALE_TARGETS = {
 	"/ui#bid_controls",
 	"/ui#rail",
 	"/ui#duel",
+	"/ui#result",
 	"/cylinder#cylinder_gui",
 }
 
@@ -42,12 +44,18 @@ local function try_handle_qa_message(self, message)
 	return true
 end
 
-local function try_handle_dom_pointer(message)
+local function try_handle_dom_pointer(self, message)
 	if message.type ~= "DOM_POINTER" then
 		return false
 	end
 
-	msg.post("/cylinder#cylinder", "pointer_input", message.payload or {})
+	local state = self.store and self.store:get_state()
+	local view = state and presentation.describe(state)
+	if view and view.result_visible then
+		msg.post("/ui#result", "pointer_input", message.payload or {})
+	else
+		msg.post("/cylinder#cylinder", "pointer_input", message.payload or {})
+	end
 	return true
 end
 
@@ -141,7 +149,7 @@ function update(self, dt)
 		end
 
 		if not try_handle_locale_message(message)
-			and not try_handle_dom_pointer(message)
+			and not try_handle_dom_pointer(self, message)
 			and not try_handle_qa_message(self, message) then
 			self.adapter:on_bridge_message(message)
 		end

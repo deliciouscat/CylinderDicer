@@ -61,8 +61,8 @@ export type CustomGameRoomUnsubscribe = (() => void) & {
 
 export function createCustomGameService(client: ConvexClient) {
   return {
-    async ensureMyCustomGameRoom(options: { virtualOpponentKeys?: string[] } = {}): Promise<CustomGameRoomView | Record<string, any> | null> {
-      return await client.mutation(convexFunctions.customGames.ensureMyCustomGameRoom, options)
+    async ensureMyCustomGameRoom(): Promise<CustomGameRoomView | Record<string, any> | null> {
+      return await client.mutation(convexFunctions.customGames.ensureMyCustomGameRoom, {})
     },
     async getMyCustomGameRoom(): Promise<CustomGameRoomView | null> {
       return await client.query(convexFunctions.customGames.getMyCustomGameRoom, {}) as CustomGameRoomView | null
@@ -78,6 +78,9 @@ export function createCustomGameService(client: ConvexClient) {
     },
     async setMyCustomGameReady(input: { roomId: string; ready: boolean }): Promise<CustomGameRoomView | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.setMyCustomGameReady, input as any) as CustomGameRoomView | Record<string, any>
+    },
+    async addMyCustomGameOpponent(roomId: string): Promise<CustomGameRoomView | Record<string, any>> {
+      return await client.mutation(convexFunctions.customGames.addMyCustomGameOpponent, { roomId } as any) as CustomGameRoomView | Record<string, any>
     },
     async startMyCustomGameRoom(roomId: string): Promise<CreatedMatch | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.startMyCustomGameRoom, { roomId } as any)

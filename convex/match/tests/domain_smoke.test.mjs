@@ -8,6 +8,7 @@ const { reduceMatchState } = require('../../../.tmp/convex-domain/match/reducer.
 const { buildPrivateDelta, buildPublicSnapshot, hudKind } = require('../../../.tmp/convex-domain/match/snapshots.js')
 const { automaticTransitionFor, automaticTransitionScheduleArgs, matchesAutomaticTransition } = require('../../../.tmp/convex-domain/match/flow.js')
 const { deriveAvailableActions } = require('../../../.tmp/convex-domain/match/capabilities.js')
+const { buildPlacementResult, finalizeMatchResult } = require('../../../.tmp/convex-domain/match/results.js')
 
 function action(type, actorPlayerId, payload) {
 	return {
@@ -356,6 +357,32 @@ test('phase-wide shake timeout completes only unfinished players after six secon
 	assert.equal(matchesAutomaticTransition(state, scheduled), false)
 })
 
+test('phase-wide dice check timeout completes only unchecked players after six seconds', () => {
+	let state = createDevState({
+		matchId: 'dice-check-timeout-match',
+		requiresSetupLoad: false,
+	})
+	state = dispatchShakes(state)
+	assert.equal(state.flow.phase, 'dice_check')
+
+	const scheduled = automaticTransitionFor(state)
+	assert.equal(scheduled.type, 'dice.check.timeout')
+	assert.equal(scheduled.delayMs, 6_000)
+
+	state = dispatch(state, 'dice.check', 'local-player')
+	assert.equal(state.flow.phase, 'dice_check')
+	assert.equal(state.shake.checked['local-player'], true)
+	assert.equal(state.shake.checked['opponent-1'], undefined)
+	assert.equal(matchesAutomaticTransition(state, scheduled), true)
+
+	state = dispatch(state, 'dice.check.timeout', state.turn.activePlayerId)
+	assert.equal(state.flow.phase, 'bidding_gap')
+	assert.equal(state.shake.checked['local-player'], true)
+	assert.equal(state.shake.checked['opponent-1'], true)
+	assert.equal(state.shake.checked['opponent-2'], true)
+	assert.equal(matchesAutomaticTransition(state, scheduled), false)
+})
+
 test('face one is a skull bid and raises after face six at the next count', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
@@ -415,6 +442,30 @@ test('lethal skull roulette rejects the attempted bid and skips the eliminated b
 	assert.equal(state.turn.previousPlayerId, 'opponent-2')
 	assert.deepEqual(state.bidding.myBid, { count: 1, face: 2 })
 	assert.equal(state.pendingLoad, undefined)
+	assert.deepEqual(state.eliminationOrder, ['local-player'])
+	assert.deepEqual(state.match.result.placements, [
+		{ playerId: 'local-player', place: 3, playerCount: 3, rated: false },
+	])
+})
+
+test('result placements reverse authoritative elimination order and put winner first', () => {
+	const state = createDevState({ requiresSetupLoad: false })
+	state.players.byId['local-player'].hp = 0
+	state.players.byId['local-player'].eliminated = true
+	state.players.byId['opponent-1'].hp = 0
+	state.players.byId['opponent-1'].eliminated = true
+	state.eliminationOrder = ['local-player', 'opponent-1']
+	state.match.winnerId = 'opponent-2'
+	state.match.status = 'complete'
+
+	assert.deepEqual(buildPlacementResult(state), [
+		{ playerId: 'opponent-2', place: 1, playerCount: 3, rated: false },
+		{ playerId: 'opponent-1', place: 2, playerCount: 3, rated: false },
+		{ playerId: 'local-player', place: 3, playerCount: 3, rated: false },
+	])
+	finalizeMatchResult(state)
+	assert.equal(state.match.result.playerCount, 3)
+	assert.equal(state.match.result.rated, false)
 })
 
 test('bid reload pipelines one next bid then gates until the previous reload completes', () => {
@@ -467,7 +518,50 @@ test('bid reload pipelines one next bid then gates until the previous reload com
 	assert.equal(hudKind(state, 'opponent-1'), 'bidding')
 })
 
-test('duel bullet spender reloads after the next shake', () => {
+test('bidding timeout raises the count by one with a skull or challenges at the cap', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.kind = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+
+	let scheduled = automaticTransitionFor(state)
+	assert.equal(scheduled.type, 'bidding.timeout')
+	assert.equal(scheduled.delayMs, 40_000)
+	state = dispatchAutomaticTransition(state, 'bidding.timeout')
+	assert.deepEqual(state.bidding.currentBid, {
+		playerId: 'local-player',
+		count: 1,
+		face: 1,
+	})
+	assert.equal(state.turn.activePlayerId, 'opponent-1')
+	assert.equal(state.bidding.skullRoulette.playerId, 'local-player')
+
+	// A new bid resets the revision token, so an earlier 40 second timer cannot fire early.
+	const stale = scheduled
+	scheduled = automaticTransitionFor(state)
+	assert.equal(matchesAutomaticTransition(state, stale), false)
+	assert.equal(scheduled.type, 'bidding.timeout')
+	assert.equal(scheduled.expectedRevision, state.revision)
+
+	state.bidding.currentBid = { playerId: 'local-player', count: 7, face: 4 }
+	state.turn.activePlayerId = 'opponent-1'
+	state.pendingLoad = undefined
+	state = dispatchAutomaticTransition(state, 'bidding.timeout')
+	assert.deepEqual(state.bidding.currentBid, {
+		playerId: 'opponent-1',
+		count: 8,
+		face: 1,
+	})
+
+	state.bidding.currentBid = { playerId: 'local-player', count: 36, face: 6 }
+	state.turn.activePlayerId = 'opponent-1'
+	state.pendingLoad = undefined
+	state = dispatchAutomaticTransition(state, 'bidding.timeout')
+	assert.equal(state.flow.phase, 'duel')
+	assert.equal(state.duel.challengerId, 'opponent-1')
+})
+
+test('duel bullet spender reloads before the next shake', () => {
 	let state = createDevState({
 		matchId: 'spender-reload-match',
 		requiresSetupLoad: false,
@@ -488,13 +582,20 @@ test('duel bullet spender reloads after the next shake', () => {
 	state = dispatchAutomaticTransition(state, 'duel.execute')
 	state = dispatchAutomaticTransition(state, 'round.advance')
 	assert.equal(state.turn.activePlayerId, 'opponent-2')
-
-	state = dispatchShakes(state)
 	assert.deepEqual(state.pendingLoad, {
 		playerId: 'opponent-1',
 		source: 'duel',
 		count: 1,
 	})
+	assert.equal(state.flow.phase, 'revolver_reload')
+
+	state = dispatch(state, 'bullet.load', 'opponent-1', { slotIndex: 1 })
+	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.flow.phase, 'cup_shake')
+
+	state = dispatchShakes(state)
+	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.flow.phase, 'dice_check')
 })
 
 test('automatic transition tokens become stale after the flow advances', () => {
@@ -516,7 +617,7 @@ test('automatic transition tokens become stale after the flow advances', () => {
 	state = dispatchAutomaticTransition(state, 'bidding.open')
 
 	assert.equal(matchesAutomaticTransition(state, scheduled), false)
-	assert.equal(automaticTransitionFor(state), undefined)
+	assert.equal(automaticTransitionFor(state).type, 'bidding.timeout')
 })
 
 test('capabilities expose player intents and keep automatic transitions server-owned', () => {

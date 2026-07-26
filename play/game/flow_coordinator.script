@@ -4,6 +4,8 @@ local store_mod = require("game.model.store")
 
 local ACTION_BY_TYPE = {
 	["shake.timeout"] = actions.shake_timeout,
+	["dice.check.timeout"] = actions.dice_check_timeout,
+	["bidding.timeout"] = actions.bidding_timeout,
 	["bidding.open"] = actions.bidding_open,
 	["bid.reload_timeout"] = actions.bid_reload_timeout,
 	["duel.execute"] = actions.duel_execute,
@@ -11,7 +13,7 @@ local ACTION_BY_TYPE = {
 }
 
 local function state_signature(state, transition)
-	if transition and transition.type == "shake.timeout" then
+	if transition and (transition.type == "shake.timeout" or transition.type == "dice.check.timeout") then
 		return table.concat({
 			transition.type,
 			tostring(state.flow and state.flow.phase or "waiting"),

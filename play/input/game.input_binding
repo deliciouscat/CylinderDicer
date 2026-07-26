@@ -23,6 +23,10 @@ key_trigger {
   action: "pass"
 }
 key_trigger {
+  input: KEY_SPACE
+  action: "pass"
+}
+key_trigger {
   input: KEY_C
   action: "challenge"
 }

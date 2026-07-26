@@ -78,6 +78,19 @@ export interface MatchSnapshotBase {
     turnCount: number
     eventsHash: string
     winnerId?: string
+    result?: {
+      playerCount: number
+      rated: boolean
+      placements: Array<{
+        playerId: string
+        place: number
+        playerCount: number
+        rated: boolean
+        mmrBefore?: number
+        mmrAfter?: number
+        mmrDelta?: number
+      }>
+    }
   }
   turn: {
     activePlayerId?: string

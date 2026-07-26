@@ -496,6 +496,15 @@ local function process_json_command(self, command)
 			return false, "wrong_active_player"
 		end
 		return qa_advance(self)
+	elseif action == "result" then
+		return dispatch(self, actions.qa_result_preview({
+			place = number_or_nil(payload.place),
+			player_count = number_or_nil(payload.player_count),
+			mmr_before = number_or_nil(payload.mmr_before),
+			mmr_after = number_or_nil(payload.mmr_after),
+			rated = payload.rated ~= false,
+			match_complete = payload.match_complete == true,
+		}))
 	end
 
 	return false, "unknown_action"

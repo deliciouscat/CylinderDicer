@@ -8,7 +8,35 @@ const source = path.resolve(repoRoot, process.argv[2] ?? 'play/wasm-web/Cylinder
 const destination = path.resolve(repoRoot, process.argv[3] ?? 'web/public/play')
 const defoldProjectDir = path.join(repoRoot, 'play')
 const bundleRuntime = path.join(source, 'CylinderDicer_wasm.js')
-const defoldScriptExtensions = new Set(['.lua', '.script', '.gui_script', '.render_script'])
+const defoldSourceExtensions = new Set([
+  '.appmanifest',
+  '.atlas',
+  '.collection',
+  '.font',
+  '.fp',
+  '.glsl',
+  '.go',
+  '.gui',
+  '.gui_script',
+  '.input_binding',
+  '.jpg',
+  '.jpeg',
+  '.json',
+  '.lua',
+  '.manifest',
+  '.material',
+  '.ogg',
+  '.png',
+  '.project',
+  '.render_script',
+  '.script',
+  '.sound',
+  '.sprite',
+  '.tga',
+  '.vp',
+  '.wav',
+  '.webp',
+])
 const skippedSourceDirs = new Set(['.deps', 'build', 'wasm-web'])
 
 function assertInsideRepo(label, target) {
@@ -24,7 +52,7 @@ async function assertFile(filePath, label) {
   }
 }
 
-async function latestDefoldScriptMtime(directory) {
+async function latestDefoldSourceMtime(directory) {
   let latest = null
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
 
@@ -35,14 +63,14 @@ async function latestDefoldScriptMtime(directory) {
       if (directory === defoldProjectDir && skippedSourceDirs.has(entry.name)) {
         continue
       }
-      const child = await latestDefoldScriptMtime(filePath)
+      const child = await latestDefoldSourceMtime(filePath)
       if (child && (!latest || child.mtimeMs > latest.mtimeMs)) {
         latest = child
       }
       continue
     }
 
-    if (!entry.isFile() || !defoldScriptExtensions.has(path.extname(entry.name))) {
+    if (!entry.isFile() || !defoldSourceExtensions.has(path.extname(entry.name))) {
       continue
     }
 
@@ -60,23 +88,23 @@ async function latestDefoldScriptMtime(directory) {
 
 async function warnIfBundleLooksStale() {
   const runtimeInfo = await stat(bundleRuntime).catch(() => null)
-  const latestScript = await latestDefoldScriptMtime(defoldProjectDir)
+  const latestSource = await latestDefoldSourceMtime(defoldProjectDir)
 
-  if (!runtimeInfo?.isFile() || !latestScript) {
+  if (!runtimeInfo?.isFile() || !latestSource) {
     return
   }
 
-  if (runtimeInfo.mtimeMs + 1000 < latestScript.mtimeMs) {
+  if (runtimeInfo.mtimeMs + 1000 < latestSource.mtimeMs) {
     console.warn(`WARNING: Defold HTML5 bundle may be stale.`)
     console.warn(`  bundle: ${path.relative(repoRoot, bundleRuntime)}`)
-    console.warn(`  latest: ${path.relative(repoRoot, latestScript.filePath)}`)
-    console.warn(`  Run npm run defold:web:build after editing play/** scripts.`)
+    console.warn(`  latest: ${path.relative(repoRoot, latestSource.filePath)}`)
+    console.warn(`  Run npm run defold:web:build after editing play/** source or assets.`)
     return
   }
 
   console.log(`Bundle freshness check passed`)
   console.log(`  bundle: ${path.relative(repoRoot, bundleRuntime)}`)
-  console.log(`  latest: ${path.relative(repoRoot, latestScript.filePath)}`)
+  console.log(`  latest: ${path.relative(repoRoot, latestSource.filePath)}`)
 }
 
 assertInsideRepo('Source', source)

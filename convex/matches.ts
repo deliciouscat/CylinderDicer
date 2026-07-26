@@ -52,6 +52,9 @@ import {
 	type GenericCtx,
 } from './users'
 import { ensureDefaultVirtualOpponents, getVirtualOpponentByKey } from './virtualOpponents'
+import { scheduleNextBotAction } from './bots/scheduling'
+import { ensureGameplayBotCatalog } from './bots/catalog'
+import { requireQaToolsEnabled } from './qa/guards'
 
 const DEFAULT_COMPACTION_KEEP_REVISIONS = 12
 const DEFAULT_COMPACTION_MAX_DELETE = 200
@@ -175,9 +178,14 @@ export async function insertMatchParticipants(
 				userId: player.userId,
 				virtualOpponentId: player.virtualOpponentId,
 				participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
+				controlMode: player.controlMode ?? (player.virtualOpponentId ? 'qa_manual' : 'human'),
+				botProfileId: player.botProfileId,
+				botStrategyVersion: player.botStrategyVersion,
+				botParameters: player.botParameters,
 				playerId: player.id,
 				seatIndex: index,
 				status: 'active',
+				startingMmr: player.startingMmr,
 				updatedAt: now,
 			}),
 		)
@@ -248,6 +256,11 @@ async function buildCustomPlayers(
 	options: CreateCustomMatchOptions,
 ) {
 	await ensureDefaultVirtualOpponents(ctx)
+	const gameplayCatalog = await ensureGameplayBotCatalog(ctx)
+	const profileByOpponentId = new Map(gameplayCatalog.map(({ opponent, profile }) => [
+		opponent._id,
+		profile,
+	]))
 	const requestedKeys = Array.from(new Set(options.virtualOpponentKeys ?? []))
 	const keys = requestedKeys.length > 0
 		? requestedKeys.slice(0, MAX_CUSTOM_OPPONENTS)
@@ -275,13 +288,20 @@ async function buildCustomPlayers(
 				participantKind: 'human' as const,
 				name: options.localPlayerName ?? currentUser.displayName ?? 'You',
 			},
-			...opponents.map((opponent, index) => ({
-				id: `opponent-${index + 1}`,
-				virtualOpponentId: opponent._id,
-				participantKind: 'virtual' as const,
-				name: opponent.displayName,
-				initialLoadedSlots: [1, 3, 5],
-			})),
+			...opponents.map((opponent, index) => {
+				const profile = profileByOpponentId.get(opponent._id)
+				return {
+					id: `opponent-${index + 1}`,
+					virtualOpponentId: opponent._id,
+					participantKind: 'virtual' as const,
+					controlMode: 'server_bot' as const,
+					botProfileId: profile?._id,
+					botStrategyVersion: profile?.strategyVersion,
+					botParameters: profile?.parameters,
+					name: opponent.displayName,
+					initialLoadedSlots: [1, 3, 5],
+				}
+			}),
 		] satisfies CreateInitialStateInput['players'],
 	}
 }
@@ -326,6 +346,7 @@ export async function createDevMatchForUser(
 		players,
 	})
 	await writeStateAndPublicView(ctx, state)
+	await scheduleNextBotAction(ctx, state)
 
 	return {
 		matchId,
@@ -347,7 +368,7 @@ export async function createCustomMatchForUser(
 	}
 
 	const matchId = await ctx.db.insert('matches', {
-		mode: 'dev' satisfies MatchMode,
+		mode: 'casual' satisfies MatchMode,
 		status: 'ready',
 		revision: 0,
 		hostUserId: currentUser._id,
@@ -358,7 +379,7 @@ export async function createCustomMatchForUser(
 
 	const state = createInitialMatchState({
 		matchId,
-		mode: 'dev',
+		mode: 'casual',
 		localPlayerId: 'local-player',
 		firstPlayerId: options.firstPlayerId,
 		requiresSetupLoad: options.requiresSetupLoad,
@@ -366,6 +387,7 @@ export async function createCustomMatchForUser(
 		players: built.players,
 	})
 	await writeStateAndPublicView(ctx, state)
+	await scheduleNextBotAction(ctx, state)
 
 	return {
 		matchId,
@@ -390,6 +412,11 @@ export async function createCustomMatchFromRoomParticipants(
 	options: { requiresSetupLoad?: boolean; firstPlayerId?: string } = {},
 ) {
 	const now = Date.now()
+	const gameplayCatalog = await ensureGameplayBotCatalog(ctx)
+	const profileByOpponentId = new Map(gameplayCatalog.map(({ opponent, profile }) => [
+		opponent._id,
+		profile,
+	]))
 	const ordered = roomParticipants
 		.slice()
 		.sort((left, right) => left.seatIndex - right.seatIndex)
@@ -399,10 +426,17 @@ export async function createCustomMatchFromRoomParticipants(
 	const localPlayerId = hostParticipant?.playerId ?? 'local-player'
 	const players = ordered.map((participant) => {
 		if (participant.participantKind === 'virtual') {
+			const profile = participant.virtualOpponentId
+				? profileByOpponentId.get(participant.virtualOpponentId)
+				: undefined
 			return {
 				id: participant.playerId,
 				virtualOpponentId: participant.virtualOpponentId,
 				participantKind: 'virtual' as const,
+				controlMode: 'server_bot' as const,
+				botProfileId: profile?._id,
+				botStrategyVersion: profile?.strategyVersion,
+				botParameters: profile?.parameters,
 				name: participant.displayName,
 				initialLoadedSlots: [1, 3, 5],
 			}
@@ -419,7 +453,7 @@ export async function createCustomMatchFromRoomParticipants(
 	})
 
 	const matchId = await ctx.db.insert('matches', {
-		mode: 'dev' satisfies MatchMode,
+		mode: 'casual' satisfies MatchMode,
 		status: 'ready',
 		revision: 0,
 		hostUserId: hostUser._id,
@@ -430,7 +464,7 @@ export async function createCustomMatchFromRoomParticipants(
 
 	const state = createInitialMatchState({
 		matchId,
-		mode: 'dev',
+		mode: 'casual',
 		localPlayerId,
 		firstPlayerId: options.firstPlayerId,
 		requiresSetupLoad: options.requiresSetupLoad,
@@ -438,6 +472,7 @@ export async function createCustomMatchFromRoomParticipants(
 		players,
 	})
 	await writeStateAndPublicView(ctx, state)
+	await scheduleNextBotAction(ctx, state)
 
 	return {
 		matchId,
@@ -456,6 +491,7 @@ export const createDevMatch = mutationGeneric({
 	},
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: any) => {
+		requireQaToolsEnabled()
 		const currentUser = await requireCurrentUser(ctx)
 		return await createDevMatchForUser(ctx, currentUser, {
 			localPlayerName: args.localPlayerName,

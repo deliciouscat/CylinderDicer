@@ -1,8 +1,19 @@
 local M = {}
 
--- Register component URLs here only after the matching sound resources and
--- /audio game object exist in the bootstrap collection.
-local SFX = {}
+local SFX = {
+	start_bell = "/audio#start_bell",
+	victory = "/audio#victory",
+	placement = "/audio#placement",
+	roll = "/audio#roll",
+	drop = "/audio#drop",
+	reload = "/audio#reload",
+	clasp = "/audio#clasp",
+	tick = "/audio#tick",
+	bang = "/audio#bang",
+	button_click = "/audio#button_click",
+	click = "/audio#button_click",
+	click_empty = "/audio#button_click",
+}
 local BGM = {}
 local VOICE = {}
 

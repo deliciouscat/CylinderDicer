@@ -20,7 +20,12 @@ function M.visible_rail_range(state)
 end
 
 function M.is_my_bid_valid(state)
-	return bidding.validate(state.bidding.current_bid, state.bidding.my_bid, bidding.DEFAULT_LIMITS).ok
+	local current = state.bidding.current_bid
+	local draft = state.bidding.my_bid
+	if current and draft.count <= current.count then
+		return false
+	end
+	return bidding.validate(current, draft, bidding.DEFAULT_LIMITS).ok
 end
 
 function M.count_face(state, face)

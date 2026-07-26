@@ -83,6 +83,20 @@ local function set_meta_enabled(prefix, visible)
 	gui_util.set_enabled(prefix .. "_marker", visible)
 end
 
+local function player_status_alpha(player)
+	if player.eliminated == true or (player.hp or 0) <= 0 then
+		return 0.5
+	end
+	return 1.0
+end
+
+local function set_status_alpha(prefix, alpha)
+	gui_util.set_alpha(prefix .. "_bullet_badge", alpha)
+	gui_util.set_alpha(prefix .. "_bullets", alpha)
+	gui_util.set_alpha(prefix .. "_hp_badge", alpha)
+	gui_util.set_alpha(prefix .. "_hp", alpha)
+end
+
 local function set_slot(index, player, focus, show_meta)
 	local prefix = "slot" .. tostring(index)
 	local visible = player ~= nil
@@ -109,7 +123,9 @@ local function set_slot(index, player, focus, show_meta)
 
 	gui_util.set_texture(prefix .. "_body", texture_name(player))
 	gui_util.set_color(prefix .. "_body", color(1.0, 1.0, 1.0, 1.0))
-	gui_util.set_alpha(prefix .. "_body", (focus.active or focus.previous) and 1.0 or 0.72)
+	local status_alpha = player_status_alpha(player)
+	gui_util.set_alpha(prefix .. "_body", status_alpha)
+	set_status_alpha(prefix, status_alpha)
 	gui_util.play_flipbook(prefix .. "_body", player.portrait_state or "front")
 end
 

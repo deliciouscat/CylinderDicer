@@ -6,6 +6,72 @@ Opponent Controller 사용 절차는 [shared/docs/OPPONENT_CONTROLLER.md](shared
 
 ---
 
+진행 상태 (2026-07-26, bidding 가독성 / bot raise variation):
+
+- carousel과 결투 HUD의 생존자는 portrait와 HP/탄환 indicator를 alpha 1.0으로 표시한다. 탈락자는 portrait와 두 indicator만 alpha 0.5로 낮추며, 치명타 연출에서는 표시 HP가 0이 되는 시점에 함께 전환한다.
+- gameplay bot은 seeded personality 값을 사용해 직전 count에서 1–3칸을 올린다. 같은 revision/seed에서는 deterministic하고 aggression/bluff/randomness가 큰 profile일수록 큰 raise 확률이 높다.
+- local 입찰 버튼은 유효한 face 변경만으로 활성화되지 않는다. 직전 입찰보다 rail count가 실제로 한 칸 이상 올라간 뒤에만 활성화된다.
+- 검증: Convex domain 26/26, Defold Lua 49/49, Ladder 19/19, Custom Game 3/3, Vue production build, release HTML5 bundle/sync freshness check, `phase4:deploy`, `phase4:check` 통과.
+- 다음 리팩터링 착수 순서와 완료 gate는 [REVIEW.md](REVIEW.md)에 고정했다. 첫 wave는 command boundary validator와 admin claim 축소이며, 이후 capability 전달과 versioned bridge coordinator를 진행한다.
+
+진행 상태 (2026-07-26, Custom Game 명시적 bot composition):
+
+- Custom Game 방 생성 시 기본 bot 3명을 자동 삽입하던 fallback을 제거했다. 새 방은 방장 1명으로 시작하며 host의 `봇 추가` 버튼 click마다 enabled gameplay catalog에서 아직 없는 bot 한 명을 빈 좌석에 추가한다.
+- bot 추가는 `addMyCustomGameOpponent` transaction이 room ownership/composing 상태, 6인 상한, enabled catalog와 중복 identity를 검증한다. 이미 human이 차지한 player id/seat는 건너뛰며 추가된 bot은 ready 상태로 들어가 기존 `server_bot` 승격·match start 계약을 그대로 사용한다.
+- `shared/custom-game/composition.ts`에 6인 구성 계획을 공용화하고 빈 방, human 좌석 충돌, catalog 소진/6인 상한을 3개 focused test로 고정했다. `ko`/`en`/`ja` 버튼·상태 문구를 추가했다.
+- 검증: `custom-game:test`, Convex typecheck/codegen, Vue production build, `phase4:deploy`, `phase4:check`를 통과했다. 인증 브라우저 `http://localhost:5173/play/custom-game`에서 새 방 1/6, bot 1명씩 추가, 6/6에서 버튼 disabled, 추가된 5 bot으로 `/play/dev?matchId=...` handoff를 확인했다.
+
+진행 상태 (2026-07-26, gameplay bot bidding pacing / observer sync):
+
+- 서버 bot의 `bid.raise`/`bid.challenge` 결정만 별도 사고 구간으로 분류해 1.8–4.2초의 deterministic delay를 적용했다. Shake/check/reload 같은 routine action의 기존 profile reaction 값은 유지한다.
+- `bidding` HUD는 상대 턴에도 비활성 controls를 표시하고, 주사위와 rail은 speculative local draft 대신 authoritative `current_bid`를 표시한다. 상대 입찰이 승인되면 모든 구독자에게 같은 count/face가 보인다.
+- 다음 local turn의 draft는 서버가 제안한 다음 raise가 아니라 직전 `current_bid`의 count/face에서 시작한다. 사용자가 여기서 count 또는 face를 올려 legal raise를 만든다.
+- 검증: Convex domain 24/24, Defold Lua 46/46, release HTML5 observer fixture를 통과했다. 인증된 4인 Custom Game에서 local `1×2` 입찰부터 첫 bot 입찰까지 2.923초 간격과 상대 턴 disabled controls/face 2 표시를 확인했다.
+
+진행 상태 (2026-07-26, parameterized gameplay bot runtime):
+
+- QA용 수동 virtual opponent와 실제 플레이용 server bot을 `matchParticipants.controlMode` (`human` / `qa_manual` / `server_bot`)로 분리했다. `/admin/opponents`와 admin mutation은 QA env gate 뒤에서만 열리며 `server_bot` command를 대신 제출할 수 없다.
+- `botProfiles`에 strategy key/version, difficulty, 기준 MMR, reaction 범위와 honesty/aggression/bluff/challenge/risk/skull/caution/randomness parameter를 저장한다. 매치 참가 시 profile/version/parameter를 participant row에 고정해 진행 중 tuning 변경이 기존 매치를 바꾸지 않는다.
+- 서버 bot은 자신에게 허용된 private 정보와 public 정보만으로 observation을 만들고, reducer가 제공한 legal capability 안에서 load, shake, check, bid, challenge 중 하나를 deterministic seed로 고른다. Convex internal scheduler는 match revision/phase/epoch guard를 확인한 뒤 기존 authoritative `applyMatchCommand` 경로로 한 command씩 제출한다.
+- Custom Game의 선택된 virtual opponent는 자동 ready이며 Start 시 `casual` server bot participant가 된다. 사람은 Opponent Controller 없이도 bot 3명과 실제 매치를 시작할 수 있다.
+- Ladder는 6 human을 우선해 40초 동안 기다리고 45초 hard max를 유지한다. 2–5 human으로 시작 결정을 내리면 현재 roster를 gameplay bot으로 6명까지 채우며 bot 혼합 match는 `casual`/unrated, 6 human match만 `ranked`다. Bot은 fake queue entry로 넣지 않는다.
+- schema 변경은 optional widen-only여서 backfill 없이 legacy participant/catalog row를 기본값으로 dual-read한다. `botProfiles.by_virtual_opponent`, `botProfiles.by_enabled_and_base_mmr` indexes를 사용하며 queue/profile scan은 추가하지 않았다.
+- 검증: Convex domain 24, Ladder 19, Defold Lua 46 tests와 Vue production build, `convex:typecheck`, `phase4:deploy`, `phase4:check`를 통과했다. 인증된 Custom Game에서 3 server bots가 controller 없이 `shake.complete`와 `dice.check`를 제출하는 것을 command log로 확인했고, Ladder waiting/cancel을 1440×900 및 375×812에서 확인했다. Production Ladder bot-fill은 두 authenticated human 세션이 필요한 경로여서 policy/domain test까지 확인했으며 실제 multi-user match-found E2E로 과장하지 않는다.
+- 운영/QA 절차: [shared/docs/GAMEPLAY_BOTS.md](shared/docs/GAMEPLAY_BOTS.md), [shared/docs/OPPONENT_CONTROLLER.md](shared/docs/OPPONENT_CONTROLLER.md), [shared/docs/LADDER_QA.md](shared/docs/LADDER_QA.md).
+
+진행 상태 (2026-07-24, Ladder 탈락/결과 HUD 및 Elo 집계):
+
+- 결투에서 실제 탄환이 소모된 다음 라운드 순서를 서버/Defold 양쪽에서 `즉시 재장전 → 전원 shake → 패 확인`으로 교정했다. 재장전이 필요 없는 결투는 곧바로 shake로 진행하며, TypeScript/Lua parity test가 두 경로와 탈락자 다음 좌석 승계를 함께 고정한다. release HTML5 phase check에서도 `revolver_reload → cup_shake → dice_check`와 6초 shake timeout, console error 없음까지 확인했다.
+- HTML5 엔진 로더를 프로젝트 `background.png` + `logo.png` 기반 custom CSS로 교체했다. Defold 기본 light-theme 배경/내장 SVG 대신 빌드 전 원본을 web bundle resource로 자동 복사하며, release bundle/sync와 지연 로딩 브라우저 캡처에서 두 asset 200 응답 및 console error 없음을 확인했다.
+- authoritative reducer가 탈락 순서를 기록해 탈락 즉시 확정 가능한 등수를 public snapshot의 `match.result`로 내보낸다. 최종 생존자가 정해지면 전체 1–6위 결과를 확정한다.
+- ranked match 완료 transaction에서만 `ladderStats`와 `matchParticipants`에 placement/MMR을 한 번 기록한다. Elo는 시작 rating을 고정한 pairwise-average 방식(K=32, scale=400)이며 `matches.ratingAppliedAt`으로 중복 반영을 막는다. dev/virtual-opponent match는 unrated다.
+- Defold `result` HUD를 추가했다. 1위는 locale별 승리/축하 문구와 금색 plaque, 2–3위는 은색, 4–6위는 동색 plaque를 사용한다. Elo reel은 이전 점수를 0.5초 유지한 뒤 ease-in-out으로 움직이고, 변화량 절댓값 8 이하는 0.75초, 96 이상은 4초, 사이는 정규화 sigmoid duration을 사용한다.
+- 로컬 플레이어가 탈락하면 진행 중 gameplay 위에 결과 HUD가 즉시 뜬다. `로비로 나가기`는 `EXIT_TO_LOBBY` GameBridge 이벤트로 Vue wrapper의 기존 back 흐름을 사용하고, `관전하기`는 같은 authoritative snapshot subscription과 Defold instance를 유지한 채 HUD만 닫는다. 실제 match complete snapshot이 오면 최종 Elo 결과 HUD가 다시 열린다.
+- HTML5의 캔버스 focus가 관전 뒤 바뀌어도 버튼이 동작하도록 bridge의 정규화된 `DOM_POINTER`를 result HUD로 라우팅하고 로비 handoff는 one-shot으로 보호했다. Defold locale 전체 글리프도 font character set에 포함했다.
+- result의 `deactivate`가 공용 `/ui` game object input focus를 해제해 shake Space/drag와 bidding keyboard 입력을 막던 회귀를 수정했다. 개별 result component는 focus를 소유하지 않으며 `html5-shake-input-check.mjs`가 실제 Space 5회 → gauge 100 → `shake.complete`를 검증한다.
+- 검증: Convex domain/Ladder/Lua focused tests, release HTML5 bundle/sync, 1280×720 및 375×812 standalone dev result fixture에서 탈락 선택 → 관전 → 최종 승리 reel → `EXIT_TO_LOBBY`를 확인했다. fixture는 production matchmaking/rating write 검증이 아니다.
+
+진행 상태 (2026-07-23, gameplay / web SFX):
+
+- 제공된 SFX 원본을 `play/art-source/sounds/sfx/`에 보존하고 Defold용 16-bit PCM WAV + `.sound` 리소스를 `play/assets/sounds/sfx/`에 추가했다.
+- Defold bootstrap의 `/audio` game object와 `game/core/audio.lua` façade를 연결했다. 시작 종, shake/확인, 장전/마지막 장전, 결투 miss/hit, 승리/비승리 종료 음을 각 authoritative state/연출 시점에 재생한다. `drop`은 Space 입력이 아니라 컵이 올라가 실제 패가 보이는 `dice_check` phase 진입에 재생한다.
+- `audio_events.lua`가 이전/현재 snapshot을 비교해 start/result/reload/dice reveal cue를 한 번만 생성한다. 마지막 pending bullet은 `reload` 대신 `clasp`, 완료된 match refresh는 종료 음을 다시 재생하지 않는다.
+- 결투 전 패 공개의 컵 아래 주사위도 shake 결과와 동일한 `a1`–`a5` table angle을 사용한다. 판정 grid와 하단 패 목록은 판독용 `a0`를 유지한다.
+- 결투 집행 일러스트를 고정 previous/challenger 순서가 아니라 resolution 역할 기준으로 정렬했다. 일반 결투는 왼쪽 공격자/오른쪽 피격자이며 SHORT와 OVER의 방향이 화면에서도 authoritative `shooterId`/`targetId`와 일치한다.
+- `buttonClick`은 Defold bidding controls와 Vue SPA의 enabled button activation 양쪽에서 사용한다. Vue는 짧은 4-slot audio pool로 빠른 연속 클릭도 처리한다.
+- 검증: release HTML5 bundle/sync, Convex 18 + Ladder 17 + Lua 41 tests, Vue production build를 통과했다. dev-only HTML5 phase harness의 `duel_reveal`/`duel_combat` checkpoint와 screenshot에서 컵 아래 angled dice, 정면 grid/tray, 역할 기준 결투 일러스트, 빈 canvas/asset 오류 없음도 확인했다.
+
+진행 상태 (2026-07-19, web background music):
+
+- SPA 전역 background music controller를 추가했다. lobby/custom game/Ladder 대기·roster/admin/auth 화면은 `lobby_1`/`lobby_2`, 실제 `ConvexPlayScreen`·local play wrapper는 `battle_1`/`battle_2`를 순서대로 반복한다.
+- 화면 모드 전환과 좌하단 music toggle은 650ms ease-in/out fade를 사용한다. 토글 상태는 localStorage에 유지하며, 브라우저 autoplay 차단 시 첫 pointer/keyboard 입력으로 재생을 다시 시도한다.
+- 비동기 fade에는 generation guard를 적용해 빠른 화면 전환이나 unmount가 이전 곡을 다시 활성화하거나 중복 재생하지 않게 했다.
+- `en`/`ko`/`ja` 접근성 label을 추가했다. 브라우저 QA에서 lobby/battle 음원 요청, 토글 persistence, play wrapper 전환을 확인했다.
+- Ladder production matchmaking은 6인 구성을 우선하기 위해 2–5인 partial roster의 최소 대기를 10초에서 40초로 늘렸다. 6인은 즉시 시작하고, 40초 이후에만 arrival-rate projection을 적용하며 45초에는 hard start한다.
+- Opponent Controller Ladder QA도 1.5초 click debounce 대신 player 입장 기준 40초 동안 bot 추가를 받도록 맞췄다. Human + bot 6명은 즉시 시작하고 2–5명은 40초 시점에 확정한다.
+- 인증된 Chrome QA에서 fresh player + bot 1명은 3초 뒤에도 searching을 유지했고, bot을 총 5명까지 채우자 6인 roster가 즉시 생성되어 단 한 번 handoff됐다. 같은 match를 `dice_check`까지 진행해 새 HTML5 bundle의 2열/3열 reveal dice 위치와 앞뒤 순서가 에디터 GUI대로 반영된 것도 확인했다.
+- Defold editor가 만든 최신 bundle을 `web/public/play`로 다시 sync했다. source/output `CylinderDicer_wasm.js` SHA-256 일치와 freshness check를 확인했다.
+
 진행 상태 (2026-07-17, local shake gauge / timeout / font):
 
 - Defold shake 입력을 서버 `shake.roll` 누적에서 보이지 않는 0–100 local gauge로 변경했다 (`+24/input`, `-12/second`, bounded). 100에서 `shake.complete`를 한 번만 제출하며 숫자나 bar는 HUD에 표시하지 않는다.
@@ -165,12 +231,20 @@ Opponent Controller 사용 절차는 [shared/docs/OPPONENT_CONTROLLER.md](shared
 - 완료 (2026-07-12): SHORT/OVER 공격 소유권 교정.
   - `SHORT(actual < bid)`는 challenge가 성공한 것이므로 challenger가 previous bidder에게 차이만큼 격발한다.
   - `OVER(actual > bid)`는 challenge가 실패한 것이므로 previous bidder가 challenger에게 차이만큼 격발한다.
-  - resolution은 `shooterId`, `targetId`, `rouletteSubjectId`를 분리하며 공격자 실린더를 소모하고 피격자 HP만 감소시킨다. 실제 총알을 소모한 공격자가 다음 shake 후 재장전한다.
+  - resolution은 `shooterId`, `targetId`, `rouletteSubjectId`를 분리하며 공격자 실린더를 소모하고 피격자 HP만 감소시킨다. 실제 총알을 소모한 공격자가 즉시 재장전한 뒤 다음 shake를 시작한다.
 - 완료 (2026-07-14): bidding 장전과 다음 입찰을 pipeline으로 전환.
   - 직전 입찰자가 1발을 장전하는 동안 다음 active player는 bidding HUD에서 다음 입찰을 제출할 수 있다. 장전이 먼저 끝나면 모두 bidding HUD를 유지한다.
   - 다음 입찰이 먼저 제출되면 추가 입찰/결투를 잠그고, 장전자는 3초 카운트다운, 다른 플레이어는 회전 실린더 loading HUD를 본다. `bid.reload_timeout`이 첫 빈 슬롯을 서버 권위로 자동 장전하고 후속 장전을 승격한다.
   - Convex scheduler와 standalone `flow_coordinator`가 같은 timeout을 소유하며 수동 장전이 먼저 반영되면 revision guard로 예약 timeout을 폐기한다.
   - 검증: Convex domain 15/15, Lua model 21/21, `phase0:test`, `phase4:deploy`, `phase4:check`, release HTML5 bundle/sync 및 focused Chrome 상태별 캡처 통과.
+- 완료 (2026-07-26): bidding 입력 및 timeout 안전장치.
+  - active bidding turn마다 40초 `bidding.timeout`을 Convex와 Defold local simulator가 함께 예약한다. 새 bid가 revision을 바꾸면 이전 timer는 폐기된다.
+  - timeout 시 현재 수량보다 1 높은 Skull 입찰을 자동 제출해 입찰자 본인의 Russian roulette를 수행한다. 최대 수량에서는 reload 대기가 없을 때 challenge로 전환한다.
+  - Custom Game의 `생성`은 host-only composing room만 만들며, bot은 `봇 추가`를 누른 횟수만큼만 참가한다. 초기 room 조회 중에는 생성 동작을 잠가 이전 started-room 응답과의 race를 막는다.
+  - 결투 HUD의 탄환 수는 결투 시작 값에서 실제 탄환이 소비되는 연출 단계마다 감소하며, 서버가 이미 계산한 최종 탄환 수를 연출 시작부터 미리 표시하지 않는다.
+  - bidding `Space` 입력을 추가하고 기존 `Enter`도 호환 유지했으며, `C` challenge 입력은 기존 action binding을 사용한다.
+  - bid/challenge 버튼의 enabled/disabled 텍스트 노드를 제거하고 disabled 상태를 alpha 0.5로 표현한다.
+  - 검증: Convex domain 25/25, Lua model 47/47, `phase0:test` 통과.
 - 남음: local reducer 자체를 완전히 제거하는 장기 리팩터링. 현재 local store는 server snapshot render cache와 local animation/progress cache 역할을 겸한다.
 
 완료 기준:
@@ -677,40 +751,41 @@ Phase 5에서 opponent controller가 담당하는 QA 범위:
   - snapshot key normalization에 `requiredCount → required_count`를 추가해 Convex 실매치의 local HUD가 1회 fallback을 쓰던 문제를 제거했다.
   - 검증: Convex domain 9/9, Lua model 19/19, Vue build, Convex deploy/check, release HTML5 bundle, authenticated Chrome same-match smoke.
 
-#### Phase 5+. Opponent automation (opponent controller 상위 계층)
+#### Phase 5+. Gameplay bot runtime
 
-목표: 사람이 매 턴마다 admin을 누르지 않아도 virtual opponent가 움직이게 한다.  
-**구현 위치는 opponent controller 위**이며, reducer나 room state를 우회하지 않는다.
+완료 (2026-07-26):
 
-작업:
-
-- bot strategy 모듈:
-  - conservative bid
-  - random legal bid
-  - challenge threshold
-  - auto load / shake.complete / dice.check
-- runner가 호출하는 API는 opponent controller와 동일 entrypoint만 사용:
-  - `setCustomGameOpponentReady`
-  - `submitOpponentCommand`
-- runner 형태 (우선순위):
-  - 1차: admin UI “Auto” / step runner (여전히 admin auth)
-  - 2차: external `opponent-bot/`가 admin mutation 호출
-  - 3차: Convex scheduled/internal action 검토
-- pacing / illegal spam guard:
-  - automation layer에서 action delay, retry backoff, illegal command 차단
-  - opponent controller mutation contract는 변경하지 않음
-
-완료 기준 (automation):
-
-- local player 혼자서 bot 3명과 한 판을 **automation on** 상태로 진행 가능.
-- automation action이 모두 `adminAudit`으로 추적 가능.
-- bot이 illegal command를 반복 spam하지 않음.
+- 실제 bot은 Opponent Controller/admin identity를 가장하지 않고 `server_bot` participant로 명시한다.
+- parameterized profile, fair observation, legal-action decision engine, guarded Convex internal scheduler를 분리했다.
+- 모든 bot command는 human과 같은 authoritative reducer/command log를 통과하고 `source: bot`으로 기록한다.
+- Custom Game은 virtual opponent를 자동 ready 처리하며, Ladder는 40초 이후 2–5 human start decision을 6인 gameplay bot roster로 보완한다.
+- QA controller는 `qa_manual` dev match와 Ladder fixture 전용으로 유지하며 actual server bot을 조작하지 못한다.
+- 완료 기준과 운영 절차는 [shared/docs/GAMEPLAY_BOTS.md](shared/docs/GAMEPLAY_BOTS.md)에 고정한다.
 - automation off 시 Phase 5 manual QA 경로와 동일하게 동작.
 
 ---
 
 ### Ladder matchmaking waiting / roster vertical slice
 
+- 2026-07-26 dice check timeout:
+  - `dice_check` phase에 서버 권위 `dice.check.timeout`을 추가했다. phase 진입 후 6초 동안 확인하지 않은 생존 플레이어만 자동 확인 처리하고 `bidding_gap`으로 진행한다.
+  - Convex scheduler/reducer와 Defold local simulator flow contract/reducer를 같은 6초 규칙으로 맞췄다. 이미 확인한 플레이어의 상태는 유지한다.
+  - Convex domain 20 tests, Lua 46 tests 통과. Convex public protocol/schema 변경은 없어 phase4 deploy/check는 실행하지 않았다.
+- 2026-07-24 중복 phase indicator 정리:
+  - `cylinder_overlay`의 `reload_title_box` / `reload_title`과 `duel`의 `title_box` / `title`을 제거해 `turn_indicator`만 phase 제목을 표시하도록 통일했다.
+  - reload의 남은 장전 수, duel의 hint/콜/실제 개수 요약은 유지했다. 제목용 i18n을 런타임에서 더 이상 참조하지 않는다.
+  - `GUI_NODE_CONTRACTS.md`와 duel GUI 문서를 실제 node tree에 맞게 갱신했다.
+  - release HTML5 bundle/sync, `phase0:test`, stale node reference 검사 통과. HTML5 harness에서 reload 및 duel reveal/combat screenshot과 console runtime error 없음 확인. 기존 harness의 `dice_check`/bidding timing check는 실패해 해당 검증은 보류 상태로 남겼다.
+- 2026-07-24 결투 중간 텍스트 정리:
+  - `combat_status`, `combat_shot`, `combat_result`를 제거해 결투 중간의 `판정`, 러시안 룰렛 단계, 명중/빗나감 텍스트를 표시하지 않도록 했다.
+  - 초상화, HP/탄환 indicator, hit flash, 결투 오디오는 유지했다. 결투 공개 단계의 하단 안내 문구는 phase 안내로 유지한다.
+  - release HTML5 bundle/sync, `phase0:test`, stale node reference 검사 통과. `duel_combat` screenshot에서 중앙 텍스트가 사라지고 console runtime error가 없음을 확인했다.
+- 2026-07-24 로컬 공개 주사위 안내문구 겹침 수정:
+  - 결투 공개 단계에서 local `player_dice_template` anchor를 기존보다 28px 위로 올려 하단 `hint` 안내문구를 가리지 않도록 했다. 상대 좌석, grid, local tray 위치는 변경하지 않았다.
+  - release HTML5 bundle/sync, `phase0:test`, `duel_reveal` screenshot 및 console runtime error 없음 확인.
+- 2026-07-24 shake 컵 draw order 정리:
+  - `cup_local`을 `reveal_dice_*` node 뒤로 이동해, Defold GUI의 node 목록 draw order에서 컵이 공개 주사위보다 앞에 렌더링되도록 했다. z 값은 깊이 범위 내 값으로만 유지한다.
+  - HTML5 bundle/sync 후 `shake` screenshot에서 컵 하단이 공개 주사위를 가리는 것을 확인했다. 기존 harness의 timing check는 여전히 `dice_check`에서 종료되지만 console runtime error는 없었다.
 - 2026-07-17 bidding turn/carousel 회귀 수정:
   - 에디터에서 삭제된 구형 `slot*_head`와 `face_hint` placeholder를 GUI script가 계속 참조해 carousel과 bid/challenge controls 갱신이 중단되던 오류를 제거했다. `slot*_body`를 portrait의 유일한 기준 node로 유지한다.
   - authoritative 현재 turn 플레이어를 carousel의 정확한 가로 중앙에, 직전 turn 플레이어를 바로 왼쪽에 배치했다. HTML5 phase check는 bid controls visibility, active portrait 중앙 정렬, local-turn rail 실제 키 입력을 검증한다.
@@ -753,12 +828,12 @@ Phase 5에서 opponent controller가 담당하는 QA 범위:
 - 2026-07-11 waiting lifecycle / adaptive fill 후속 완료:
   - stale `matched` queue row가 Lobby의 다음 Ladder click을 즉시 이전 game으로 handoff하던 root cause를 수정했다. roster handoff가 queue row를 consume하고 `/play/ladder?matchId=...`를 남겨 refresh recovery와 새 search intent를 분리한다.
   - `lastSeenAt` + `by_status_and_last_seen_at` active lease를 추가했다. searching client는 8초 heartbeat, server는 20초 lease로 abnormal-close waiting row를 production/admin 후보에서 제외한다.
-  - production policy를 즉시 2인 FIFO에서 adaptive 2–6 fill로 교체했다. target 6, min 2, min hold 10초, max wait 45초, MMR band ±150→±400, active eligible join gap 기반 projected fill을 사용한다. projected fill이 remaining budget보다 길면 현재 2–5명으로 시작한다.
+  - production policy를 즉시 2인 FIFO에서 adaptive 2–6 fill로 교체했다. target 6, min 2, min hold 40초, max wait 45초, MMR band ±150→±400, active eligible join gap 기반 projected fill을 사용한다. 40초 전에는 partial roster를 만들지 않고, 이후 projected fill이 remaining budget보다 길면 현재 2–5명으로 시작한다.
   - authenticated browser에서 Lobby → Ladder가 Searching 유지, Opponent Controller button enabled, QA 2-player handoff가 `?matchId=...` + single iframe을 생성, Back → Lobby → Ladder가 새 Searching session 및 enabled button을 만드는 회귀 시나리오를 확인했다.
   - 의도적으로 미룸: historical arrival telemetry와 region/platform/rating-band별 percentile calibration. 현재 estimate는 active eligible cohort만 사용하며 traffic data 없이 production tuning 수치를 invent하지 않는다.
 - 2026-07-11 Opponent Controller QA 후속 완료:
   - `/admin/opponents`에 최신 authenticated waiting Ladder session을 live 표시하고 click마다 existing virtual opponent 한 명을 stage하는 `Add Ladder Opponent` control을 추가했다.
-  - `ladderQaOpponents` child table과 queue `qaRevision` guard로 2–6 player click burst를 모은 뒤 마지막 click 1.5초 후 단 하나의 authoritative `dev` match를 생성한다. cancel, production match-found, re-enter가 pending row와 scheduled finalize를 idempotently 무효화한다.
+  - `ladderQaOpponents` child table과 queue `qaRevision` guard로 2–6 player click burst를 모은다. Human 포함 6명은 즉시, 2–5명은 player 입장 40초 뒤 단 하나의 authoritative `dev` match를 생성한다. cancel, production match-found, re-enter가 pending row와 scheduled finalize를 idempotently 무효화한다.
   - Production 2-human FIFO matcher, MMR/placement, Defold bridge/matchId handoff는 변경하지 않았다. Admin action은 `ladder.qa.add_opponent` audit row를 남긴다.
   - 검증: Ladder tests 9/9, Convex typecheck/domain/Phase 0, Web build, `phase4:deploy`, `phase4:check`, authenticated 1280×720 two-tab browser flow에서 3 clicks → 4-player dev match → `/play/ladder` single iframe handoff 확인. In-app browser viewport override가 적용되지 않아 이 후속의 narrow-mobile visual result는 claim하지 않는다.
   - Runbook: [shared/docs/OPPONENT_CONTROLLER.md](shared/docs/OPPONENT_CONTROLLER.md) `Ladder QA`, [shared/docs/LADDER_QA.md](shared/docs/LADDER_QA.md) `Opponent Controller QA roster`.

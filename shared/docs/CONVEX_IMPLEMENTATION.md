@@ -41,7 +41,8 @@ flowchart LR
     Vue -->|"Convex query subscription"| Convex
     Vue -->|"SERVER_SNAPSHOT / SERVER_EVENT"| Defold["Defold canvas"]
     Defold -->|"PLAYER_COMMAND via GameBridge"| Vue
-    QA["opponent-controller / bot"] -->|"same command protocol"| Convex
+    QA["QA opponent controller"] -->|"qa_manual dev commands"| Convex
+    Bot["Convex gameplay bot scheduler"] -->|"guarded player command"| Convex
     Convex -->|"scheduled internal transition"| Convex
 ```
 
@@ -68,7 +69,7 @@ High-frequency examples:
 - Count/face spinner repeat: client keeps local draft value and sends only final `bid.raise`.
 - Duel animation: server returns ordered resolution steps once; Defold plays timing, easing, hit flashes, vibration, and camera effects locally.
 - SHORT/OVER duel ownership: verdict는 `actual - bid` 기준이다. `SHORT`에서는 challenger가 previous bidder를, `OVER`에서는 previous bidder가 challenger를 공격한다. 각 step의 `shooterId`와 `rouletteSubjectId`는 공격자 및 소모할 실린더를, `targetId`는 HP가 감소할 피격자를 뜻한다.
-- Delayed phase progression: Convex schedules `bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
+- Delayed phase progression: Convex schedules `shake.timeout`, `dice.check.timeout`, `bidding.open`, `bidding.timeout` (40 seconds per active bidding turn), `bid.reload_timeout`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
 - Pointer hover/drag, HUD open/close, disabled-button feedback: local only.
 
 ## Responsibility split
@@ -77,7 +78,7 @@ High-frequency examples:
 
 Convex owns:
 
-- Ladder queue lease lifecycle, adaptive 2–6 player match formation, and stable Ladder stat summaries
+- Ladder queue lease lifecycle, humans-first six-player formation with guarded bot fill, and stable Ladder stat summaries
 - match creation and participants
 - seat/order
 - turn/phase FSM
@@ -160,7 +161,7 @@ Send one server command per rule checkpoint:
 | Duel request | Button feedback and local pending state | `bid.challenge` |
 | Duel animation | Play returned steps locally | none; server schedules execute/advance |
 
-Shake tick과 local gauge 값은 Convex state/snapshot에 저장하지 않는다. Defold local simulator도 같은 checkpoint-level `shake.complete`와 phase-level `shake.timeout` action을 사용한다.
+Shake tick과 local gauge 값은 Convex state/snapshot에 저장하지 않는다. Defold local simulator도 같은 checkpoint-level `shake.complete`/`dice.check`와 phase-level `shake.timeout`/`dice.check.timeout` action을 사용한다.
 
 ### Snapshot policy
 
@@ -260,6 +261,7 @@ Vite exposes only `VITE_` variables to browser code. These values are client con
 ```env
 VITE_CONVEX_URL=https://<your-convex-deployment>.convex.cloud
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxx
+VITE_ENABLE_QA_TOOLS=false
 ```
 
 Optional local flags:
@@ -278,6 +280,7 @@ VITE_CONVEX_URL=
 VITE_CLERK_PUBLISHABLE_KEY=
 VITE_USE_CONVEX_DEV=true
 VITE_USE_LOCAL_DEFOLD_SIMULATOR=false
+VITE_ENABLE_QA_TOOLS=false
 ```
 
 ### Convex deployment environment
@@ -404,6 +407,15 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
 ```bash
 npx convex env set CLERK_JWT_ISSUER_DOMAIN https://<issuer>.clerk.accounts.dev
 ```
+
+Gameplay/QA gates:
+
+```bash
+npx convex env set GAMEPLAY_BOTS_ENABLED true
+npx convex env set QA_TOOLS_ENABLED true
+```
+
+`GAMEPLAY_BOTS_ENABLED`는 명시적으로 `false`일 때만 실제 server bot scheduling을 끈다. `QA_TOOLS_ENABLED`는 `/admin/opponents`가 호출하는 admin mutations와 Ladder QA fixture를 여는 server gate다. Web production bundle에서 controller route도 노출해야 하는 특별한 QA build만 `VITE_ENABLE_QA_TOOLS=true`를 사용한다. 일반 production build에서는 이 값을 false로 둔다. Legacy `LADDER_DEV_FIXTURES=true`도 호환상 server QA gate를 열지만 새 설정에서는 `QA_TOOLS_ENABLED`를 사용한다.
 
 The exact dashboard path can differ by Clerk UI version. Look for API keys, Frontend API URL, or JWT Templates.
 
@@ -615,7 +627,7 @@ type MatchCommand = {
 
 Defold local simulator and Convex production both use `shake.complete`; `shake.roll` is no longer part of the active domain protocol.
 
-`bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions.
+`shake.timeout`, `dice.check.timeout`, `bidding.timeout`, `bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions. `bidding.timeout` is 40 seconds per active turn and remains revision-guarded so every accepted bid resets its deadline; it raises the current count by one with face `1` (Skull), invoking the bidder's authoritative self-roulette, or challenges at the maximum count when no reload is pending.
 
 Bid reloads are pipelined inside the authoritative `bidding` phase. `pendingLoad` is the player currently loading, while `bidding.deferredLoad` holds at most one reload created by the next accepted bid. Before that next bid, the active player may bid while the previous loader acts; challenge remains unavailable until the reload queue is empty. If the next bid arrives first, `bidding.reloadGate` freezes further bidding for three seconds and is projected publicly for the loader countdown/loading-wheel HUD. The guarded `bid.reload_timeout` loads the current player's first empty slot and promotes `deferredLoad`; a manual load changes revision and invalidates the scheduled timeout.
 
@@ -680,11 +692,12 @@ Backend ownership:
 - `ladder.enterQueue`: idempotent enter/re-enter와 lease 시작을 소유한다. `ladder.heartbeatQueue`는 searching 동안 8초마다 lease를 갱신하고 같은 adaptive policy를 재평가한다.
 - `ladder.leaveQueue`: waiting row만 cancelled로 바꾸며 반복 호출해도 안전하다. 이미 matched라면 matched state를 반환해 cancel race에서 match-found가 사라지지 않는다.
 - `ladder.observeOwnQueue`: own queue, self stats, matchId, 2–6 seat-ordered roster를 한 subscription shape로 제공한다.
-- `shared/ladder/matchmaking.ts`가 production policy의 server/test 공통 SSOT다. 목표는 6명, 최소 시작은 2명, hard max wait는 45초다. MMR 허용 폭은 oldest player 기준 ±150에서 ±400까지 시간에 따라 넓어진다. 현재 active/eligible cohort의 join 간격으로 arrival rate를 추정하고, 10초 이후 예상 full-roster 시간이 남은 wait budget을 넘으면 현재 2–5명으로 시작한다. 6명이 모이면 즉시 시작하고, 45초에는 eligible 2명 이상이면 partial roster로 시작한다.
-- match-found는 새 gameplay reducer를 만들지 않고 기존 `matches`, `matchParticipants`, `createInitialMatchState`, public/private snapshot 계약으로 `ranked` match를 생성한다.
+- `shared/ladder/matchmaking.ts`가 production policy의 server/test 공통 SSOT다. 목표는 6 human, 최소 start decision은 2 human, 최소 대기는 40초, hard max wait는 45초다. MMR 허용 폭은 oldest player 기준 ±150에서 ±400까지 시간에 따라 넓어진다. 현재 active/eligible cohort의 join 간격으로 arrival rate를 추정하되, 40초 전에는 projection 결과와 무관하게 2–5명 match를 시작하지 않는다. 40초 이후 예상 full-human-roster 시간이 남은 wait budget을 넘거나 45초에 도달하면 현재 human cohort로 start를 결정한다.
+- start decision이 2–5 human이면 indexed gameplay bot catalog/profile에서 MMR proximity로 bot을 골라 roster를 6명까지 채운다. Bot은 `ladderQueueEntries`에 fake waiting row를 만들지 않는다. Bot 혼합 match는 `casual`/unrated이고, 6 human roster만 `ranked`다.
+- match-found는 새 gameplay reducer를 만들지 않고 기존 `matches`, `matchParticipants`, `createInitialMatchState`, public/private snapshot 계약을 그대로 사용한다.
 - `/admin/opponents`의 Ladder QA는 admin claim으로 보호된 `getLatestLadderQaSessionForAdmin` / `addLadderQaOpponent`만 사용한다. 가장 최근 waiting entry와 현재 staged count를 live query로 보여 주며 각 click은 기존 `virtualOpponents` catalog의 한 명을 추가한다.
 - human session이 아직 없으면 각 click은 `ladderQaWaitingOpponents`의 indexed `default` QA pool에 최대 5명까지 bot을 먼저 넣는다. 다음 authenticated `enterQueue` transaction이 pool을 해당 queue entry의 `ladderQaOpponents`로 atomically claim하고 pool row를 삭제한다. `qaPendingCount > 0`인 entry는 production adaptive matcher에서 제외되므로 QA finalizer와 human matcher가 같은 player를 동시에 claim하지 않는다.
-- staged bot은 `ladderQaOpponents`에 queue entry별 child row로 저장한다. `by_queue_entry_and_seat_index`로 최대 5개만 읽으며 stable profile/stat row와 분리한다. 마지막 click 뒤 1.5초 동안 새 click이 없을 때만 `qaRevision` guard를 통과한 internal finalizer가 human + staged bots로 단 하나의 `dev` match를 만든다.
+- staged bot은 `ladderQaOpponents`에 queue entry별 child row로 저장한다. `by_queue_entry_and_seat_index`로 최대 5개만 읽으며 stable profile/stat row와 분리한다. QA도 player의 `joinedAt`부터 40초 동안 6명을 우선해 모으고, human + bot이 6명이 되면 즉시 시작한다. 40초 시점에는 2–5명 partial roster를 허용하며 `qaRevision` guard를 통과한 internal finalizer만 단 하나의 `dev` match를 만든다.
 - cancel, production match, re-enter는 staged child row를 idempotently 삭제하고 revision을 무효화한다. 따라서 scheduled QA finalizer는 cancel race나 이미 성사된 production match를 덮어쓰지 않는다.
 
 Web ownership:
@@ -697,13 +710,40 @@ Gameplay character identity는 authoritative player state가 소유한다. 초�
 
 Placement normalization은 `shared/ladder/placement.ts`의 단일 구현을 Web/Convex가 같이 import한다. 1인전은 1.0, 그 외는 `(place - 1) / (playerCount - 1) * 5 + 1`이며 표시만 소수 1자리로 반올림한다.
 
-현재 `ladderStats`는 신규 사용자를 MMR 1000 / placement 없음으로 초기화한다. ranked match result에서 MMR/placement를 writeback하는 정책, tier, season, leaderboard는 별도 제품 결정 전까지 구현하지 않는다.
+### Ladder elimination, placement, and rating result
+
+- authoritative `MatchState.eliminationOrder`는 실제 HP가 0이 된 순서를 한 번만 기록한다. 진행 중 result에는 이미 탈락해 등수가 확정된 플레이어만 포함하며 첫 탈락자는 N위, 다음 탈락자는 N-1위다.
+- 한 명만 남으면 `buildPlacementResult`가 winner를 1위로 두고 전체 2–6위를 확정한다. 이 result는 public snapshot과 기존 `SERVER_SNAPSHOT` handoff를 통해 모든 관전자에게 같은 값으로 전달된다.
+- `commands.submitMatchCommand`의 match-complete transaction이 `finalizeLadderResult`를 호출한다. `matchParticipants.by_match`, `ladderStats.by_user`만 사용하며 `.collect()` scan은 하지 않는다.
+- 모든 match는 participant row에 placement/playerCount를 기록한다. 실제 user만 참가한 `ranked` match만 MMR을 반영하고, `dev`, casual, virtual participant가 섞인 match는 unrated로 남긴다.
+- `shared/ladder/rating.ts`는 match 시작 전 rating set을 고정한 pairwise-average multiplayer Elo를 사용한다(K=32, scale=400). 순위가 높은 pair는 1, 낮은 pair는 0, 동순위는 0.5이며 각 player의 pair 차이를 평균한 뒤 정수 delta로 반올림한다.
+- `matches.ratingAppliedAt` / `resultRevision`과 participant의 `mmrBefore` / `mmrAfter` / `mmrDelta`가 idempotent result write와 reconnect projection을 소유한다. 최근 placement는 `ladderStats.recentPlacements`의 최근 20개로 제한하고 normalized 누계/횟수를 함께 갱신한다.
+- Defold에서 탈락 결과를 보고 `Spectate`를 선택해도 Vue `ConvexPlayScreen` subscription과 match participant는 그대로 유지한다. `Return to Lobby`만 `EXIT_TO_LOBBY` GameBridge 이벤트로 wrapper를 종료하며, 서버 match 상태나 남은 참가자를 변경하지 않는다.
 
 Opponent Controller staging은 QA/dev 전용이며 생성 match mode도 `dev`다. Production matchmaking policy, MMR, placement, opponent selection을 검증하거나 대체하지 않는다. 운영 순서는 [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md)의 `Ladder QA`를 따른다.
 
 Admin cleanup은 `adminMatches.dismissReadyDevMatch`와 `purgeCompletedDevMatchData`가 소유한다. Opponent Controller의 individual/bulk Remove는 ready `dev` match를 먼저 terminal authoritative state로 전환하고, bounded hard purge를 `mayHaveMore === false`까지 반복해 match child graph와 linked custom rooms를 제거한다. Ranked/casual data와 `adminAudit` history는 대상이 아니다.
 
 Arrival-rate estimate는 현재 active/eligible cohort만 사용한다. 장기 historical arrival telemetry, region/platform segmentation, percentile 기반 wait budget tuning은 실제 traffic data가 생긴 뒤 calibration할 항목이며 현재 정책 숫자에 fake production confidence를 부여하지 않는다.
+
+### Gameplay bot runtime
+
+QA controller와 실제 플레이 bot은 identity와 권한이 다르다.
+
+- `matchParticipants.controlMode`은 `human`, `qa_manual`, `server_bot`을 구분한다. Legacy row는 identity 기반 default로 읽는다.
+- `virtualOpponents.catalogScope`은 gameplay catalog와 QA fixture identity를 구분한다.
+- `botProfiles`는 virtual opponent별 strategy key/version, difficulty, 기준 MMR, enabled flag와 honesty/aggression/bluff/challenge/risk/skull/caution/randomness/reaction parameter를 저장한다. `by_virtual_opponent`, `by_enabled_and_base_mmr` index로 bounded lookup한다.
+- match 생성 시 profile id/version/parameter를 participant row에 고정한다. Catalog tuning이 이미 진행 중인 match behavior를 소급 변경하지 않는다.
+- `convex/bots/observation.ts`는 bot 자신의 private dice/cylinder와 모든 player의 public HP/bullet/dice-count/elimination만 제공한다. Opponent private dice/cylinder는 decision input에 포함하지 않는다.
+- `convex/bots/decision.ts`는 reducer의 `deriveAvailableActions`와 bid validator를 사용해 legal player command만 만든다. Seeded randomness와 reaction delay도 parameter에서 bounded하게 계산한다. Routine action은 profile reaction 범위를 사용하고, `bid`/`challenge` 선택지는 사람의 숙고를 표현하는 deterministic extra delay를 더해 1.8–4.2초로 제한한다.
+- `convex/bots/scheduling.ts`와 `convex/botRunner.ts`는 현재 revision/phase/epoch/participant를 guard한 internal mutation으로 command 하나를 제출한다. Stale scheduled work는 authoritative state를 덮지 않고 no-op/re-schedule한다.
+- command는 기존 `applyMatchCommand`를 통과하고 `source: bot`, `actorVirtualOpponentId`로 command log에 기록된다. Shake/check timeout, bidding timeout/open, duel execute, round advance 같은 system transition은 계속 match flow scheduler가 소유한다.
+- Client는 bot의 speculative draft를 command로 중계하지 않는다. 상대 턴에는 직전 authoritative `currentBid`를 표시하고, 확정 `bid.raise`가 reducer를 통과하면 Convex snapshot으로 모든 구독자에게 동일한 count/face를 전달한다. 다음 local turn의 draft도 server `suggestedBid`가 아니라 직전 `currentBid`에서 시작한다.
+- Custom Game composing room은 host 한 명으로 생성된다. Host의 `addMyCustomGameOpponent` 호출 한 번이 enabled gameplay catalog에서 아직 room에 없는 bot 한 명을 빈 seat에 transactionally 추가한다. 6인 상한, room ownership/status, duplicate bot과 human seat 충돌은 서버가 검증한다. 추가된 virtual participant는 ready이며 Start 뒤 기존 `server_bot` profile snapshot 경로를 사용한다.
+- `/admin/opponents`는 QA gate가 열린 `qa_manual`/dev 대상만 조작하고 `server_bot` command를 거부한다. Custom Game의 virtual participants는 자동 ready이며 Start 뒤 `server_bot`이 된다.
+- `GAMEPLAY_BOTS_ENABLED=false`는 scheduling kill switch다. QA server surface는 `QA_TOOLS_ENABLED=true`, web production controller route는 별도로 `VITE_ENABLE_QA_TOOLS=true`일 때만 연다.
+
+Schema 변경은 optional widen-only다. Stable profile과 high-churn match/queue state는 분리했고 legacy row는 dual-read default를 사용하므로 별도 backfill migration은 필요하지 않다. 운영 및 tuning 절차는 [Gameplay Bot Runbook](./GAMEPLAY_BOTS.md)을 따른다.
 
 ## Vue integration target
 
@@ -808,7 +848,7 @@ For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-
 
 Each accepted `shake.complete` rolls only the actor's private dice. The phase remains `cup_shake` until every alive player has completed it, then enters reload/dice check once. Tests must assert the intermediate one-player-complete state so a regression where one actor rolls the whole table cannot pass a final-phase-only test.
 
-`cup_shake` phase 진입 시 Convex flow scheduler는 6초짜리 `shake.timeout`을 예약한다. 이 guard는 개별 `shake.complete`가 revision을 올려도 phase/epoch 기준으로 유지되며, 만료 시 미완료 생존 플레이어만 자동 완료하고 dice를 굴린다. 이미 완료한 플레이어의 dice는 다시 굴리지 않는다. Opponent Controller의 `Complete Shake`는 이 제한시간을 기다리지 않고 bot checkpoint를 즉시 제출한다.
+`cup_shake` phase 진입 시 Convex flow scheduler는 6초짜리 `shake.timeout`을 예약한다. 이 guard는 개별 `shake.complete`가 revision을 올려도 phase/epoch 기준으로 유지되며, 만료 시 미완료 생존 플레이어만 자동 완료하고 dice를 굴린다. 이미 완료한 플레이어의 dice는 다시 굴리지 않는다. `dice_check` phase 진입 시에도 6초짜리 `dice.check.timeout`을 예약해 미확인 생존 플레이어만 자동 확인 처리하고 `bidding_gap`으로 진행한다. Opponent Controller의 `Complete Shake`/dice check는 이 제한시간을 기다리지 않고 bot checkpoint를 즉시 제출한다.
 
 Convex snapshot keys are camelCase and the Defold model is snake_case. `play/game/model/reducers.lua` normalizes nested keys through `KEY_MAP`; structured fields such as `shake.requiredCount` must have explicit protocol types and adapter assertions. Otherwise a missing map entry can silently activate a Lua fallback while server state remains correct.
 
@@ -840,14 +880,14 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 - SHORT/OVER/EXACT duel
 - challenger starts next bidding round
 - eliminated challenger falls forward to next seat
-- duel bullet spender reloads after next shake
+- duel bullet spender reloads before the next shake, followed by dice check after every living player completes shaking
 - local/opponent permissions
 
 ### Convex integration tests
 
 - Ladder normalized placement 1–6 formula and invalid edges.
 - Ladder fidget Skull/chip cap, queue/cancel/match-found state precedence, 2–6 roster order/density, stat fallback, duplicate handoff guard.
-- Two to six authenticated humans can enter the active leased queue and receive the same ranked matchId after adaptive fill/timeout evaluation (manual multi-account E2E; deterministic fixture does not prove this).
+- Six authenticated humans receive the same ranked matchId immediately. Two to five humans wait at least 40 seconds, then receive a six-seat casual/unrated roster completed by gameplay bots after the adaptive start decision (manual multi-account E2E; deterministic fixture does not prove this).
 
 - Clerk-authenticated user can create profile.
 - User can create dev match.
@@ -855,6 +895,8 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 - `shake.complete` is one mutation per completed shake, not one mutation per shake tick.
 - phase-entry `shake.timeout` fires after six seconds without being reset by partial player completions.
 - timeout rolls only unfinished alive players; completed players are not rerolled.
+- phase-entry `dice.check.timeout` fires after six seconds without being reset by partial checks.
+- dice-check timeout marks only unchecked alive players complete, then advances to `bidding_gap`.
 - Every alive player has an independent shake/check capability; one player's completion cannot advance the phase or roll another player's dice.
 - Illegal command returns structured rejection.
 - Duplicate `commandId` is idempotent.
@@ -935,7 +977,6 @@ Port the current Lua model tests from `play/game/model/tests/model_flow_test.lua
 - Do we use `convex-vue` directly, or wrap Convex React-like APIs through a small service layer?
 - Should casual/dev matches allow local simulator fallback while ranked always requires Convex?
 - Which private data should be derived on query vs materialized as private deltas?
-- Do opponent bots run as external clients or Convex scheduled/internal actions?
 - How long do we retain full command/event replay for dev, casual, and ranked matches?
 - Which UI states deserve optimistic client prediction, and which must wait for server acceptance?
 

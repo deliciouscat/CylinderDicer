@@ -101,38 +101,9 @@ nodes {
 }
 nodes {
   position {
-    y: 8.0
-    z: 0.4
-  }
-  size {
-    x: 270.0
-    y: 304.0
-  }
-  type: TYPE_BOX
-  texture: "props_default/cup"
-  id: "cup_local"
-  parent: "root"
-}
-nodes {
-  position {
-    x: -72.0
-    y: -83.0
+    x: -18.0
+    y: -96.0
     z: 0.3
-  }
-  size {
-    x: 48.0
-    y: 52.0
-  }
-  type: TYPE_BOX
-  texture: "dice_default/f1_a1"
-  id: "reveal_dice_1"
-  parent: "root"
-}
-nodes {
-  position {
-    x: -36.0
-    y: -64.0
-    z: 0.31
   }
   size {
     x: 48.0
@@ -145,22 +116,8 @@ nodes {
 }
 nodes {
   position {
-    y: -87.0
-    z: 0.32
-  }
-  size {
-    x: 48.0
-    y: 52.0
-  }
-  type: TYPE_BOX
-  texture: "dice_default/f3_a3"
-  id: "reveal_dice_3"
-  parent: "root"
-}
-nodes {
-  position {
-    x: 36.0
-    y: -65.0
+    x: 40.0
+    y: -102.0
     z: 0.33
   }
   size {
@@ -174,8 +131,23 @@ nodes {
 }
 nodes {
   position {
-    x: 72.0
-    y: -84.0
+    x: -67.0
+    y: -130.0
+    z: 0.35
+  }
+  size {
+    x: 48.0
+    y: 52.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f1_a1"
+  id: "reveal_dice_1"
+  parent: "root"
+}
+nodes {
+  position {
+    x: 68.0
+    y: -131.0
     z: 0.34
   }
   size {
@@ -185,6 +157,35 @@ nodes {
   type: TYPE_BOX
   texture: "dice_default/f5_a5"
   id: "reveal_dice_5"
+  parent: "root"
+}
+nodes {
+  position {
+    x: -1.0
+    y: -136.0
+    z: 0.36
+  }
+  size {
+    x: 48.0
+    y: 52.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f3_a3"
+  id: "reveal_dice_3"
+  parent: "root"
+}
+nodes {
+  position {
+    y: -7.0
+    z: 0.2
+  }
+  size {
+    x: 270.0
+    y: 304.0
+  }
+  type: TYPE_BOX
+  texture: "props_default/cup"
+  id: "cup_local"
   parent: "root"
 }
 nodes {

@@ -15,7 +15,10 @@ local tests = {
 	require("game.model.tests.server_snapshot_identity_test"),
 	require("game.model.tests.rail_layout_test"),
 	require("game.model.tests.dice_art_test"),
+	require("game.model.tests.duel_view_test"),
 	require("game.model.tests.i18n_test"),
+	require("game.model.tests.audio_events_test"),
+	require("game.model.tests.result_view_test"),
 }
 
 local total = 0

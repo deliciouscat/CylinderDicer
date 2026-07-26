@@ -3,6 +3,8 @@ import type { MatchState } from './state'
 
 export const BIDDING_OPEN_DELAY_MS = 3_000
 export const SHAKE_TIMEOUT_MS = 6_000
+export const DICE_CHECK_TIMEOUT_MS = 6_000
+export const BIDDING_TIMEOUT_MS = 40_000
 export const BID_RELOAD_TIMEOUT_MS = 3_000
 export const DUEL_REVEAL_INTERVAL_MS = 160
 export const DUEL_REVEAL_DURATION_MS = 340
@@ -59,6 +61,9 @@ export function automaticTransitionFor(state: MatchState): AutomaticTransition |
 	if (state.flow.phase === 'cup_shake') {
 		type = 'shake.timeout'
 		delayMs = SHAKE_TIMEOUT_MS
+	} else if (state.flow.phase === 'dice_check') {
+		type = 'dice.check.timeout'
+		delayMs = DICE_CHECK_TIMEOUT_MS
 	} else if (state.flow.phase === 'bidding_gap') {
 		type = 'bidding.open'
 		delayMs = BIDDING_OPEN_DELAY_MS
@@ -69,6 +74,9 @@ export function automaticTransitionFor(state: MatchState): AutomaticTransition |
 	) {
 		type = 'bid.reload_timeout'
 		delayMs = BID_RELOAD_TIMEOUT_MS
+	} else if (state.flow.phase === 'bidding') {
+		type = 'bidding.timeout'
+		delayMs = BIDDING_TIMEOUT_MS
 	} else if (state.flow.phase === 'duel' && state.duel?.phase === 'ready' && !state.duel.resolution) {
 		type = 'duel.execute'
 		delayMs = duelRevealDelayMs(state)
@@ -98,5 +106,9 @@ export function matchesAutomaticTransition(
 	return current?.type === expected.type
 		&& current.expectedPhase === expected.expectedPhase
 		&& current.expectedEpoch === expected.expectedEpoch
-		&& (expected.type === 'shake.timeout' || current.expectedRevision === expected.expectedRevision)
+		&& (
+			 expected.type === 'shake.timeout'
+			|| expected.type === 'dice.check.timeout'
+			|| current.expectedRevision === expected.expectedRevision
+		)
 }

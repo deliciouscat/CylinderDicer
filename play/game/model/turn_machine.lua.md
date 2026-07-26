@@ -9,7 +9,7 @@ phase 상태 전이표와 alive player 순회 유틸. `flow.phase`의 유효 전
 # I/O
 - 입력:
   - current state.
-  - phase event: `start_reload`, `shake_complete_first`, `reload_complete_bid`, `challenge`, `exact_reload` 등.
+  - phase event: `start_reload`, `shake_complete_first`, `reload_complete_bid`, `challenge`, `duel_reload` 등.
   - alive player order.
 - 출력:
   - next `flow.phase`.
@@ -31,6 +31,7 @@ local PHASE_TRANSITIONS = {
         reload_complete_setup = "cup_shake",
         reload_complete_shake = "dice_check",
         reload_complete_bid = "bidding",
+        reload_complete_duel = "cup_shake",
         reload_complete_exact_duel = "cup_shake",
     },
     cup_shake = {
@@ -48,6 +49,7 @@ local PHASE_TRANSITIONS = {
     duel = {
         match_complete = "complete",
         round_shake = "cup_shake",
+        duel_reload = "revolver_reload",
         exact_reload = "revolver_reload",
     },
     complete = {},

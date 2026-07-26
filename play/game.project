@@ -1,5 +1,6 @@
 [project]
 title = CylinderDicer
+bundle_resources = /html5/bundle_resources
 
 [bootstrap]
 main_collection = /main/main.collectionc
@@ -32,3 +33,4 @@ velocity_threshold = 100.0
 
 [html5]
 scale_mode = fit
+cssfile = /html5/loading.css

@@ -98,9 +98,36 @@ export default defineSchema({
     key: v.string(),
     displayName: v.string(),
     archetype: v.optional(v.string()),
+    catalogScope: v.optional(v.union(v.literal('gameplay'), v.literal('qa_fixture'))),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_key', ['key']),
+
+  botProfiles: defineTable({
+    virtualOpponentId: v.id('virtualOpponents'),
+    strategyKey: v.string(),
+    strategyVersion: v.string(),
+    difficulty: v.union(v.literal('easy'), v.literal('normal'), v.literal('hard')),
+    baseMmr: v.number(),
+    enabled: v.boolean(),
+    parameters: v.object({
+      honesty: v.number(),
+      aggression: v.number(),
+      bluffRate: v.number(),
+      challengeThreshold: v.number(),
+      riskTolerance: v.number(),
+      skullBidRate: v.number(),
+      lowHpCaution: v.number(),
+      loadedGunCaution: v.number(),
+      randomness: v.number(),
+      reactionMinMs: v.number(),
+      reactionMaxMs: v.number(),
+    }),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_virtual_opponent', ['virtualOpponentId'])
+    .index('by_enabled_and_base_mmr', ['enabled', 'baseMmr']),
 
   matches: defineTable({
     mode: v.union(v.literal('dev'), v.literal('casual'), v.literal('ranked')),
@@ -109,6 +136,8 @@ export default defineSchema({
     hostUserId: v.optional(v.id('users')),
     createdAt: v.number(),
     updatedAt: v.number(),
+    ratingAppliedAt: v.optional(v.number()),
+    resultRevision: v.optional(v.number()),
   })
     .index('by_status', ['status'])
     .index('by_mode_status', ['mode', 'status']),
@@ -118,9 +147,23 @@ export default defineSchema({
     userId: v.optional(v.id('users')),
     virtualOpponentId: v.optional(v.id('virtualOpponents')),
     participantKind: v.optional(v.union(v.literal('human'), v.literal('virtual'))),
+    controlMode: v.optional(v.union(
+      v.literal('human'),
+      v.literal('qa_manual'),
+      v.literal('server_bot'),
+    )),
+    botProfileId: v.optional(v.id('botProfiles')),
+    botStrategyVersion: v.optional(v.string()),
+    botParameters: v.optional(v.any()),
     playerId: v.string(),
     seatIndex: v.number(),
     status: v.union(v.literal('active'), v.literal('left'), v.literal('complete')),
+    startingMmr: v.optional(v.number()),
+    placement: v.optional(v.number()),
+    playerCount: v.optional(v.number()),
+    mmrBefore: v.optional(v.number()),
+    mmrAfter: v.optional(v.number()),
+    mmrDelta: v.optional(v.number()),
     updatedAt: v.number(),
   })
     .index('by_match', ['matchId'])

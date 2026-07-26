@@ -13,7 +13,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync, readdirSync } from 'node:fs'
-import { access, mkdir, readFile, stat } from 'node:fs/promises'
+import { access, copyFile, mkdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -308,6 +308,29 @@ async function assertProject(projectDir) {
   }
 }
 
+async function prepareHtml5LoaderAssets(projectDir, dryRun) {
+  if (dryRun) {
+    return
+  }
+
+  const sourceDir = path.join(projectDir, 'assets', 'images')
+  const bundleResourceDir = path.join(projectDir, 'html5', 'bundle_resources', 'web')
+  const filenames = ['background.png', 'logo.png']
+
+  await mkdir(bundleResourceDir, { recursive: true })
+  for (const filename of filenames) {
+    const source = path.join(sourceDir, filename)
+    if (!(await pathExists(source))) {
+      throw new Error(`HTML5 loader asset missing: ${path.relative(repoRoot, source)}`)
+    }
+    await copyFile(source, path.join(bundleResourceDir, filename))
+  }
+
+  console.log('Prepared HTML5 loader assets')
+  console.log(`  from: ${path.relative(repoRoot, sourceDir)}`)
+  console.log(`  to:   ${path.relative(repoRoot, bundleResourceDir)}`)
+}
+
 function buildBobCommand(options, bobJar) {
   const javaExecutable = resolveJavaExecutable(options.java)
   const args = [
@@ -415,6 +438,7 @@ async function main() {
   }
 
   await assertProject(options.projectDir)
+  await prepareHtml5LoaderAssets(options.projectDir, options.dryRun)
 
   const javaExecutable = resolveJavaExecutable(options.java)
   assertJava(javaExecutable, options.dryRun)

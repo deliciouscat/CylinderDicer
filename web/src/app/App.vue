@@ -21,6 +21,7 @@ const ladderHandoffMatchId = ref<string | null>(
   ladderMatchIdFromUrl(window.location.pathname, window.location.search),
 )
 const useLocalDefoldSimulator = import.meta.env.VITE_USE_LOCAL_DEFOLD_SIMULATOR === 'true'
+const exposeQaTools = import.meta.env.DEV || import.meta.env.VITE_ENABLE_QA_TOOLS === 'true'
 let removeButtonClickSound: (() => void) | null = null
 const activeScreen = computed(() => {
   if (currentPath.value === '/play/custom-game') {
@@ -29,7 +30,7 @@ const activeScreen = computed(() => {
   if (currentPath.value === '/play/ladder') {
     return ladderHandoffMatchId.value ? 'ladder-play' : 'ladder'
   }
-  if (currentPath.value === '/admin/opponents') {
+  if (currentPath.value === '/admin/opponents' && exposeQaTools) {
     return 'admin-opponents'
   }
   if (currentPath.value === '/play/dev' && useLocalDefoldSimulator) {

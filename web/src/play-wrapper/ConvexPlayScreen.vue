@@ -371,6 +371,11 @@ async function drainPlayerCommandQueue() {
 }
 
 async function handleDefoldMessage(message: GameBridgeMessage) {
+  if (message.type === 'EXIT_TO_LOBBY') {
+    emit('back')
+    return
+  }
+
   if (message.type === 'SERVER_SNAPSHOT_RECEIVED') {
     const payload = (message.payload ?? {}) as Record<string, unknown>
     const revision = Number(payload.revision ?? 0)

@@ -35,4 +35,10 @@ function M.test_table_dice_variant_is_stable_per_round_and_changes_across_rounds
 	assert_true(dice_art.table_animation(4, 2, 8) ~= first, "next round angle")
 end
 
+function M.test_duel_cup_reveal_uses_table_art_while_summary_dice_stay_front_facing()
+	local under_cup = dice_art.table_animation(3, 9, 4)
+	assert_true(under_cup:match("^f3_a[1-5]$") ~= nil, "duel cup variant")
+	assert_eq(dice_art.front_animation(3), "f3_a0", "grid and tray face")
+end
+
 return M

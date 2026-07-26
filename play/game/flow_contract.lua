@@ -2,6 +2,8 @@ local M = {}
 
 M.BIDDING_OPEN_DELAY_SECONDS = 3.0
 M.SHAKE_TIMEOUT_SECONDS = 6.0
+M.DICE_CHECK_TIMEOUT_SECONDS = 6.0
+M.BIDDING_TIMEOUT_SECONDS = 40.0
 M.BID_RELOAD_TIMEOUT_SECONDS = 3.0
 M.DUEL_REVEAL_INTERVAL_SECONDS = 0.16
 M.DUEL_REVEAL_DURATION_SECONDS = 0.34
@@ -30,6 +32,12 @@ function M.automatic_transition(state)
 			delay = M.SHAKE_TIMEOUT_SECONDS,
 		}
 	end
+	if phase == "dice_check" then
+		return {
+			type = "dice.check.timeout",
+			delay = M.DICE_CHECK_TIMEOUT_SECONDS,
+		}
+	end
 	if phase == "bidding_gap" then
 		return {
 			type = "bidding.open",
@@ -41,6 +49,12 @@ function M.automatic_transition(state)
 		return {
 			type = "bid.reload_timeout",
 			delay = M.BID_RELOAD_TIMEOUT_SECONDS,
+		}
+	end
+	if phase == "bidding" then
+		return {
+			type = "bidding.timeout",
+			delay = M.BIDDING_TIMEOUT_SECONDS,
 		}
 	end
 

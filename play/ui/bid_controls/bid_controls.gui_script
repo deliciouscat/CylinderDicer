@@ -16,25 +16,43 @@ local ACTION_CHALLENGE = hash("challenge")
 local ACTION_POINTER = hash("pointer")
 local ACTION_TOUCH = hash("touch")
 
+local BUTTON_ENABLED_ALPHA = 1.0
+local BUTTON_DISABLED_ALPHA = 0.5
+
+local function set_button_alpha(button_id, child_ids, enabled)
+	local alpha = enabled and BUTTON_ENABLED_ALPHA or BUTTON_DISABLED_ALPHA
+	gui_util.set_alpha(button_id, alpha)
+	for _, child_id in ipairs(child_ids) do
+		gui_util.set_alpha(child_id, alpha)
+	end
+end
+
 local function render(self, state)
 	local bid = state.bidding.my_bid
+	local current = state.bidding.current_bid
+	local visible = selectors.is_hud(state, "bidding")
 	self.can_drive = local_permissions.can_bid(state)
 	self.can_pass = self.can_drive and selectors.is_my_bid_valid(state)
 	self.can_challenge = self.can_drive and selectors.has_previous_bid(state)
+	local display_bid = self.can_drive and bid or current or bid
 
-	gui_util.set_enabled("root", self.can_drive)
+	gui_util.set_enabled("root", visible)
 	gui_util.set_text("pass_label", i18n.t("action.pass"))
 	gui_util.set_text("challenge_label", i18n.t("action.challenge"))
-	gui_util.play_flipbook("pass_die", dice_art.bid_animation(bid.face))
-	gui_util.set_text("pass_enabled", self.can_pass and "enabled" or "disabled")
-	gui_util.set_text("challenge_enabled", self.can_challenge and "enabled" or "disabled")
+	gui_util.play_flipbook("pass_die", dice_art.bid_animation(display_bid.face))
+	set_button_alpha("pass_button", { "pass_die", "pass_label" }, self.can_pass)
+	set_button_alpha("challenge_button", { "challenge_label" }, self.can_challenge)
+	set_button_alpha("face_up", {}, self.can_drive)
+	set_button_alpha("face_down", {}, self.can_drive)
 	visual_status.set("bid_controls", {
 		phase = selectors.phase(state),
 		hud = selectors.hud_kind(state),
-		visible = self.can_drive,
+		visible = visible,
 		can_drive = self.can_drive,
 		can_pass = self.can_pass,
 		can_challenge = self.can_challenge,
+		display_count = display_bid.count,
+		display_face = display_bid.face,
 		active_player_id = state.turn.active_player_id,
 		local_player_id = state.match.local_player_id,
 	})
@@ -58,8 +76,10 @@ local function handle_command(self, command)
 	end
 
 	if command == "face_up" then
+		audio.play_sfx("button_click")
 		self.store:dispatch(actions.bid_select_face(bid.face + 1))
 	elseif command == "face_down" then
+		audio.play_sfx("button_click")
 		self.store:dispatch(actions.bid_select_face(bid.face - 1))
 	elseif command == "pass" and self.can_pass then
 		audio.play_sfx("click")

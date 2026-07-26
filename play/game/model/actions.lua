@@ -7,6 +7,8 @@ M.types = {
 	SHAKE_COMPLETE = "shake.complete",
 	SHAKE_TIMEOUT = "shake.timeout",
 	DICE_CHECK = "dice.check",
+	DICE_CHECK_TIMEOUT = "dice.check.timeout",
+	BIDDING_TIMEOUT = "bidding.timeout",
 	BIDDING_OPEN = "bidding.open",
 	BID_RELOAD_TIMEOUT = "bid.reload_timeout",
 	BULLET_LOAD = "bullet.load",
@@ -18,6 +20,8 @@ M.types = {
 	DUEL_RESOLVE_CHOICE = "duel.resolve_choice",
 	ROUND_ADVANCE = "round.advance",
 	MATCH_COMPLETE = "match.complete",
+	RESULT_SPECTATE = "result.spectate",
+	QA_RESULT_PREVIEW = "qa.result_preview",
 	SERVER_SNAPSHOT_APPLY = "server_snapshot.apply",
 }
 
@@ -63,6 +67,14 @@ end
 
 function M.shake_timeout(rng)
 	return action(M.types.SHAKE_TIMEOUT, { rng = rng })
+end
+
+function M.dice_check_timeout()
+	return action(M.types.DICE_CHECK_TIMEOUT)
+end
+
+function M.bidding_timeout()
+	return action(M.types.BIDDING_TIMEOUT)
 end
 
 function M.dice_check(player_id)
@@ -120,8 +132,16 @@ function M.round_advance()
 	return action(M.types.ROUND_ADVANCE)
 end
 
-function M.match_complete(winner_id)
-	return action(M.types.MATCH_COMPLETE, { winner_id = winner_id })
+function M.match_complete(winner_id, result)
+	return action(M.types.MATCH_COMPLETE, { winner_id = winner_id, result = result })
+end
+
+function M.result_spectate()
+	return action(M.types.RESULT_SPECTATE)
+end
+
+function M.qa_result_preview(payload)
+	return action(M.types.QA_RESULT_PREVIEW, payload)
 end
 
 function M.server_snapshot_apply(snapshot)

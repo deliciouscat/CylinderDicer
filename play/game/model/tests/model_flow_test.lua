@@ -195,6 +195,75 @@ function M.test_shake_timeout_completes_only_unfinished_players()
 	assert_eq(state.players.by_id["opponent-1"].dice[1], 4, "unfinished opponent is rolled")
 end
 
+function M.test_dice_check_timeout_completes_only_unchecked_players()
+	local store = new_store()
+	start_match(store, {
+		sessionId = "session-dice-check-timeout",
+		matchId = "match-dice-check-timeout",
+		playerId = "local",
+		mode = "casual",
+		players = {
+			{ id = "local", hp = 6, dice_count = 5 },
+			{ id = "opponent-1", hp = 6, dice_count = 5 },
+		},
+	})
+	load_setup(store, { 1, 2, 3 })
+	complete_shake(store, "local", fixed_rng(2))
+	complete_shake(store, "opponent-1", fixed_rng(3))
+
+	dispatch_ok(store, actions.dice_check("local"))
+	local before = store:get_state()
+	assert_eq(before.flow.phase, "dice_check", "unchecked opponent keeps dice check open")
+	assert_eq(before.shake.checked["local"], true, "local check stays complete")
+	assert_eq(before.shake.checked["opponent-1"], nil, "opponent remains unchecked")
+
+	dispatch_ok(store, actions.dice_check_timeout())
+	local state = store:get_state()
+	assert_eq(state.flow.phase, "bidding_gap", "dice check timeout advances phase")
+	assert_eq(state.shake.checked["local"], true, "completed local stays checked")
+	assert_eq(state.shake.checked["opponent-1"], true, "unchecked opponent is auto checked")
+end
+
+function M.test_bidding_timeout_raises_with_skull()
+	local store = new_store()
+	start_match(store, {
+		sessionId = "session-bidding-timeout",
+		matchId = "match-bidding-timeout",
+		playerId = "local",
+		mode = "casual",
+		requiresSetupLoad = false,
+		players = {
+			{ id = "local", hp = 6, dice_count = 5 },
+			{ id = "opponent-1", hp = 6, dice_count = 5 },
+		},
+	})
+	local state = store:get_state()
+	state.flow.phase = "bidding"
+	state.turn.kind = "bidding"
+	state.turn.active_player_id = "local"
+	state.bidding.current_bid = nil
+
+	dispatch_ok(store, actions.bidding_timeout())
+	state = store:get_state()
+	assert_eq(state.bidding.current_bid.player_id, "local", "timeout bidder")
+	assert_eq(state.bidding.current_bid.count, 1, "timeout bid count")
+	assert_eq(state.bidding.current_bid.face, 1, "timeout bid uses skull")
+	assert_eq(state.bidding.skull_roulette.player_id, "local", "timeout triggers bidder roulette")
+	assert_eq(state.turn.active_player_id, "opponent-1", "timeout advances turn")
+
+	state.flow.phase = "bidding"
+	state.turn.kind = "bidding"
+	state.turn.active_player_id = "opponent-1"
+	state.bidding.current_bid = { player_id = "local", count = 7, face = 4 }
+	state.pending_load = nil
+
+	dispatch_ok(store, actions.bidding_timeout())
+	state = store:get_state()
+	assert_eq(state.bidding.current_bid.player_id, "opponent-1", "raised timeout bidder")
+	assert_eq(state.bidding.current_bid.count, 8, "timeout raises count by one")
+	assert_eq(state.bidding.current_bid.face, 1, "raised timeout uses skull")
+end
+
 function M.test_match_adapter_accepts_server_snapshot_and_reject()
 	local store = new_store()
 	local adapter = start_match(store, {
@@ -285,6 +354,8 @@ function M.test_match_adapter_accepts_server_snapshot_and_reject()
 	assert_eq(synced.turn.active_player_id, "opponent-1", "server snapshot applies active player")
 	assert_eq(synced.match.revision, 3, "server snapshot applies revision")
 	assert_eq(synced.bidding.current_bid.player_id, "local", "server snapshot applies current bid")
+	assert_eq(synced.bidding.my_bid.count, 2, "next turn draft starts at previous bid count")
+	assert_eq(synced.bidding.my_bid.face, 4, "next turn draft starts at previous bid face")
 	assert_eq(synced.shake.required_count, 6, "server snapshot normalizes shake required count")
 	assert_eq(synced.shake.counts["local"], 2, "server snapshot keeps per-player shake count")
 	assert_eq(synced.players.by_id["local"].hp, 2, "server snapshot applies public hp")
@@ -626,7 +697,7 @@ function M.test_challenger_starts_next_bidding_round()
 	assert_eq(state.turn.active_player_id, "local", "challenger starts next bidding")
 end
 
-function M.test_duel_spender_reloads_after_next_shake()
+function M.test_duel_spender_reloads_before_next_shake()
 	local store = new_store()
 	start_match(store, {
 		sessionId = "session-6",
@@ -672,11 +743,9 @@ function M.test_duel_spender_reloads_after_next_shake()
 	assert_eq(state.players.by_id["opponent-1"].hp, 6, "previous bidder spends bullets without self damage")
 	assert_eq(state.players.by_id["opponent-2"].hp, 4, "challenger takes previous bidder shots")
 	assert_eq(state.turn.active_player_id, "opponent-2", "challenger starts next shake")
-
-	complete_all_shakes(store, fixed_rng(3))
-	state = store:get_state()
 	assert_eq(state.pending_load.player_id, "opponent-1", "duel bullet spender reloads")
 	assert_eq(state.pending_load.source, "duel", "duel reload source")
+	assert_eq(state.flow.phase, "revolver_reload", "duel reload precedes next shake")
 	assert_eq(selectors.hud_kind(state), "loading", "remote reload uses loading hud")
 
 	local snapshot = qa_cli.status_snapshot(state)
@@ -687,7 +756,13 @@ function M.test_duel_spender_reloads_after_next_shake()
 
 	load_pending(store, { 1 })
 	state = store:get_state()
-	assert_eq(state.flow.phase, "dice_check", "duel reload returns to dice check")
+	assert_eq(state.flow.phase, "cup_shake", "duel reload advances to shake")
+	assert_eq(state.pending_load, nil, "duel reload is cleared before shake")
+
+	complete_all_shakes(store, fixed_rng(3))
+	state = store:get_state()
+	assert_eq(state.flow.phase, "dice_check", "next shake advances to dice check")
+	assert_eq(state.pending_load, nil, "next shake does not create another reload")
 end
 
 function M.test_eliminated_challenger_falls_forward_to_next_seat()
@@ -736,12 +811,14 @@ function M.test_eliminated_challenger_falls_forward_to_next_seat()
 	assert_eq(state.players.by_id["opponent-2"].eliminated, true, "challenger is eliminated")
 	assert_eq(state.turn.active_player_id, "opponent-3", "next seat starts after eliminated challenger")
 
-	complete_all_shakes(store, fixed_rng(3))
-	state = store:get_state()
 	if state.pending_load then
+		assert_eq(state.flow.phase, "revolver_reload", "duel spender reloads before the next shake")
 		load_pending(store, { 2 })
 		state = store:get_state()
 	end
+	assert_eq(state.flow.phase, "cup_shake", "reload completion starts the next shake")
+	complete_all_shakes(store, fixed_rng(3))
+	state = store:get_state()
 	assert_eq(state.flow.phase, "dice_check", "next seat reaches dice check")
 	for _, player_id in ipairs(state.players.order or {}) do
 		local player = store:get_state().players.by_id[player_id]

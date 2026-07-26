@@ -81,7 +81,9 @@ local function render(self, state)
 	local bid = state.bidding.my_bid
 	local current = state.bidding.current_bid
 	local visible = selectors.is_hud(state, "bidding")
-	local target_count = bid.count
+	local can_drive = local_permissions.can_bid(state)
+	local display_bid = can_drive and bid or current or bid
+	local target_count = display_bid.count
 	local half = rail_layout.CENTER_INDEX - 1
 
 	visual_status.set("rail", {
@@ -92,6 +94,7 @@ local function render(self, state)
 		hi = math.min(rail_layout.MAX_COUNT, target_count + half),
 		selected_count = target_count,
 		current_bid = current,
+		can_drive = can_drive,
 	})
 	gui_util.set_enabled("root", visible)
 	self.is_visible = visible

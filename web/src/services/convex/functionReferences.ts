@@ -55,6 +55,7 @@ export const convexFunctions = {
     joinCustomGameRoomByInviteCode: api.customGames.joinCustomGameRoomByInviteCode,
     leaveMyCustomGameRoom: api.customGames.leaveMyCustomGameRoom,
     setMyCustomGameReady: api.customGames.setMyCustomGameReady,
+    addMyCustomGameOpponent: api.customGames.addMyCustomGameOpponent,
     startMyCustomGameRoom: api.customGames.startMyCustomGameRoom,
   },
   adminMatches: {

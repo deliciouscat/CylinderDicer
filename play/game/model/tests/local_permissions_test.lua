@@ -1,4 +1,5 @@
 local local_permissions = require("ui.common.local_permissions")
+local selectors = require("game.model.selectors")
 
 local M = {}
 
@@ -37,6 +38,26 @@ end
 function M.test_dev_mode_does_not_grant_opponent_load_control()
 	assert_eq(local_permissions.can_load(state("opponent-1", "opponent-1")), false, "opponent load control")
 	assert_eq(local_permissions.can_load(state("opponent-1", "local")), true, "local load control")
+end
+
+function M.test_bid_button_requires_count_cell_to_advance()
+	local bidding_state = state("local")
+	bidding_state.bidding = {
+		current_bid = {
+			player_id = "opponent-1",
+			count = 3,
+			face = 2,
+		},
+		my_bid = {
+			count = 3,
+			face = 4,
+		},
+	}
+	assert_eq(selectors.is_my_bid_valid(bidding_state), false, "face-only raise")
+
+	bidding_state.bidding.my_bid.count = 4
+	bidding_state.bidding.my_bid.face = 1
+	assert_eq(selectors.is_my_bid_valid(bidding_state), true, "count-cell raise")
 end
 
 return M

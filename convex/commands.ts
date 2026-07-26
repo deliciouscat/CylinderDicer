@@ -43,6 +43,8 @@ import type { MatchCommand, MatchCommandType } from './protocol/commands'
 import { completeLinkedCustomGameRoom } from './customGames'
 import { getLatestMatchState, getMatchParticipant, writeStateAndPublicView } from './matches'
 import { requireCurrentUser, type GenericCtx } from './users'
+import { finalizeLadderResult } from './ladderResults'
+import { scheduleNextBotAction } from './bots/scheduling'
 
 const MAX_COMMAND_ID_LENGTH = 160
 const MAX_PAYLOAD_JSON_LENGTH = 4096
@@ -78,6 +80,8 @@ export const matchCommandTypeValidator = v.union(
 
 export const automaticMatchCommandTypeValidator = v.union(
 	v.literal('shake.timeout'),
+	v.literal('dice.check.timeout'),
+	v.literal('bidding.timeout'),
 	v.literal('bidding.open'),
 	v.literal('bid.reload_timeout'),
 	v.literal('duel.execute'),
@@ -109,7 +113,7 @@ async function markParticipantsComplete(ctx: GenericCtx, matchId: string, now: n
 	const participants = await ctx.db
 		.query('matchParticipants')
 		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
-		.collect()
+		.take(8)
 	let updated = 0
 	for (const participant of participants) {
 		if (participant.status !== 'complete') {
@@ -123,7 +127,7 @@ async function markParticipantsComplete(ctx: GenericCtx, matchId: string, now: n
 	const verifiedParticipants = await ctx.db
 		.query('matchParticipants')
 		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
-		.collect()
+		.take(8)
 	const remainingActive = verifiedParticipants.filter((participant: any) => participant.status === 'active')
 	return {
 		total: verifiedParticipants.length,
@@ -280,11 +284,13 @@ export async function applyMatchCommand(
 	let participantsCompleted
 	let linkedCustomGameRoomCompleted
 	if (result.state.match.status === 'complete') {
+		await finalizeLadderResult(ctx, match, result.state, now)
 		participantsCompleted = await markParticipantsComplete(ctx, args.matchId, now)
 		linkedCustomGameRoomCompleted = await completeLinkedCustomGameRoom(ctx, args.matchId, now)
 	}
 	await writeStateAndPublicView(ctx, result.state)
 	await scheduleAutomaticTransition(ctx, result.state)
+	await scheduleNextBotAction(ctx, result.state)
 
 	const publicSnapshot = buildPublicSnapshot(result.state)
 	const privateDelta = buildPrivateDelta(result.state, args.actorPlayerId)
@@ -402,6 +408,7 @@ export const resumeMatchFlow = mutationGeneric({
 			matchId: args.matchId,
 			revision: state.revision,
 			...(await scheduleAutomaticTransition(ctx, state)),
+			bot: await scheduleNextBotAction(ctx, state),
 		}
 	},
 })

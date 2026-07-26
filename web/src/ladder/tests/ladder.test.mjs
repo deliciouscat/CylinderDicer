@@ -8,6 +8,9 @@ const {
   normalizePlacement,
 } = require('../../../../.tmp/ladder-test/shared/ladder/placement.js')
 const {
+  calculateMultiplayerElo,
+} = require('../../../../.tmp/ladder-test/shared/ladder/rating.js')
+const {
   canFinalizeLadderQaRoster,
   ladderQaFinalizeDelayMs,
   nextLadderQaPlayerCount,
@@ -17,6 +20,7 @@ const {
 const {
   decideLadderMatch,
   estimateLadderArrivalRate,
+  ladderBotFillCount,
   ladderMmrBand,
 } = require('../../../../.tmp/ladder-test/shared/ladder/matchmaking.js')
 const {
@@ -63,6 +67,28 @@ test('normalizes placements to the exact 1–6 formula', () => {
   assert.equal(averageNormalizedPlacement([]), null)
   assert.equal(averageNormalizedPlacement([{ place: 1, playerCount: 2 }, { place: 2, playerCount: 2 }]), 3.5)
   assert.equal(formatPlacement(normalizePlacement(2, 4)), '2.7')
+})
+
+test('multiplayer Elo uses one frozen rating set and rewards placement order', () => {
+  const ratings = calculateMultiplayerElo(
+    Array.from({ length: 6 }, (_, index) => ({
+      playerId: `player-${index + 1}`,
+      rating: 1000,
+      place: index + 1,
+    })),
+  )
+  assert.deepEqual(ratings.map((result) => result.ratingDelta), [16, 10, 3, -3, -10, -16])
+  assert.equal(ratings.reduce((sum, result) => sum + result.ratingDelta, 0), 0)
+  assert.deepEqual(ratings.map((result) => result.ratingAfter), [1016, 1010, 1003, 997, 990, 984])
+})
+
+test('multiplayer Elo clamps the displayed rating at zero', () => {
+  const ratings = calculateMultiplayerElo([
+    { playerId: 'winner', rating: 1, place: 1 },
+    { playerId: 'loser', rating: 1, place: 2 },
+  ])
+  assert.equal(ratings[1].ratingAfter, 0)
+  assert.equal(ratings[1].ratingDelta, -1)
 })
 
 test('skull halves chips while pip faces add one and the display cap holds', () => {
@@ -207,6 +233,7 @@ test('matchmaking starts a partial roster after 40 seconds when fill is still to
   assert.equal(decision.shouldStart, true)
   assert.equal(decision.playerCount, 2)
   assert.equal(decision.reason, 'projected_slow_fill')
+  assert.equal(ladderBotFillCount(decision), 4)
 })
 
 test('matchmaking starts six immediately and widens MMR only with wait time', () => {
@@ -215,6 +242,7 @@ test('matchmaking starts six immediately and widens MMR only with wait time', ()
     mmr: 1000 + index * 10,
   }))
   assert.equal(decideLadderMatch(full, 3_000).reason, 'full')
+  assert.equal(ladderBotFillCount(decideLadderMatch(full, 3_000)), 0)
   assert.equal(ladderMmrBand(0), 150)
   assert.equal(ladderMmrBand(45_000), 400)
   assert.equal(estimateLadderArrivalRate([0, 20_000]), 0.05)

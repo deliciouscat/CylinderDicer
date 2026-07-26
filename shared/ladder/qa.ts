@@ -1,6 +1,23 @@
+import {
+	LADDER_MIN_WAIT_MS,
+	LADDER_TARGET_PLAYER_COUNT,
+} from './matchmaking'
+
 export const LADDER_QA_MAX_PLAYER_COUNT = 6
-export const LADDER_QA_FINALIZE_DELAY_MS = 1500
 export const LADDER_DEV_MATCH_RESUME_WINDOW_MS = 5 * 60 * 1000
+
+export function ladderQaFinalizeDelayMs(input: {
+	joinedAt: number
+	now: number
+	pendingOpponentCount: number
+}): number {
+	const playerCount = input.pendingOpponentCount + 1
+	if (playerCount >= LADDER_TARGET_PLAYER_COUNT) {
+		return 0
+	}
+	const waitedMs = Math.max(0, input.now - input.joinedAt)
+	return Math.max(0, LADDER_MIN_WAIT_MS - waitedMs)
+}
 
 export function nextLadderQaPlayerCount(pendingOpponentCount: number): number | null {
 	if (!Number.isInteger(pendingOpponentCount) || pendingOpponentCount < 0) {

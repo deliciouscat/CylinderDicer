@@ -1,5 +1,5 @@
 # 개요
-내 턴 베팅 조작 GUI. raise, face up/down, challenge 버튼을 제공한다. 선택 face는 숫자 텍스트 대신 `f{face}_a0` 정면 주사위 이미지로 표시한다.
+내 턴 베팅 조작 GUI. raise, face up/down, challenge 버튼을 제공한다. 선택 face는 숫자 텍스트 대신 `f{face}_a0` 정면 주사위 이미지로 표시한다. Space/Enter가 raise를, C가 challenge를 실행하며, 비활성 버튼은 alpha 0.5로 표시한다.
 
 # 의존성
 - `bid_controls.gui_script`

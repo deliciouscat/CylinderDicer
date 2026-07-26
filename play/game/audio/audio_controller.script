@@ -1,0 +1,61 @@
+local audio = require("game.core.audio")
+local audio_events = require("game.core.audio_events")
+local store_mod = require("game.model.store")
+
+local function request_sync(self)
+	self.needs_sync = true
+end
+
+local function sync(self, state)
+	local current = audio_events.snapshot(state)
+	for _, cue in ipairs(audio_events.cues(self.previous_snapshot, current)) do
+		audio.play_sfx(cue)
+	end
+	self.previous_snapshot = current
+end
+
+local function bind_store(self)
+	if self.store then
+		return true
+	end
+
+	self.store = store_mod.get()
+	if not self.store then
+		return false
+	end
+
+	for _, topic in ipairs({ "match", "players", "flow", "ui" }) do
+		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
+			request_sync(self)
+		end)
+	end
+
+	sync(self, self.store:get_state())
+	return true
+end
+
+function init(self)
+	self.store = nil
+	self.subs = {}
+	self.needs_sync = false
+	self.previous_snapshot = nil
+	bind_store(self)
+end
+
+function update(self, dt)
+	if not self.store and not bind_store(self) then
+		return
+	end
+	if self.needs_sync then
+		self.needs_sync = false
+		sync(self, self.store:get_state())
+	end
+end
+
+function final(self)
+	if self.store then
+		for _, token in ipairs(self.subs or {}) do
+			self.store:unsubscribe(token)
+		end
+	end
+end

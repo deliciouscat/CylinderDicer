@@ -20,6 +20,7 @@ export type GameBridgeMessageType =
   | 'PONG'
   | 'QA_COMMAND'
   | 'QA_STATUS'
+  | 'EXIT_TO_LOBBY'
   | 'UNKNOWN_MESSAGE'
 
 export interface GameBridgeMessage<TPayload = unknown> {
@@ -102,6 +103,28 @@ export interface MatchPublicView {
   revision: number
   phase: MatchPhase
   hud: string
+  match?: {
+    id: string
+    status: 'idle' | 'ready' | 'complete'
+    mode: 'dev' | 'casual' | 'ranked'
+    localPlayerId?: string
+    turnCount: number
+    eventsHash: string
+    winnerId?: string
+    result?: {
+      playerCount: number
+      rated: boolean
+      placements: Array<{
+        playerId: string
+        place: number
+        playerCount: number
+        rated: boolean
+        mmrBefore?: number
+        mmrAfter?: number
+        mmrDelta?: number
+      }>
+    }
+  }
   players: Array<{
     id: string
     name: string
@@ -202,10 +225,17 @@ export interface QaCommandPayload {
     | 'challenge'
     | 'resolve'
     | 'advance'
+    | 'result'
   payload?: {
     slot_index?: number
     count?: number
     face?: number
+    place?: number
+    player_count?: number
+    mmr_before?: number
+    mmr_after?: number
+    rated?: boolean
+    match_complete?: boolean
   }
 }
 

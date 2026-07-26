@@ -1,0 +1,620 @@
+script: "/ui/result/result.gui_script"
+fonts {
+  name: "system_font"
+  font: "/assets/fonts/noto_serif_cjk_kr_semibold.font"
+}
+textures {
+  name: "rank_result"
+  texture: "/assets/atlases/rank_result.atlas"
+}
+nodes {
+  position {
+    x: 640.0
+    y: 360.0
+  }
+  size {
+    x: 1280.0
+    y: 720.0
+  }
+  color {
+    x: 0.025
+    y: 0.018
+    z: 0.012
+  }
+  type: TYPE_BOX
+  id: "root"
+  alpha: 0.84
+}
+nodes {
+  position {
+    y: 105.0
+    z: 0.1
+  }
+  size {
+    x: 610.0
+    y: 360.0
+  }
+  type: TYPE_BOX
+  texture: "rank_result/rank_1"
+  id: "plaque"
+  parent: "root"
+}
+nodes {
+  position {
+    y: 98.0
+    z: 0.2
+  }
+  scale {
+    x: 2.5
+    y: 2.5
+  }
+  size {
+    x: 600.0
+    y: 72.0
+  }
+  color {
+    x: 0.94
+    y: 0.84
+    z: 0.56
+  }
+  type: TYPE_TEXT
+  text: "VICTORY"
+  font: "system_font"
+  id: "title"
+  parent: "root"
+}
+nodes {
+  position {
+    y: 65.0
+    z: 0.2
+  }
+  scale {
+    x: 1.25
+    y: 1.25
+  }
+  size {
+    x: 520.0
+    y: 38.0
+  }
+  color {
+    x: 0.88
+    y: 0.82
+    z: 0.68
+  }
+  type: TYPE_TEXT
+  text: "CONGRATULATIONS"
+  font: "system_font"
+  id: "congratulations"
+  parent: "root"
+}
+nodes {
+  position {
+    y: -108.0
+    z: 0.2
+  }
+  scale {
+    x: 1.15
+    y: 1.15
+  }
+  size {
+    x: 320.0
+    y: 32.0
+  }
+  color {
+    x: 0.75
+    y: 0.68
+    z: 0.55
+  }
+  type: TYPE_TEXT
+  text: "ELO"
+  font: "system_font"
+  id: "rating_label"
+  parent: "root"
+}
+nodes {
+  position {
+    y: -158.0
+    z: 0.2
+  }
+  size {
+    x: 250.0
+    y: 62.0
+  }
+  color {
+    x: 0.055
+    y: 0.043
+    z: 0.03
+  }
+  type: TYPE_BOX
+  id: "odometer"
+  parent: "root"
+  alpha: 0.9
+}
+nodes {
+  position {
+    x: -88.0
+    z: 0.1
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  type: TYPE_BOX
+  id: "digit_1_clip"
+  parent: "odometer"
+  clipping_mode: CLIPPING_MODE_STENCIL
+  clipping_visible: false
+  alpha: 0.0
+}
+nodes {
+  position {
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "0"
+  font: "system_font"
+  id: "digit_1_current"
+  parent: "digit_1_clip"
+}
+nodes {
+  position {
+    y: -58.0
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "digit_1_next"
+  parent: "digit_1_clip"
+}
+nodes {
+  position {
+    x: -44.0
+    z: 0.1
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  type: TYPE_BOX
+  id: "digit_2_clip"
+  parent: "odometer"
+  clipping_mode: CLIPPING_MODE_STENCIL
+  clipping_visible: false
+  alpha: 0.0
+}
+nodes {
+  position {
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "0"
+  font: "system_font"
+  id: "digit_2_current"
+  parent: "digit_2_clip"
+}
+nodes {
+  position {
+    y: -58.0
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "digit_2_next"
+  parent: "digit_2_clip"
+}
+nodes {
+  position {
+    z: 0.1
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  type: TYPE_BOX
+  id: "digit_3_clip"
+  parent: "odometer"
+  clipping_mode: CLIPPING_MODE_STENCIL
+  clipping_visible: false
+  alpha: 0.0
+}
+nodes {
+  position {
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "0"
+  font: "system_font"
+  id: "digit_3_current"
+  parent: "digit_3_clip"
+}
+nodes {
+  position {
+    y: -58.0
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "digit_3_next"
+  parent: "digit_3_clip"
+}
+nodes {
+  position {
+    x: 44.0
+    z: 0.1
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  type: TYPE_BOX
+  id: "digit_4_clip"
+  parent: "odometer"
+  clipping_mode: CLIPPING_MODE_STENCIL
+  clipping_visible: false
+  alpha: 0.0
+}
+nodes {
+  position {
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "0"
+  font: "system_font"
+  id: "digit_4_current"
+  parent: "digit_4_clip"
+}
+nodes {
+  position {
+    y: -58.0
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "digit_4_next"
+  parent: "digit_4_clip"
+}
+nodes {
+  position {
+    x: 88.0
+    z: 0.1
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  }
+  type: TYPE_BOX
+  id: "digit_5_clip"
+  parent: "odometer"
+  clipping_mode: CLIPPING_MODE_STENCIL
+  clipping_visible: false
+  alpha: 0.0
+}
+nodes {
+  position {
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "0"
+  font: "system_font"
+  id: "digit_5_current"
+  parent: "digit_5_clip"
+}
+nodes {
+  position {
+    y: -58.0
+    z: 0.2
+  }
+  scale {
+    x: 2.25
+    y: 2.25
+  }
+  size {
+    x: 42.0
+    y: 58.0
+  }
+  color {
+    x: 0.93
+    y: 0.85
+    z: 0.67
+  }
+  type: TYPE_TEXT
+  text: "1"
+  font: "system_font"
+  id: "digit_5_next"
+  parent: "digit_5_clip"
+}
+nodes {
+  position {
+    y: -203.0
+    z: 0.2
+  }
+  scale {
+    x: 1.35
+    y: 1.35
+  }
+  size {
+    x: 260.0
+    y: 38.0
+  }
+  color {
+    x: 0.56
+    y: 0.82
+    z: 0.56
+  }
+  type: TYPE_TEXT
+  text: "+16"
+  font: "system_font"
+  id: "rating_delta"
+  parent: "root"
+}
+nodes {
+  position {
+    y: -159.0
+    z: 0.2
+  }
+  scale {
+    x: 1.15
+    y: 1.15
+  }
+  size {
+    x: 480.0
+    y: 44.0
+  }
+  color {
+    x: 0.72
+    y: 0.66
+    z: 0.55
+  }
+  type: TYPE_TEXT
+  text: "UNRATED MATCH"
+  font: "system_font"
+  id: "unrated"
+  parent: "root"
+}
+nodes {
+  position {
+    x: -112.0
+    y: -234.0
+    z: 0.3
+  }
+  size {
+    x: 196.0
+    y: 48.0
+  }
+  color {
+    x: 0.19
+    y: 0.11
+    z: 0.065
+  }
+  type: TYPE_BOX
+  id: "lobby_button"
+  parent: "root"
+  slice9 {
+    x: 12.0
+    y: 12.0
+    z: 12.0
+    w: 12.0
+  }
+  alpha: 0.96
+}
+nodes {
+  position {
+    z: 0.1
+  }
+  scale {
+    x: 1.15
+    y: 1.15
+  }
+  size {
+    x: 180.0
+    y: 38.0
+  }
+  color {
+    x: 0.93
+    y: 0.84
+    z: 0.66
+  }
+  type: TYPE_TEXT
+  text: "LOBBY"
+  font: "system_font"
+  id: "lobby_label"
+  parent: "lobby_button"
+}
+nodes {
+  position {
+    x: 112.0
+    y: -234.0
+    z: 0.3
+  }
+  size {
+    x: 196.0
+    y: 48.0
+  }
+  color {
+    x: 0.12
+    y: 0.15
+    z: 0.13
+  }
+  type: TYPE_BOX
+  id: "spectate_button"
+  parent: "root"
+  slice9 {
+    x: 12.0
+    y: 12.0
+    z: 12.0
+    w: 12.0
+  }
+  alpha: 0.96
+}
+nodes {
+  position {
+    z: 0.1
+  }
+  scale {
+    x: 1.15
+    y: 1.15
+  }
+  size {
+    x: 180.0
+    y: 38.0
+  }
+  color {
+    x: 0.82
+    y: 0.86
+    z: 0.78
+  }
+  type: TYPE_TEXT
+  text: "SPECTATE"
+  font: "system_font"
+  id: "spectate_label"
+  parent: "spectate_button"
+}
+material: "/builtins/materials/gui.material"
+adjust_reference: ADJUST_REFERENCE_PARENT
+max_nodes: 64

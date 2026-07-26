@@ -21,6 +21,7 @@ local DEFAULT_STATE = {
 		turn_count = 0,
 		events_hash = "0",
 		winner_id = nil,
+		result = nil,
 		local_simulator = false,
 	},
 	players = {
@@ -64,6 +65,7 @@ local DEFAULT_STATE = {
 		locale = "ko",
 		hint_key = "hud.hint.waiting",
 		cosmetics = {},
+		spectating = false,
 	},
 }
 
@@ -389,6 +391,10 @@ local KEY_MAP = {
 	turnCount = "turn_count",
 	viewerPlayerId = "viewer_player_id",
 	winnerId = "winner_id",
+	playerCount = "player_count",
+	mmrBefore = "mmr_before",
+	mmrAfter = "mmr_after",
+	mmrDelta = "mmr_delta",
 }
 
 local function snake_key(key)
@@ -507,12 +513,17 @@ local function apply_server_snapshot(state, payload)
 		or next.match.local_player_id
 
 	next.match.match_id = public.match_id or snapshot.match_id or (payload or {}).matchId or next.match.match_id
+	local previous_match_status = next.match.status
 	next.match.status = match.status or next.match.status
 	next.match.mode = match.mode or next.match.mode
 	next.match.local_player_id = local_player_id
 	next.match.turn_count = match.turn_count or next.match.turn_count
 	next.match.events_hash = match.events_hash or next.match.events_hash
 	next.match.winner_id = match.winner_id
+	next.match.result = match.result
+	if next.match.status == "complete" and previous_match_status ~= "complete" then
+		next.ui.spectating = false
+	end
 	next.match.revision = public.revision or snapshot.revision or (payload or {}).revision or next.match.revision
 
 	next.flow.phase = public.phase or snapshot.phase or next.flow.phase
@@ -567,10 +578,11 @@ local function apply_server_snapshot(state, payload)
 	next.bidding.current_bid = normalize_snapshot_keys(bidding_snapshot.current_bid)
 	next.bidding.skull_roulette = normalize_snapshot_keys(bidding_snapshot.skull_roulette)
 	next.bidding.reload_gate = normalize_snapshot_keys(bidding_snapshot.reload_gate)
-	if bidding_snapshot.suggested_bid then
+	local draft_bid = bidding_snapshot.current_bid or bidding_snapshot.suggested_bid
+	if draft_bid then
 		next.bidding.my_bid = {
-			count = bidding_snapshot.suggested_bid.count or next.bidding.my_bid.count,
-			face = bidding_snapshot.suggested_bid.face or next.bidding.my_bid.face,
+			count = draft_bid.count or next.bidding.my_bid.count,
+			face = draft_bid.face or next.bidding.my_bid.face,
 		}
 		next.bidding.rail.selected_count = next.bidding.my_bid.count
 	end
@@ -661,6 +673,20 @@ local function complete_shake_load_if_ready(next)
 	end
 
 	local ok, err = enter_dice_check(next, "reload_complete_shake")
+	if not ok then
+		return err
+	end
+	return nil
+end
+
+local function complete_duel_load_if_ready(next)
+	if next.pending_load then
+		return nil
+	end
+
+	local ok, err = enter_cup_shake(next, "reload_complete_duel", {
+		reload_source = "duel",
+	})
 	if not ok then
 		return err
 	end
@@ -861,6 +887,29 @@ handlers[actions.types.SHAKE_TIMEOUT] = function(state, action)
 	return next, { "players", "turn", "flow", "shake", "ui" }
 end
 
+handlers[actions.types.DICE_CHECK_TIMEOUT] = function(state, action)
+	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "dice_check" then
+		return state, nil, "not_dice_check_turn"
+	end
+
+	local next = clone(state)
+	for _, player_id in ipairs(next.players.order or {}) do
+		local player = next.players.by_id[player_id]
+		if is_alive(player) and not next.shake.checked[player_id] then
+			next.shake.checked[player_id] = true
+		end
+	end
+
+	local ok, err = enter_bidding_gap(next, "all_checked")
+	if not ok then
+		return state, nil, err
+	end
+
+	set_hint(next)
+	append_event_hash(next, action)
+	return next, { "turn", "flow", "shake", "ui" }
+end
+
 handlers[actions.types.DICE_CHECK] = function(state, action)
 	if state.turn.kind ~= "shaking" or not state.flow or state.flow.phase ~= "dice_check" then
 		return state, nil, "not_dice_check_turn"
@@ -901,6 +950,46 @@ handlers[actions.types.BIDDING_OPEN] = function(state, action)
 	return next, { "turn", "flow", "ui" }
 end
 
+local function timeout_bid(state)
+	local player_id = state.turn and state.turn.active_player_id
+	if not player_id then
+		return nil
+	end
+	local current = state.bidding and state.bidding.current_bid
+	if not current then
+		return { player_id = player_id, count = 1, face = 1 }
+	end
+	if (current.count or 1) < bidding.DEFAULT_LIMITS.max_count then
+		return { player_id = player_id, count = current.count + 1, face = 1 }
+	end
+	return nil
+end
+
+handlers[actions.types.BIDDING_TIMEOUT] = function(state, action)
+	if state.turn.kind ~= "bidding" or not state.flow or state.flow.phase ~= "bidding" then
+		return state, nil, "not_bidding_turn"
+	end
+
+	local bid = timeout_bid(state)
+	if bid then
+		local fallback = actions.bid_raise(bid)
+		local next, topics, err = handlers[actions.types.BID_RAISE](state, fallback)
+		if not err then
+			append_event_hash(next, action)
+			return next, topics, nil
+		end
+	end
+	if state.bidding.current_bid and not state.pending_load then
+		local fallback = actions.bid_challenge()
+		local next, topics, err = handlers[actions.types.BID_CHALLENGE](state, fallback)
+		if not err then
+			append_event_hash(next, action)
+			return next, topics, nil
+		end
+	end
+	return state, nil, "bidding_timeout_no_fallback"
+end
+
 handlers[actions.types.BULLET_LOAD] = function(state, action)
 	local pending = state.pending_load
 	if not pending then
@@ -939,8 +1028,13 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 		if transition_err then
 			return state, nil, transition_err
 		end
-	elseif pending.source == "shake" or pending.source == "duel" then
+	elseif pending.source == "shake" then
 		local transition_err = complete_shake_load_if_ready(next)
+		if transition_err then
+			return state, nil, transition_err
+		end
+	elseif pending.source == "duel" then
+		local transition_err = complete_duel_load_if_ready(next)
 		if transition_err then
 			return state, nil, transition_err
 		end
@@ -1263,10 +1357,18 @@ handlers[actions.types.ROUND_ADVANCE] = function(state, action)
 			end
 		end
 	else
-		local ok, err = enter_cup_shake(next, "round_shake", {
-			reload_player_id = reload_player_id,
-			reload_source = "duel",
-		})
+		local pending = nil
+		if reload_player_id then
+			pending = pending_for_player(next, reload_player_id, "duel", 1)
+		end
+		local ok, err
+		if pending then
+			ok, err = enter_revolver_reload(next, pending, "duel_reload")
+		else
+			ok, err = enter_cup_shake(next, "round_shake", {
+				reload_source = "duel",
+			})
+		end
 		if not ok then
 			return state, nil, err
 		end
@@ -1281,11 +1383,58 @@ handlers[actions.types.MATCH_COMPLETE] = function(state, action)
 	local next = clone(state)
 	next.match.status = "complete"
 	next.match.winner_id = action.payload.winner_id
+	next.match.result = clone(action.payload.result)
 	next.turn.kind = "complete"
 	enter_phase(next, "complete")
 	set_hint(next)
 	append_event_hash(next, action)
 	return next, { "match", "turn", "flow", "ui" }
+end
+
+handlers[actions.types.RESULT_SPECTATE] = function(state, action)
+	local next = clone(state)
+	next.ui.spectating = true
+	return next, { "ui" }
+end
+
+-- Standalone local-simulator visual fixture only. It is not mapped to a server
+-- command and qa_cli keeps it behind mode=dev + local_simulator=true.
+handlers[actions.types.QA_RESULT_PREVIEW] = function(state, action)
+	local next = clone(state)
+	local player_id = next.match.local_player_id
+	local player = next.players.by_id[player_id]
+	local player_count = tonumber(action.payload.player_count) or #next.players.order
+	local place = math.max(1, math.min(player_count, tonumber(action.payload.place) or player_count))
+	local before = tonumber(action.payload.mmr_before) or 1000
+	local after = tonumber(action.payload.mmr_after) or before
+	local is_complete = action.payload.match_complete == true
+	if player and place > 1 then
+		player.hp = 0
+		player.eliminated = true
+	end
+	next.match.result = {
+		player_count = player_count,
+		rated = action.payload.rated ~= false,
+		placements = {
+			{
+				player_id = player_id,
+				place = place,
+				player_count = player_count,
+				rated = action.payload.rated ~= false,
+				mmr_before = before,
+				mmr_after = after,
+				mmr_delta = after - before,
+			},
+		},
+	}
+	next.ui.spectating = false
+	if is_complete then
+		next.match.status = "complete"
+		next.match.winner_id = place == 1 and player_id or next.players.order[1]
+		next.turn.kind = "complete"
+		enter_phase(next, "complete")
+	end
+	return next, publish_all()
 end
 
 function M.reduce(state, action)

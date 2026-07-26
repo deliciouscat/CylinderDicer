@@ -38,10 +38,18 @@ function M.test_automatic_flow_contract()
 	state.flow.phase = "bidding_gap"
 	assert_eq(flow_contract.automatic_transition(state).type, "bidding.open", "bidding gap transition")
 
+	state.flow.phase = "dice_check"
+	assert_eq(flow_contract.automatic_transition(state).type, "dice.check.timeout", "dice check timeout transition")
+	assert_eq(flow_contract.automatic_transition(state).delay, 6.0, "dice check timeout delay")
+
 	state.flow.phase = "bidding"
 	state.bidding = { reload_gate = { countdown_seconds = 3, epoch = 1 } }
 	state.pending_load = { player_id = "local", source = "bid", count = 1 }
 	assert_eq(flow_contract.automatic_transition(state).type, "bid.reload_timeout", "bid reload timeout transition")
+	state.bidding = {}
+	state.pending_load = nil
+	assert_eq(flow_contract.automatic_transition(state).type, "bidding.timeout", "bidding timeout transition")
+	assert_eq(flow_contract.automatic_transition(state).delay, 40.0, "bidding timeout delay")
 
 	state.flow.phase = "duel"
 	state.turn.kind = "dualing"
@@ -84,6 +92,27 @@ function M.test_presentation_descriptor_owns_component_selection()
 	view = presentation.describe(state)
 	assert_eq(view.hud, "duel", "duel hud")
 	assert_eq(#view.components, 1, "duel component")
+
+	state.players.by_id["local"].hp = 0
+	state.players.by_id["local"].eliminated = true
+	state.match.local_player_id = "local"
+	state.ui = { spectating = false }
+	view = presentation.describe(state)
+	assert_eq(view.result_visible, true, "eliminated local player sees result overlay")
+	assert_eq(#view.components, 2, "duel and result overlap only for elimination decision")
+
+	state.ui.spectating = true
+	view = presentation.describe(state)
+	assert_eq(view.result_visible, false, "spectating hides personal result overlay")
+	assert_eq(#view.components, 1, "spectating returns to gameplay presentation")
+
+	state.flow.phase = "complete"
+	state.turn.kind = "complete"
+	view = presentation.describe(state)
+	assert_eq(view.result_visible, true, "match completion reopens final result")
+	assert_eq(#view.components, 1, "complete phase shows result only")
+	assert_eq(view.components[1], "/ui#result", "complete result component")
+	assert_eq(view.show_turn_indicator, false, "complete hides turn indicator")
 end
 
 return M

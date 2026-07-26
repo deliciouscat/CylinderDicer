@@ -67,27 +67,6 @@ nodes {
 }
 nodes {
   position {
-    x: 42.0
-    y: -22.0
-    z: 0.3
-  }
-  size {
-    x: 116.0
-    y: 20.0
-  }
-  color {
-    x: 0.82
-    y: 0.88
-    z: 0.82
-  }
-  type: TYPE_TEXT
-  text: "disabled"
-  font: "system_font"
-  id: "pass_enabled"
-  parent: "pass_button"
-}
-nodes {
-  position {
     x: -208.0
     y: 143.0
     z: 0.3
@@ -155,27 +134,6 @@ nodes {
   text: "Challenge"
   font: "system_font"
   id: "challenge_label"
-  parent: "challenge_button"
-}
-nodes {
-  position {
-    x: 20.0
-    y: -22.0
-    z: 0.3
-  }
-  size {
-    x: 116.0
-    y: 20.0
-  }
-  color {
-    x: 0.92
-    y: 0.76
-    z: 0.76
-  }
-  type: TYPE_TEXT
-  text: "disabled"
-  font: "system_font"
-  id: "challenge_enabled"
   parent: "challenge_button"
 }
 material: "/builtins/materials/gui.material"

@@ -44,7 +44,7 @@ flowchart TD
         내 턴이 아니면:
             Carousel 상으로 중앙에 표시된 현재 플레이어의 플레이를 기다리게 됨.
             (해당 플레이어가 bidding중인 주사위 눈은 realtime으로 표시)
-            bidding 마치면 다음 플레이어 턴으로 넘어가게 됨. (제한시간 30초)
+            bidding 마치면 다음 플레이어 턴으로 넘어가게 됨. (제한시간 40초)
             해당 플레이어가 넘기기 선택하면:
                 -> 콜이 레일에 기록되고, 넘긴 본인만 우하단 cylinder에 1발 장전.
                 -> 이 장전과 다음 플레이어의 bidding은 동시에 진행한다.
@@ -53,9 +53,9 @@ flowchart TD
             해당 플레이어가 결투신청 선택하면:
                 -> `결투집행`
         내 턴이면:
-            넘기기 — 레일로 개수, ▲▼ 버튼(또는 키보드 화살표)로 주사위눈 선택. 직전 콜보다 높게만 가능. 확정 시 턴을 넘기고 본인은 `revolver reload` HUD에서 1발을 장전한다. 다음 active player는 이 장전과 병행해 bidding할 수 있다.
+            넘기기 — 레일로 개수, ▲▼ 버튼(또는 키보드 화살표)로 주사위눈 선택. 직전 콜보다 높게만 가능. `Space`(기존 `Enter`도 호환)로 확정하거나 버튼을 누르면 턴을 넘기고 본인은 `revolver reload` HUD에서 1발을 장전한다. 다음 active player는 이 장전과 병행해 bidding할 수 있다.
             Skull(1) 넘기기 — 입찰을 확정하기 전에 본인 실린더를 회전하고 본인 총으로 1회 격발한다. 탄환이 발사되면 본인 HP가 1 감소하고 일러스트가 진동한다. 생존하면 Skull 입찰을 확정하고, 사망하면 해당 입찰은 무효이며 기존 입찰을 유지한 채 다음 생존 플레이어로 넘어간다.
-            결투신청 선택 시:
+            결투신청 선택 시(버튼 또는 `C`):
                 -> `결투집행`
 
 결투 집행 후:
@@ -151,8 +151,8 @@ Sequence[
     if "bidding이 정확히 맞아서(EXACT) 모든 플레이어에게 총을 쏘는 상황":
         for 6번: "도전자부터 그 이후 플레이어 순서로 돌아가면서 russian roulette 진행. 예를 들어 [p1, p2, p3, p4] 중 p4가 도전해서 p3가 정확히 맞춘 상황이면, [p4, p1, p2, p4, p1, p2] 순서로 russian roulette 진행하는거임. A(맞춘 사람): 방아쇠/회피, B(지목 대상): 응사/걍맞기",
     "배경 shading 및 vignetting이 ease-inout 되며 사라짐",
-    "`cup shake` 차례로 돌아감. (EXACT이면 정확히 맞춘 사람만 3발 충전 후 shaking, SHORT/OVER면 바로 shaking)",
-    "SHORT/OVER에서 실제 총알이 소진됐다면 다음 shake 후 그 총알을 소진한 플레이어만 1발 장전함. 다음 첫 bidding 플레이어와 결투 후 장전 대상은 별개.",
+    "`cup shake` 차례로 돌아감. (EXACT이면 정확히 맞춘 사람만 3발 충전 후 shaking, SHORT/OVER이면 실제 총알을 소진한 플레이어만 1발 충전 후 shaking)",
+    "SHORT/OVER에서 실제 총알이 소진되지 않았다면 바로 shaking. 다음 첫 bidding 플레이어와 결투 후 장전 대상은 별개.",
     "다음 라운드의 첫 bidding 순서는 결투를 신청한 도전자가 가져감. 도전자가 탈락했다면 그 다음 생존 플레이어가 첫 bidding을 시작함.",
     "bid 장전 중 다음 입찰 전에는 장전자만 reload HUD, 나머지는 bidding HUD를 표시함. 다음 입찰이 먼저 끝나면 장전자는 3초 countdown, 나머지는 회전 cylinder loading HUD를 표시함.",
 ]

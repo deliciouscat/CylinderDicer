@@ -7,22 +7,32 @@ local function sync_signature(state)
 	end
 
 	local view = presentation.describe(state)
-	return table.concat({ view.hud or "-", view.background or "-", view.cylinder_anchor or "-" }, "|")
+	return table.concat({
+		view.hud or "-",
+		view.background or "-",
+		view.cylinder_anchor or "-",
+		tostring(view.result_visible == true),
+	}, "|")
 end
 
 local function set_block(self, view)
-	if self.active_kind ~= view.hud then
+	local active_kind = (view.hud or "-") .. ":" .. tostring(view.result_visible == true)
+	if self.active_kind ~= active_kind then
 		for _, url in ipairs(presentation.all_components()) do
 			msg.post(url, "deactivate")
 		end
-		self.active_kind = view.hud
+		self.active_kind = active_kind
 	end
 
 	for _, url in ipairs(view.components) do
 		msg.post(url, "activate")
 	end
 
-	msg.post("/ui#turn_indicator", "activate")
+	if view.show_turn_indicator then
+		msg.post("/ui#turn_indicator", "activate")
+	else
+		msg.post("/ui#turn_indicator", "deactivate")
+	end
 end
 
 local function sync_turn(self, state)

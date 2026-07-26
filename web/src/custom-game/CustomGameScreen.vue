@@ -49,9 +49,11 @@ const errorMessage = ref('')
 const busy = ref(false)
 const convexAuthReady = ref(false)
 const loadedOnce = ref(false)
+const initialRoomLoadPending = ref(true)
 
 let roomUnsubscribe: CustomGameRoomUnsubscribe | undefined
 let authSetupGeneration = 0
+let roomStateGeneration = 0
 const CONVEX_REQUEST_TIMEOUT_MS = 10000
 const CONVEX_AUTH_TIMEOUT_MS = 8000
 
@@ -105,7 +107,12 @@ const allOpponentsReady = computed(() => {
   return roomView.value?.allReady === true
 })
 const canShowStart = computed(() => isHost.value && !roomStarted.value)
-const createDisabled = computed(() => !canUseConvex.value || busy.value)
+const canAddBot = computed(() => {
+  return isHost.value
+    && !roomStarted.value
+    && roomPlayers.value.length < 6
+})
+const createDisabled = computed(() => !canUseConvex.value || busy.value || initialRoomLoadPending.value)
 const joinDisabled = computed(() => !canUseConvex.value || busy.value)
 const toolbarActionDisabled = computed(() => {
   if (!roomView.value) {
@@ -183,27 +190,41 @@ async function prepareConvexAuth(generation: number) {
   }
 }
 
-async function loadRoom() {
-  roomView.value = await withTimeout(
+async function loadRoom(generation: number) {
+  const nextRoom = await withTimeout(
     customGameService.getMyCustomGameRoom(),
     CONVEX_REQUEST_TIMEOUT_MS,
     'custom_room_load_timeout',
   )
+  if (generation !== roomStateGeneration) {
+    return false
+  }
+  roomView.value = nextRoom
+  return true
 }
 
-async function loadPublicRooms() {
-  publicRooms.value = await withTimeout(
+async function loadPublicRooms(generation: number) {
+  const nextRooms = await withTimeout(
     customGameService.listComposingCustomGameRooms(12),
     CONVEX_REQUEST_TIMEOUT_MS,
     'custom_room_list_timeout',
   )
+  if (generation !== roomStateGeneration) {
+    return false
+  }
+  publicRooms.value = nextRooms
+  return true
 }
 
 async function createRoom() {
-  if (!canUseConvex.value || busy.value) {
+  if (!canUseConvex.value || busy.value || initialRoomLoadPending.value) {
     return
   }
   busy.value = true
+  const generation = roomStateGeneration + 1
+  roomStateGeneration = generation
+  roomUnsubscribe?.unsubscribe()
+  roomUnsubscribe = undefined
   errorMessage.value = ''
   statusMessage.value = t('customGame.createQueued')
   try {
@@ -212,15 +233,21 @@ async function createRoom() {
       CONVEX_REQUEST_TIMEOUT_MS,
       'custom_room_create_timeout',
     )
+    if (generation !== roomStateGeneration) {
+      return
+    }
     if (!isRoomView(created)) {
       throw new Error((created as any)?.message ?? 'custom_room_not_available')
     }
     roomView.value = created
     publicRooms.value = []
-    subscribeRoomUpdates()
+    subscribeRoomUpdates(generation)
     selectedPlayerId.value = roomPlayers.value[1]?.id ?? 'local-player'
     statusMessage.value = selectedStatusMessage()
   } catch (error) {
+    if (generation !== roomStateGeneration) {
+      return
+    }
     errorMessage.value = error instanceof Error ? error.message : String(error)
     statusMessage.value = t('customGame.createError')
   } finally {
@@ -239,6 +266,10 @@ async function joinRoom() {
   }
 
   busy.value = true
+  const generation = roomStateGeneration + 1
+  roomStateGeneration = generation
+  roomUnsubscribe?.unsubscribe()
+  roomUnsubscribe = undefined
   errorMessage.value = ''
   statusMessage.value = t('customGame.joinQueued')
   try {
@@ -247,15 +278,21 @@ async function joinRoom() {
       CONVEX_REQUEST_TIMEOUT_MS,
       'custom_room_join_timeout',
     )
+    if (generation !== roomStateGeneration) {
+      return
+    }
     if (!isRoomView(joined)) {
       throw new Error(`${(joined as any)?.code ?? 'JOIN_FAILED'}: ${(joined as any)?.message ?? 'join_failed'}`)
     }
     roomView.value = joined
     publicRooms.value = []
-    subscribeRoomUpdates()
+    subscribeRoomUpdates(generation)
     selectedPlayerId.value = joined.viewer?.playerId ?? roomPlayers.value[0]?.id ?? 'local-player'
     statusMessage.value = t('customGame.joinedRoom')
   } catch (error) {
+    if (generation !== roomStateGeneration) {
+      return
+    }
     errorMessage.value = error instanceof Error ? error.message : String(error)
     statusMessage.value = t('customGame.joinError')
   } finally {
@@ -282,6 +319,8 @@ async function leaveRoom() {
     return
   }
   busy.value = true
+  const generation = roomStateGeneration + 1
+  roomStateGeneration = generation
   errorMessage.value = ''
   try {
     await withTimeout(
@@ -289,11 +328,17 @@ async function leaveRoom() {
       CONVEX_REQUEST_TIMEOUT_MS,
       'custom_room_leave_timeout',
     )
+    if (generation !== roomStateGeneration) {
+      return
+    }
     roomUnsubscribe?.unsubscribe()
     roomView.value = null
     inviteCodeInput.value = ''
     statusMessage.value = t('customGame.leftRoom')
   } catch (error) {
+    if (generation !== roomStateGeneration) {
+      return
+    }
     errorMessage.value = error instanceof Error ? error.message : String(error)
   } finally {
     busy.value = false
@@ -328,38 +373,88 @@ async function toggleMyReady() {
   }
 }
 
-async function refreshRoom() {
-  await loadRoom()
-  if (!roomView.value) {
-    await loadPublicRooms()
+async function refreshRoom(generation = roomStateGeneration) {
+  const roomApplied = await loadRoom(generation)
+  if (!roomApplied) {
+    return false
   }
+  if (!roomView.value) {
+    return await loadPublicRooms(generation)
+  }
+  return true
 }
 
 function refreshRoomFromToolbar() {
   if (!canUseConvex.value || busy.value) {
     return
   }
+  const generation = roomStateGeneration + 1
+  roomStateGeneration = generation
   statusMessage.value = t('customGame.loadingRoom')
-  void refreshRoom()
+  void refreshRoom(generation)
     .then(() => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       statusMessage.value = roomView.value ? selectedStatusMessage() : ''
     })
     .catch((error) => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       errorMessage.value = error instanceof Error ? error.message : String(error)
       statusMessage.value = t('customGame.roomLoadError')
     })
 }
 
 function selectedStatusMessage() {
+  if (isHost.value && !hasVirtualOpponents.value && !roomStarted.value) {
+    return t('customGame.addBotPrompt')
+  }
   return roomView.value?.allReady
     ? t('customGame.allReady')
     : t('customGame.waitingForReady')
 }
 
-function subscribeRoomUpdates() {
+async function addBot() {
+  if (!roomView.value || !canUseConvex.value || !canAddBot.value || busy.value) {
+    return
+  }
+
+  const previousPlayerIds = new Set(roomPlayers.value.map((player) => player.id))
+  busy.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('customGame.addBotQueued')
+  try {
+    const updated = await withTimeout(
+      customGameService.addMyCustomGameOpponent(roomView.value.room._id),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_add_bot_timeout',
+    )
+    if (!isRoomView(updated)) {
+      throw new Error(`${(updated as any)?.code ?? 'ADD_BOT_FAILED'}: ${(updated as any)?.message ?? 'add_bot_failed'}`)
+    }
+    roomView.value = updated
+    const addedPlayer = roomPlayers.value.find(
+      (player) => player.kind === 'virtual' && !previousPlayerIds.has(player.id),
+    )
+    selectedPlayerId.value = addedPlayer?.id ?? selectedPlayerId.value
+    statusMessage.value = t('customGame.botAdded')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.addBotError')
+  } finally {
+    busy.value = false
+  }
+}
+
+function subscribeRoomUpdates(generation = roomStateGeneration) {
   roomUnsubscribe?.unsubscribe()
   roomUnsubscribe = customGameService.subscribeMyCustomGameRoom(
     (room) => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       if (room) {
         roomView.value = room
         statusMessage.value = selectedStatusMessage()
@@ -372,6 +467,9 @@ function subscribeRoomUpdates() {
       roomView.value = null
     },
     (error) => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       errorMessage.value = error.message
     },
   )
@@ -432,10 +530,12 @@ watchEffect(() => {
 
   if (!isSignedIn.value) {
     authSetupGeneration += 1
+    roomStateGeneration += 1
     convex.setAuth(async () => null)
     convexAuthReady.value = false
     statusMessage.value = t('customGame.signInRequired')
     loadedOnce.value = false
+    initialRoomLoadPending.value = true
     return
   }
 
@@ -450,17 +550,31 @@ watchEffect(() => {
     return
   }
   loadedOnce.value = true
-  void refreshRoom()
+  initialRoomLoadPending.value = true
+  const generation = roomStateGeneration + 1
+  roomStateGeneration = generation
+  void refreshRoom(generation)
     .then(() => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       if (roomView.value) {
-        subscribeRoomUpdates()
+        subscribeRoomUpdates(generation)
         selectedPlayerId.value = roomView.value.viewer?.playerId ?? roomPlayers.value[1]?.id ?? 'local-player'
       }
       statusMessage.value = roomView.value ? selectedStatusMessage() : ''
     })
     .catch((error) => {
+      if (generation !== roomStateGeneration) {
+        return
+      }
       errorMessage.value = error instanceof Error ? error.message : String(error)
       statusMessage.value = t('customGame.roomLoadError')
+    })
+    .finally(() => {
+      if (generation === roomStateGeneration) {
+        initialRoomLoadPending.value = false
+      }
     })
 })
 
@@ -478,6 +592,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  roomStateGeneration += 1
   roomUnsubscribe?.unsubscribe()
 })
 </script>
@@ -608,6 +723,16 @@ onUnmounted(() => {
           </div>
 
           <div class="room-action-bar">
+            <button
+              v-if="isHost && !roomStarted"
+              class="texture-button texture-button--large texture-button--wood"
+              data-testid="add-custom-game-bot"
+              type="button"
+              :disabled="busy || !canUseConvex || !canAddBot"
+              @click="addBot"
+            >
+              <span>{{ t('customGame.addBot') }}</span>
+            </button>
             <button
               v-if="isGuest && !roomStarted"
               class="texture-button texture-button--large texture-button--wood"

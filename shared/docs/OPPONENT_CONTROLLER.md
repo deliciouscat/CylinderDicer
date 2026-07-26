@@ -2,7 +2,7 @@
 
 이 문서는 `http://localhost:5173/admin/opponents` 사용법을 정리한다.
 
-Opponent Controller는 QA/admin 화면이다. 직접 DB state를 패치하지 않고, Convex admin mutation을 통해 virtual opponent의 room ready와 match command를 제출한다.
+Opponent Controller는 QA/admin 화면이다. 직접 DB state를 패치하지 않고, QA gate가 열린 Convex admin mutation을 통해 `qa_manual` virtual opponent의 room ready와 dev match command를 제출한다. 실제 플레이의 `server_bot`은 이 화면이 아니라 Convex gameplay bot scheduler가 소유한다.
 
 ## Prerequisites
 
@@ -22,6 +22,13 @@ npm run phase4:check
 
 - Clerk 로그인 완료.
 - Clerk JWT template `convex`에 admin claim 포함.
+- Convex QA tools gate 활성화:
+
+```bash
+npx convex env set QA_TOOLS_ENABLED true
+```
+
+Vite dev에서는 controller route가 열린다. Production build에 특별히 노출해야 하는 QA bundle만 `VITE_ENABLE_QA_TOOLS=true`를 사용한다.
 
 최소 claim 예시:
 
@@ -57,9 +64,10 @@ Admin guard는 `convex/adminMatches.ts`의 `probeAdminAccess`로 검증된다. �
 
 - room host는 human user다.
 - virtual opponents는 `customGameParticipants`에 들어간다.
-- virtual opponent ready/unready는 Opponent Controller가 담당한다.
+- virtual opponents는 기본적으로 자동 ready다. Human guest는 본인이 ready 해야 한다.
 - 모든 required player가 ready가 되면 host가 Start 할 수 있다.
 - Start 후 room은 matchId를 갖고, play 화면은 `/play/dev?matchId=...`로 열린다.
+- Start된 casual match의 virtual participants는 `server_bot`이며 Convex scheduler가 행동한다. Opponent Controller는 이들을 대신 조작하지 않는다.
 
 ### Standalone Dev Match
 
@@ -88,7 +96,7 @@ Opponent Controller의 `Create Dev Match`가 만드는 개발용 match다.
 3. 그 뒤 player tab에서 `http://localhost:5173/play/ladder`를 연다. Player가 후순위로 들어오면서 waiting bot pool을 claim한다.
 4. player + 미리 대기하던 bot 수의 roster가 생성되는지 확인한다. 예: bots 3 + player 1 = 4-player roster.
 5. claim 뒤 admin pool은 `0/5`로 돌아가야 한다.
-6. 마지막 claim/click 1.5초 뒤 Ladder tab에 Match Found roster가 나타난다.
+6. player 입장 뒤 40초 동안 추가 bot을 모은다. 총 6명이 되면 즉시, 그렇지 않으면 40초 시점에 Ladder tab에 Match Found roster가 나타난다.
 7. countdown 후 같은 `/play/ladder?matchId=...` URL에서 기존 `ConvexPlayScreen`이 단 한 번 mount되는지 확인한다.
 
 각 click은 `adminAudit`의 `ladder.qa.add_opponent` row로 남는다. Staged row는 cancel, production match-found, QA finalize에서 정리된다. QA finalize는 기존 authoritative match/participant/snapshot contract로 `dev` match를 만들며 production adaptive 2–6 policy와 분리된다.
@@ -108,16 +116,15 @@ Expected Convex data:
 - `customGameRooms` row 생성.
 - `customGameParticipants`에 host human + virtual opponents 생성.
 - host participant는 ready 취급.
-- virtual opponents는 Opponent Controller에서 ready 처리한다.
+- virtual opponents는 자동 ready다.
 
-### 2. Admin Readies Virtual Opponents
+### 2. Optional Ready-State QA
 
-Admin tab:
+`Ready All` / `Unready All`은 composing room의 ready-state 회귀를 수동으로 만들기 위한 QA control이다. 정상 product flow에서는 필요하지 않다.
 
-1. `http://localhost:5173/admin/opponents` 접속.
-2. Custom Rooms 목록에서 host가 만든 room 선택.
-3. room panel에서 participants 확인.
-4. `Ready All` 클릭.
+1. Admin tab의 Custom Rooms에서 host room을 선택한다.
+2. `Unready All`로 Start guard를 확인한다.
+3. `Ready All`로 virtual opponents를 복원한다.
 
 Expected:
 
@@ -143,7 +150,7 @@ Expected:
 - Play tab과 Admin tab이 같은 Convex match state를 공유한다.
 - `/play/dev?matchId=...`의 current user는 match participant여야 private delta를 받을 수 있다.
 
-### 4. Manual Match Play
+### 4. Gameplay Bot Match
 
 Human player action:
 
@@ -152,19 +159,20 @@ Human player action:
 
 Virtual opponent action:
 
-- admin tab에서 selected virtual opponent를 고른 뒤 제출한다.
-- 가능한 action은 UX hint일 뿐이고, 최종 판정은 Convex reducer가 한다.
+- Custom Game에서 시작된 `server_bot`은 Convex internal scheduler가 수행한다.
+- command는 human과 같은 authoritative reducer를 통과하고 `source: bot`으로 기록된다.
+- Admin tab은 `server_bot` command를 거부한다.
 
-Typical Phase 5 sequence:
+Typical smoke:
 
 1. Human setup load.
-2. Human과 모든 virtual opponent가 각자 6회 shake를 완료한다.
-3. Human과 모든 virtual opponent가 각자 dice check를 완료한다.
+2. Bot이 자신의 legal load/shake/check command를 reaction delay 뒤 제출하는지 확인한다.
+3. 6초 timeout이 먼저 끝나도 stale bot job이 이전 phase를 덮지 않는지 확인한다.
 4. 마지막 check 후 자동으로 bidding gap/open을 통과하는지 확인한다.
-5. Bidding raise/challenge.
-6. Duel execute.
-7. Round advance.
-8. 다음 round에서도 모든 생존 플레이어가 다시 shake 가능한지 확인한다.
+5. Bot bid/challenge가 authoritative validator를 통과하는지 확인한다.
+6. 다음 round에서도 scheduler가 새 revision/phase/epoch에 맞춰 이어지는지 확인한다.
+
+Standalone `Create Dev Match`의 `qa_manual` player command 회귀는 기존처럼 Admin tab에서 수동 제출할 수 있다. 이 경로는 gameplay bot 검증이 아니다.
 
 ## URL Shortcuts
 
@@ -197,16 +205,16 @@ http://localhost:5173/play/dev?matchId=<matchId>
 - `Create Dev Match`: standalone dev match 생성 또는 재사용. Custom Game room 생성 버튼이 아니다.
 - `Remove`: one ready dev match와 그 QA game data를 영구 삭제한다. 완료/삭제 audit은 남는다.
 - `Remove All (N)`: 표시 중인 ready dev matches 전체를 같은 방식으로 영구 삭제한다.
-- `Add Ladder Opponent`: human이 없으면 QA bot pool에 먼저 enqueue하고, human이 이미 waiting이면 그 session에 직접 stage한다. Bot-first pool은 human join을 기다리고, human이 claim했거나 이미 waiting 중이면 마지막 stage 뒤 1.5초에 2–6 player dev roster를 확정한다.
+- `Add Ladder Opponent`: human이 없으면 QA bot pool에 먼저 enqueue하고, human이 이미 waiting이면 그 session에 직접 stage한다. Bot-first pool은 human join을 기다린다. Human 입장 후 총 6명이 되면 즉시, 그보다 적으면 최초 입장 40초 시점에 2–5 player dev roster를 확정한다.
 - `Ready All`: selected Custom Game room의 virtual opponents를 ready 처리한다.
 - `Unready All`: selected Custom Game room의 virtual opponents를 unready 처리한다.
 - `Open Started Match`: started room의 linked match를 admin match panel로 연다.
 - `Load All`: 현재 selected bot의 setup/bullet load를 가능한 만큼 반복 제출한다.
 - `Complete Shake`: selected bot의 로컬 gauge를 모사하지 않고 `shake.complete`를 즉시 한 번 제출한다. 모든 생존 bot에 대해 수행할 수 있으며, 6초 phase timeout이 먼저 끝나면 action이 사라진다.
 - Bid `Face`의 `Skull (1)`: protocol face `1`이다. 현재 bid보다 낮으면 controller가 다음 count의 skull로 올려 유효한 raise를 제출한다.
-- Command buttons: selected virtual opponent의 match command를 제출한다.
+- Command buttons: selected `qa_manual` dev opponent의 match command를 제출한다. `server_bot` 대상은 거부한다.
 
-Custom Game의 bot 추가/선택/room composition은 Custom Game host 화면 또는 이후 별도 asset/composition flow의 책임이다. 예외적으로 Ladder QA panel은 waiting Ladder session의 2–6 roster smoke test를 위해 virtual opponent를 stage한다. Opponent Controller의 나머지 기능은 현재 room/match에 이미 존재하는 virtual opponent를 ready/조작한다.
+Custom Game의 bot 추가/선택/room composition은 Custom Game host 화면의 책임이다. 실제 행동은 gameplay bot scheduler가 소유한다. 예외적으로 Ladder QA panel은 waiting Ladder session의 2–6 dev roster smoke test를 위해 QA fixture opponent를 stage하며, standalone dev match controls는 `qa_manual` command 회귀에 사용한다.
 
 ## Audit
 
@@ -271,7 +279,9 @@ npm run defold:web:build
 ## Current Limits
 
 - Production-grade admin role policy는 아직 dev/QA 중심이다.
-- Opponent automation은 Opponent Controller 위 계층에서 구현한다.
 - Bot은 Clerk user가 아니다.
-- Bot-host room은 현행 권장 경로가 아니다. Custom Game room은 human host가 만들고, Opponent Controller가 virtual opponent를 ready/조작한다.
+- Bot-host room은 지원하지 않는다. Custom Game room은 human host가 만들고 virtual opponents는 자동 ready/server-controlled participant가 된다.
+- Gameplay personality는 versioned code catalog를 배포해 조정한다. 운영 UI/실시간 remote tuning은 아직 없다.
 - Spectator-only play tab은 아직 지원하지 않는다.
+
+실제 bot runtime 운영은 [Gameplay Bot Runbook](./GAMEPLAY_BOTS.md)을 따른다.

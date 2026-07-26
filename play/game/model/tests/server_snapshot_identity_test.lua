@@ -53,4 +53,41 @@ function M.test_server_snapshot_preserves_character_and_duel_identity()
 	assert_eq(result.state.duel.previous_bidder_id, "qa-player-2", "duel previous bidder")
 end
 
+function M.test_server_snapshot_normalizes_result_and_reopens_after_spectating()
+	local state = reducers.initial_state()
+	state.ui.spectating = true
+	local result = reducers.reduce(state, actions.server_snapshot_apply({
+		publicSnapshot = {
+			matchId = "match-result",
+			revision = 9,
+			phase = "complete",
+			match = {
+				id = "match-result",
+				status = "complete",
+				mode = "ranked",
+				localPlayerId = "player-2",
+				winnerId = "player-1",
+				result = {
+					playerCount = 2,
+					rated = true,
+					placements = {
+						{ playerId = "player-1", place = 1, playerCount = 2, rated = true, mmrBefore = 1000, mmrAfter = 1016, mmrDelta = 16 },
+						{ playerId = "player-2", place = 2, playerCount = 2, rated = true, mmrBefore = 1000, mmrAfter = 984, mmrDelta = -16 },
+					},
+				},
+			},
+			players = {
+				{ id = "player-1", name = "Winner", hp = 1, bullets = 0, eliminated = false },
+				{ id = "player-2", name = "Local", hp = 0, bullets = 0, eliminated = true },
+			},
+		},
+		privateDelta = { viewerPlayerId = "player-2" },
+	}))
+
+	assert_eq(result.state.match.result.player_count, 2, "result player count")
+	assert_eq(result.state.match.result.placements[2].mmr_before, 1000, "rating before")
+	assert_eq(result.state.match.result.placements[2].mmr_after, 984, "rating after")
+	assert_eq(result.state.ui.spectating, false, "completion reopens result after spectating")
+end
+
 return M

@@ -46,5 +46,17 @@
   "reload.next.bid": "次: ビッドを続けます。",
   "reload.next.shake": "次: サイコロを確認します。",
   "reload.next.exact_duel": "次: 新しいシェイクラウンドへ。",
-  "reload.click_hint": "右のシリンダーの空きスロットをクリックしてください。"
+  "reload.click_hint": "右のシリンダーの空きスロットをクリックしてください。",
+  "result.victory": "勝利",
+  "result.congratulations": "おめでとう！",
+  "result.place.2": "2位",
+  "result.place.3": "3位",
+  "result.place.4": "4位",
+  "result.place.5": "5位",
+  "result.place.6": "6位",
+  "result.rating": "ELOレーティング",
+  "result.unrated": "ランク外マッチ",
+  "result.rating_pending": "最終レートはマッチ終了後に集計されます",
+  "result.lobby": "ロビーへ戻る",
+  "result.spectate": "観戦する"
 }

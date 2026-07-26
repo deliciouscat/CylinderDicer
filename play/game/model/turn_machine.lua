@@ -9,6 +9,7 @@ local PHASE_TRANSITIONS = {
 	revolver_reload = {
 		reload_complete_setup = "cup_shake",
 		reload_complete_shake = "dice_check",
+		reload_complete_duel = "cup_shake",
 		reload_complete_bid = "bidding",
 		reload_complete_exact_duel = "cup_shake",
 	},
@@ -31,6 +32,7 @@ local PHASE_TRANSITIONS = {
 	duel = {
 		match_complete = "complete",
 		round_shake = "cup_shake",
+		duel_reload = "revolver_reload",
 		exact_reload = "revolver_reload",
 	},
 	complete = {},

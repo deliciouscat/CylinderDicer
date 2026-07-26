@@ -2,8 +2,9 @@
 사운드 재생 façade. UI와 director가 구체 sound component를 모르고 이벤트 이름만 요청하게 한다.
 
 # 의존성
-- `game/director.script`: 턴/결투 사운드 요청.
-- `ui/*`: 클릭/선택 사운드 요청.
+- `game/audio/audio_controller.script`: match/reload/result snapshot cue 재생.
+- `game/core/audio_events.lua`: start/reload/clasp/dice reveal/result cue의 중복 없는 순수 판정. `drop`은 입력 시점이 아니라 `dice_check` phase 진입에 맞춘다.
+- `ui/shake`, `ui/duel`, `ui/bid_controls`: 입력 및 연출 타이밍 cue.
 - `assets/sounds/bgm`
 - `assets/sounds/sfx`
 - `assets/sounds/voice`
@@ -24,9 +25,12 @@
 local M = {}
 
 local SFX = {   -- 이벤트 이름 -> sound component url 매핑
-    click = "/audio#click", click_empty = "/audio#click_empty",
-    shake = "/audio#shake", load = "/audio#load",
-    shot  = "/audio#shot",  hit = "/audio#hit", miss = "/audio#miss",
+    start_bell = "/audio#start_bell",
+    roll = "/audio#roll", drop = "/audio#drop",
+    reload = "/audio#reload", clasp = "/audio#clasp",
+    tick = "/audio#tick", bang = "/audio#bang",
+    victory = "/audio#victory", placement = "/audio#placement",
+    button_click = "/audio#button_click",
 }
 
 function M.play_sfx(name, opts)
@@ -40,4 +44,3 @@ function M.play_voice(name, opts) sound.play("/audio#voice", opts) end
 
 return M
 ```
-

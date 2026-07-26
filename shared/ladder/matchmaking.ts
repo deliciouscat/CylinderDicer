@@ -1,6 +1,6 @@
 export const LADDER_TARGET_PLAYER_COUNT = 6
 export const LADDER_MIN_PLAYER_COUNT = 2
-export const LADDER_MIN_WAIT_MS = 10_000
+export const LADDER_MIN_WAIT_MS = 40_000
 export const LADDER_MAX_WAIT_MS = 45_000
 export const LADDER_QUEUE_HEARTBEAT_MS = 8_000
 export const LADDER_QUEUE_LEASE_MS = 20_000
@@ -19,6 +19,17 @@ export interface LadderMatchDecision {
 	mmrBand: number
 	estimatedArrivalsPerSecond: number
 	projectedFillSeconds: number | null
+}
+
+export function ladderBotFillCount(decision: LadderMatchDecision): number {
+	if (
+		!decision.shouldStart
+		|| decision.playerCount < LADDER_MIN_PLAYER_COUNT
+		|| decision.playerCount >= LADDER_TARGET_PLAYER_COUNT
+	) {
+		return 0
+	}
+	return LADDER_TARGET_PLAYER_COUNT - decision.playerCount
 }
 
 export function ladderMmrBand(waitMs: number): number {

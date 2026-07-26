@@ -1,5 +1,5 @@
 # 개요
-결투 화면 GUI. 주사위 공개, 판정 결과, 좌/우 전투 일러스트, trigger 결과를 표시한다.
+결투 화면 GUI. 주사위 공개와 좌/우 전투 일러스트, HP/탄환 indicator, trigger 연출을 표시한다.
 
 # 의존성
 - `duel.gui_script`
@@ -23,7 +23,6 @@
 # Pattern: 고정 HUD node + 반복 주사위 runtime clone.
 root (box)
 ├─ reveal_group
-│  ├─ title/title_box                              # reveal 단계
 │  ├─ duel_cup_{1..6}                              # reveal 단계 컵
 │  ├─ grid_panel                                   # 집계 영역
 │  │  └─ grid_dice_template                        # grid 좌표계 clone template
@@ -32,11 +31,10 @@ root (box)
 ├─ combat_group
 │  ├─ combat_left_body / combat_right_body         # 집행 단계 일러스트
 │  ├─ left/right HP·bullet badges                  # 집행 단계 상태
-│  ├─ combat_status / combat_shot / combat_result  # 판정/step/결과
 │  └─ hit_flash                                    # 명중 이펙트
 └─ template_group
    └─ player_dice_template                         # root 좌표계 clone template
 ```
 
 # 메모
-반복되는 주사위 노드는 `.gui`에 직접 65개를 두지 않는다. `player_dice_template`, `grid_dice_template`, `tray_dice_template`만 두고 `duel.gui_script`가 런타임에 clone한다. `reveal_group`과 `combat_group`은 phase별 visibility 경계다.
+반복되는 주사위 노드는 `.gui`에 직접 65개를 두지 않는다. `player_dice_template`, `grid_dice_template`, `tray_dice_template`만 두고 `duel.gui_script`가 런타임에 clone한다. `reveal_group`과 `combat_group`은 phase별 visibility 경계다. 로컬 공개 주사위 anchor는 안내문구와 겹치지 않도록 상대 좌석보다 위(`LOCAL_REVEAL_DICE_OFFSET_Y`)에 둔다.

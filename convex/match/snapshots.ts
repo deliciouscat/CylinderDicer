@@ -100,6 +100,7 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 			turnCount: state.match.turnCount,
 			eventsHash: state.match.eventsHash,
 			winnerId: state.match.winnerId,
+			result: state.match.result,
 		},
 		turn: {
 			activePlayerId: state.turn.activePlayerId,
