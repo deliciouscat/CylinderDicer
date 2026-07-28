@@ -13,7 +13,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync, readdirSync } from 'node:fs'
-import { access, copyFile, mkdir, readFile, stat } from 'node:fs/promises'
+import { access, copyFile, mkdir, readFile, rename, stat } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -25,6 +25,8 @@ const defaultProjectDir = path.join(repoRoot, 'play')
 const defaultBundleOutput = path.join(defaultProjectDir, 'wasm-web')
 const defaultToolsDir = path.join(scriptDir, 'defold')
 const defaultDefoldVersion = '1.13.0'
+const minimumJavaMajor = 25
+const provisionedJavaDir = path.join(defaultToolsDir, `temurin-jre-${minimumJavaMajor}`)
 
 const HELP = `
 Bundle Defold HTML5 (wasm-web) via bob.jar
@@ -193,6 +195,55 @@ function javaWorks(javaExecutable) {
   return !result.error && result.status === 0
 }
 
+function javaMajorVersion(javaExecutable) {
+	const result = spawnSync(javaExecutable, ['-version'], {
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'pipe'],
+	})
+	if (result.error || result.status !== 0) {
+		return 0
+	}
+
+	const versionOutput = `${result.stderr ?? ''}${result.stdout ?? ''}`
+	const match = versionOutput.match(/(?:version\s+\"|openjdk\s+)(\d+)/i)
+	return match ? Number(match[1]) : 0
+}
+
+async function provisionVercelJava() {
+	const provisionedJava = path.join(provisionedJavaDir, 'bin', 'java')
+	if (javaMajorVersion(provisionedJava) >= minimumJavaMajor) {
+		return provisionedJava
+	}
+
+	const archivePath = path.join(defaultToolsDir, `temurin-jre-${minimumJavaMajor}-linux-x64.tar.gz`)
+	const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${minimumJavaMajor}/ga/linux/x64/jre/hotspot/normal/eclipse`
+	console.log(`Provisioning Temurin JRE ${minimumJavaMajor} for the Vercel Defold build`)
+	console.log(`  from: ${downloadUrl}`)
+
+	await mkdir(defaultToolsDir, { recursive: true })
+	const response = await fetch(downloadUrl)
+	if (!response.ok || !response.body) {
+		throw new Error(`Failed to download Temurin JRE ${minimumJavaMajor} (${response.status} ${response.statusText})`)
+	}
+	await pipeline(response.body, createWriteStream(archivePath))
+
+	const extract = spawnSync('tar', ['-xzf', archivePath, '-C', defaultToolsDir], {
+		encoding: 'utf8',
+	})
+	if (extract.error || extract.status !== 0) {
+		throw new Error(`Failed to extract Temurin JRE ${minimumJavaMajor}: ${extract.stderr?.trim() || extract.error?.message || 'unknown error'}`)
+	}
+
+	const extractedDirectory = readdirSync(defaultToolsDir)
+		.find((entry) => entry.startsWith(`jdk-${minimumJavaMajor}`) && existsSync(path.join(defaultToolsDir, entry, 'bin', 'java')))
+	if (!extractedDirectory) {
+		throw new Error(`Temurin JRE ${minimumJavaMajor} archive did not contain a Java executable`)
+	}
+
+	await rename(path.join(defaultToolsDir, extractedDirectory), provisionedJavaDir)
+	return provisionedJava
+}
+
 function resolveJavaExecutable(explicitJava) {
   if (explicitJava) {
     return explicitJava
@@ -216,6 +267,22 @@ function resolveJavaExecutable(explicitJava) {
   return 'java'
 }
 
+async function resolveCompatibleJavaExecutable(explicitJava, dryRun) {
+  const javaExecutable = resolveJavaExecutable(explicitJava)
+  if (dryRun || javaMajorVersion(javaExecutable) >= minimumJavaMajor) {
+    return javaExecutable
+  }
+
+  // Vercel's current build image exposes Java 11, while Defold 1.12+ bob
+  // requires Java 25. Provision only there so local/editor workflows remain
+  // unchanged and reproducible.
+  if (process.env.VERCEL === '1' && process.platform === 'linux' && !explicitJava) {
+    return provisionVercelJava()
+  }
+
+  return javaExecutable
+}
+
 function assertJava(javaExecutable, dryRun) {
   if (dryRun) {
     return
@@ -235,8 +302,11 @@ function assertJava(javaExecutable, dryRun) {
     )
   }
 
-  const versionLine = `${result.stderr ?? ''}${result.stdout ?? ''}`.trim().split('\n')[0] ?? ''
-  console.log(`Using Java: ${versionLine}`)
+	const versionLine = `${result.stderr ?? ''}${result.stdout ?? ''}`.trim().split('\n')[0] ?? ''
+	if (javaMajorVersion(javaExecutable) < minimumJavaMajor) {
+		throw new Error(`Java ${minimumJavaMajor}+ is required for Defold bob.jar, but found: ${versionLine}`)
+	}
+	console.log(`Using Java: ${versionLine}`)
 }
 
 function bobDownloadUrl(defoldVersion) {
@@ -440,7 +510,7 @@ async function main() {
   await assertProject(options.projectDir)
   await prepareHtml5LoaderAssets(options.projectDir, options.dryRun)
 
-  const javaExecutable = resolveJavaExecutable(options.java)
+  const javaExecutable = await resolveCompatibleJavaExecutable(options.java, options.dryRun)
   assertJava(javaExecutable, options.dryRun)
 
   const bobJar = await ensureBobJar(options)
