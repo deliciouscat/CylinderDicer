@@ -15,6 +15,7 @@
     "defold:web:bundle": "node tools/bundle-defold-web.mjs",
     "defold:web:build": "node tools/bundle-defold-web.mjs --sync",
     "defold:web:sync": "node tools/sync-defold-web-bundle.mjs",
+    "deploy:web": "npm run defold:web:build && npm --prefix web run build",
     "phase0:test": "npm run convex:typecheck && npm run convex:domain-test && npm run ladder:test && npm run custom-game:test && npm run play-wrapper:test && npm run admin-model:test && npm run settings:test && (cd web && npm run build) && luajit play/game/model/test_runner.lua",
     "phase1:check": "node scripts/convex-phase1-check.mjs",
     "phase1:bootstrap": "node scripts/convex-phase1-bootstrap.mjs",

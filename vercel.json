@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm ci && npm ci --prefix web",
+  "buildCommand": "npm run deploy:web",
+  "outputDirectory": "web/dist",
+  "rewrites": [
+    { "source": "/play/ladder", "destination": "/index.html" },
+    { "source": "/play/custom-game", "destination": "/index.html" },
+    { "source": "/play/dev", "destination": "/index.html" },
+    { "source": "/admin/opponents", "destination": "/index.html" },
+    { "source": "/settings", "destination": "/index.html" },
+    { "source": "/sign-in", "destination": "/index.html" },
+    { "source": "/sign-up", "destination": "/index.html" }
+  ]
+}
