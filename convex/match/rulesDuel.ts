@@ -24,8 +24,9 @@
  * ```text
  * judgeDuel:
  *   actual = count dice matching bid.face
- *   if actual < bid.count then SHORT
- *   if actual > bid.count then OVER
+ *   required = skull bid ? floor(bid.count / 2) : bid.count
+ *   if actual < required then SHORT
+ *   if actual > required then OVER
  *   else EXACT
  *
  * resolveDuel:
@@ -43,7 +44,7 @@ import type {
 	PlayerState,
 } from './state'
 import { isAlive } from './state'
-import { countFace } from './rulesDice'
+import { countFace, SKULL_FACE } from './rulesDice'
 import { spinCylinder, triggerCylinder } from './rulesCylinder'
 
 export type DuelVerdict = 'SHORT' | 'OVER' | 'EXACT'
@@ -51,23 +52,35 @@ export type DuelVerdict = 'SHORT' | 'OVER' | 'EXACT'
 export interface DuelJudge {
 	verdict: DuelVerdict
 	actual: number
+	requiredCount: number
 	delta: number
 	rawDelta: number
 }
 
+export function duelRequiredCount(bid: Pick<BidState, 'count' | 'face'>): number {
+	return bid.face === SKULL_FACE ? Math.floor(bid.count / 2) : bid.count
+}
+
 export function judgeDuel(bid: BidState, players: PlayerState[]): DuelJudge {
 	const actual = countFace(players, bid.face)
-	const rawDelta = actual - bid.count
+	const requiredCount = duelRequiredCount(bid)
+	const rawDelta = actual - requiredCount
 
 	if (rawDelta < 0) {
-		return { verdict: 'SHORT', actual, delta: Math.abs(rawDelta), rawDelta }
+		return {
+			verdict: 'SHORT',
+			actual,
+			requiredCount,
+			delta: Math.abs(rawDelta),
+			rawDelta,
+		}
 	}
 
 	if (rawDelta > 0) {
-		return { verdict: 'OVER', actual, delta: rawDelta, rawDelta }
+		return { verdict: 'OVER', actual, requiredCount, delta: rawDelta, rawDelta }
 	}
 
-	return { verdict: 'EXACT', actual, delta: 0, rawDelta }
+	return { verdict: 'EXACT', actual, requiredCount, delta: 0, rawDelta }
 }
 
 function publicPlayerSnapshot(player: PlayerState): Omit<PlayerState, 'cylinder'> {
@@ -156,6 +169,7 @@ function resolveDuelShots(state: MatchState, duel: DuelState): DuelResolutionSta
 	const targetId = duel.judge.verdict === 'SHORT' ? duel.previousBidderId : duel.challengerId
 	const shooter = state.players.byId[shooterId]
 	const target = state.players.byId[targetId]
+	const cylinderSlotsBefore = shooter ? [...shooter.cylinder.slots] : []
 	const steps: DuelResolutionState['steps'] = []
 	const hpChanges: Record<string, number> = {}
 
@@ -188,6 +202,7 @@ function resolveDuelShots(state: MatchState, duel: DuelState): DuelResolutionSta
 		shooterId,
 		targetId,
 		rouletteSubjectId: shooterId,
+		cylinderSlotsBefore,
 		steps,
 		hpChanges,
 	}
@@ -200,6 +215,7 @@ function resolvePerfectDuel(state: MatchState, duel: DuelState): DuelResolutionS
 	const previousId = duel.previousBidderId
 	const targets = targetOrderFromChallenger(state, duel.challengerId, previousId)
 	const actor = state.players.byId[previousId]
+	const cylinderSlotsBefore = actor ? [...actor.cylinder.slots] : []
 	const steps: DuelResolutionState['steps'] = []
 	const hpChanges: Record<string, number> = {}
 
@@ -233,6 +249,7 @@ function resolvePerfectDuel(state: MatchState, duel: DuelState): DuelResolutionS
 		actorId: previousId,
 		shooterId: previousId,
 		targets,
+		cylinderSlotsBefore,
 		steps,
 		hpChanges,
 		reloadPlayerId: previousId,

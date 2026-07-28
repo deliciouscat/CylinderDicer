@@ -8,7 +8,7 @@ import type {
   StartMatchPayload,
 } from '@shared/protocol/game-bridge'
 import { useConvexClient } from 'convex-vue'
-import { computed, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import {
   createMatchService,
   mergeMatchSnapshots,
@@ -19,6 +19,10 @@ import {
   type SnapshotUnsubscribe,
 } from '../services/convex/matchService'
 import DefoldCanvas from './DefoldCanvas.vue'
+import {
+  SnapshotCoordinator,
+  type SnapshotScope,
+} from './snapshotCoordinator'
 
 const props = withDefaults(defineProps<{
   matchId?: string
@@ -53,7 +57,11 @@ let drainingPlayerCommands = false
 
 let publicUnsubscribe: SnapshotUnsubscribe | undefined
 let commandCounter = 0
+let commandGeneration = 0
+let screenRequestGeneration = 0
+let disposed = false
 let lastFlowResumeKey = ''
+const snapshotCoordinator = new SnapshotCoordinator()
 
 const SNAPSHOT_ACK_RETRY_DELAYS_MS = [0, 100, 250, 500, 900, 1400, 2200]
 
@@ -61,7 +69,6 @@ const isSignedIn = computed(() => auth.isSignedIn.value === true)
 const canStart = computed(() => auth.isLoaded.value && isSignedIn.value)
 const isLinkedMatch = computed(() => linkedMatchId.value.length > 0)
 const primaryActionLabel = computed(() => isLinkedMatch.value ? 'Reload Match' : 'Start / Reuse')
-const screenTitle = computed(() => props.source === 'ladder' ? 'Ladder Match' : 'Convex Dev Match')
 
 const startMatchPayload = computed<StartMatchPayload | undefined>(() => {
   if (!createdMatch.value || !mergedSnapshot.value?.viewerPlayerId) {
@@ -77,7 +84,11 @@ const startMatchPayload = computed<StartMatchPayload | undefined>(() => {
 })
 
 const serverSnapshotPayload = computed<ServerSnapshotPayload | null>(() => {
-  if (!createdMatch.value || !mergedSnapshot.value) {
+  if (
+    !createdMatch.value
+    || !mergedSnapshot.value
+    || mergedSnapshot.value.matchId !== createdMatch.value.matchId
+  ) {
     return null
   }
 
@@ -94,14 +105,79 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-async function refreshMatchViewsUntil(matchId: string, revision: number | undefined) {
+function activateMatchScope(matchId: string): SnapshotScope {
+  publicUnsubscribe?.unsubscribe()
+  publicUnsubscribe = undefined
+  pendingPlayerCommands.length = 0
+  commandGeneration += 1
+  commandInFlight.value = false
+  drainingPlayerCommands = false
+  defoldSnapshotAckRevision.value = null
+  lastFlowResumeKey = ''
+  lastRejected.value = null
+  createdMatch.value = null
+  publicSnapshot.value = null
+  privateDelta.value = null
+  mergedSnapshot.value = null
+  return snapshotCoordinator.begin(matchId)
+}
+
+function applySnapshotPair(
+  scope: SnapshotScope,
+  nextPublicSnapshot: MatchPublicSnapshot | null | undefined,
+  nextPrivateDelta: MatchPrivateDelta | null | undefined,
+): boolean {
+  if (
+    !snapshotCoordinator.canApply(scope, nextPublicSnapshot, nextPrivateDelta)
+    || !nextPublicSnapshot
+    || !nextPrivateDelta
+    || !snapshotCoordinator.commit(scope, nextPublicSnapshot.revision)
+  ) {
+    return false
+  }
+
+  publicSnapshot.value = nextPublicSnapshot
+  privateDelta.value = nextPrivateDelta
+  mergedSnapshot.value = mergeMatchSnapshots(nextPublicSnapshot, nextPrivateDelta)
+  createdMatch.value = {
+    ...(createdMatch.value ?? {}),
+    matchId: scope.matchId,
+    revision: nextPublicSnapshot.revision,
+  }
+  resumeAutomaticFlow(nextPublicSnapshot, scope)
+  return true
+}
+
+async function refreshMatchViews(
+  matchId: string,
+  scope = snapshotCoordinator.capture(matchId),
+): Promise<boolean> {
+  const [nextPublicSnapshot, nextPrivateDelta] = await Promise.all([
+    matchService.getPublicSnapshot(matchId),
+    matchService.getPrivateDelta(matchId),
+  ])
+  return applySnapshotPair(scope, nextPublicSnapshot, nextPrivateDelta)
+}
+
+async function refreshMatchViewsUntil(
+  matchId: string,
+  revision: number | undefined,
+  scope: SnapshotScope,
+): Promise<boolean> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    await refreshMatchViews(matchId)
-    if (!revision || (serverSnapshotPayload.value?.revision ?? 0) >= revision) {
-      return
+    if (!snapshotCoordinator.isCurrent(scope)) {
+      return false
+    }
+    const applied = await refreshMatchViews(matchId, scope)
+    if (
+      applied
+      && (revision === undefined || (serverSnapshotPayload.value?.revision ?? -1) >= revision)
+    ) {
+      return true
     }
     await sleep(100 + attempt * 150)
   }
+  return false
 }
 
 function sendCurrentServerSnapshotToDefold() {
@@ -115,10 +191,16 @@ function sendCurrentServerSnapshotToDefold() {
   })
 }
 
-async function sendCurrentServerSnapshotToDefoldUntilAck(revision: number | undefined) {
+async function sendCurrentServerSnapshotToDefoldUntilAck(
+  revision: number | undefined,
+  scope: SnapshotScope,
+) {
   for (const delay of SNAPSHOT_ACK_RETRY_DELAYS_MS) {
     if (delay > 0) {
       await sleep(delay)
+    }
+    if (!snapshotCoordinator.isCurrent(scope)) {
+      return false
     }
     if (revision && (defoldSnapshotAckRevision.value ?? 0) >= revision) {
       return true
@@ -133,12 +215,11 @@ function generateCommandId(type: string) {
   return `web-${Date.now()}-${commandCounter}-${type}`
 }
 
-function refreshMergedSnapshot() {
-  mergedSnapshot.value = mergeMatchSnapshots(publicSnapshot.value, privateDelta.value)
-}
-
-function resumeAutomaticFlow(snapshot: MatchPublicSnapshot | null | undefined) {
-  if (!snapshot || !createdMatch.value) {
+function resumeAutomaticFlow(
+  snapshot: MatchPublicSnapshot | null | undefined,
+  scope: SnapshotScope,
+) {
+  if (!snapshot || !createdMatch.value || !snapshotCoordinator.isCurrent(scope)) {
     return
   }
   const duel = (snapshot as MatchPublicSnapshot & { duel?: { phase?: string } }).duel
@@ -153,85 +234,73 @@ function resumeAutomaticFlow(snapshot: MatchPublicSnapshot | null | undefined) {
   }
   lastFlowResumeKey = key
   void matchService.resumeMatchFlow(snapshot.matchId).catch((error) => {
+    if (!snapshotCoordinator.isCurrent(scope)) {
+      return
+    }
     lastFlowResumeKey = ''
     errorMessage.value = error instanceof Error ? error.message : String(error)
   })
 }
 
-async function refreshPrivateDelta(matchId: string) {
-  privateDelta.value = await matchService.getPrivateDelta(matchId)
-  refreshMergedSnapshot()
-}
-
-async function refreshMatchViews(matchId: string) {
-  const [nextPublicSnapshot, nextPrivateDelta] = await Promise.all([
-    matchService.getPublicSnapshot(matchId),
-    matchService.getPrivateDelta(matchId),
-  ])
-  publicSnapshot.value = nextPublicSnapshot
-  privateDelta.value = nextPrivateDelta
-  refreshMergedSnapshot()
-  resumeAutomaticFlow(nextPublicSnapshot)
-}
-
-function subscribePublicSnapshot(matchId: string) {
+function subscribePublicSnapshot(matchId: string, scope: SnapshotScope) {
   publicUnsubscribe?.unsubscribe()
   publicUnsubscribe = matchService.subscribePublicView(matchId, {
     onSnapshot: () => {
-      void refreshMatchViews(matchId)
+      if (!snapshotCoordinator.isCurrent(scope)) {
+        return
+      }
+      void refreshMatchViewsUntil(matchId, undefined, scope).catch((error) => {
+        if (snapshotCoordinator.isCurrent(scope)) {
+          errorMessage.value = error instanceof Error ? error.message : String(error)
+        }
+      })
     },
     onError: (error) => {
-      errorMessage.value = error.message
+      if (snapshotCoordinator.isCurrent(scope)) {
+        errorMessage.value = error.message
+      }
     },
   })
 }
 
 async function loadExistingMatch(matchId: string) {
-  if (loadingMatch.value) {
-    return
-  }
   if (!canStart.value) {
     status.value = 'Sign in to open this Convex dev match.'
     return
   }
 
+  const requestGeneration = ++screenRequestGeneration
+  const scope = activateMatchScope(matchId)
   loadingMatch.value = true
   status.value = props.source === 'ladder'
     ? 'Opening Ladder match...'
     : 'Opening linked Convex dev match...'
   errorMessage.value = ''
   try {
-    const nextPublicSnapshot = await matchService.getPublicSnapshot(matchId)
-    const nextPrivateDelta = await matchService.getPrivateDelta(matchId)
-    if (!nextPublicSnapshot || !nextPrivateDelta) {
+    const applied = await refreshMatchViewsUntil(matchId, undefined, scope)
+    if (!snapshotCoordinator.isCurrent(scope) || requestGeneration !== screenRequestGeneration) {
+      return
+    }
+    if (!applied || !publicSnapshot.value || !privateDelta.value) {
       createdMatch.value = null
-      publicSnapshot.value = nextPublicSnapshot
-      privateDelta.value = nextPrivateDelta
-      refreshMergedSnapshot()
-      errorMessage.value = 'MATCH_NOT_AVAILABLE: current user is not a participant or the match does not exist.'
+      errorMessage.value = 'MATCH_NOT_AVAILABLE: match is missing, inaccessible, or its snapshot pair is incoherent.'
       status.value = 'Could not open linked match.'
       return
     }
 
-    createdMatch.value = {
-      matchId,
-      revision: nextPublicSnapshot.revision,
-      publicSnapshot: nextPublicSnapshot,
-      privateDelta: nextPrivateDelta,
-    }
-    publicSnapshot.value = nextPublicSnapshot
-    privateDelta.value = nextPrivateDelta
-    refreshMergedSnapshot()
-    subscribePublicSnapshot(matchId)
-    resumeAutomaticFlow(nextPublicSnapshot)
+    subscribePublicSnapshot(matchId, scope)
     status.value = props.source === 'ladder'
       ? `Opened Ladder match ${matchId.slice(-6)}.`
       : `Opened linked Convex dev match ${matchId.slice(-6)}.`
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-    status.value = 'Could not open linked match.'
+    if (snapshotCoordinator.isCurrent(scope) && requestGeneration === screenRequestGeneration) {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+      status.value = 'Could not open linked match.'
+    }
   } finally {
-    loadingMatch.value = false
+    if (snapshotCoordinator.isCurrent(scope) && requestGeneration === screenRequestGeneration) {
+      loadingMatch.value = false
+    }
   }
 }
 
@@ -249,6 +318,7 @@ async function createDevMatch() {
   }
 
   loadingMatch.value = true
+  const requestGeneration = ++screenRequestGeneration
   status.value = 'Creating Convex dev match...'
   errorMessage.value = ''
   try {
@@ -256,18 +326,33 @@ async function createDevMatch() {
       localPlayerName: 'You',
       requiresSetupLoad: true,
     })
+    if (disposed || requestGeneration !== screenRequestGeneration) {
+      return
+    }
+
+    const scope = activateMatchScope(match.matchId)
     createdMatch.value = match
-    publicSnapshot.value = match.publicSnapshot ?? await matchService.getPublicSnapshot(match.matchId)
-    privateDelta.value = match.privateDelta ?? await matchService.getPrivateDelta(match.matchId)
-    refreshMergedSnapshot()
-    subscribePublicSnapshot(match.matchId)
-    resumeAutomaticFlow(publicSnapshot.value)
+    const applied = match.publicSnapshot && match.privateDelta
+      ? applySnapshotPair(scope, match.publicSnapshot, match.privateDelta)
+      : await refreshMatchViewsUntil(match.matchId, match.revision, scope)
+    if (!snapshotCoordinator.isCurrent(scope) || !applied) {
+      if (snapshotCoordinator.isCurrent(scope)) {
+        errorMessage.value = 'SNAPSHOT_INCOHERENT: could not load a matching public/private snapshot pair.'
+        status.value = 'Could not create Convex dev match.'
+      }
+      return
+    }
+    subscribePublicSnapshot(match.matchId, scope)
     status.value = match.reused ? 'Reused active Convex dev match.' : 'Created Convex dev match.'
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
-    status.value = 'Could not create Convex dev match.'
+    if (!disposed && requestGeneration === screenRequestGeneration) {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+      status.value = 'Could not create Convex dev match.'
+    }
   } finally {
-    loadingMatch.value = false
+    if (!disposed && requestGeneration === screenRequestGeneration) {
+      loadingMatch.value = false
+    }
   }
 }
 
@@ -276,8 +361,17 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
     return
   }
 
-  commandInFlight.value = true
   const targetMatchId = command.matchId ?? createdMatch.value.matchId
+  const scope = snapshotCoordinator.capture(targetMatchId)
+  if (
+    targetMatchId !== createdMatch.value.matchId
+    || !snapshotCoordinator.isCurrent(scope)
+  ) {
+    return
+  }
+
+  const activeCommandGeneration = commandGeneration
+  commandInFlight.value = true
   try {
     const submittedCommandId = command.commandId ?? generateCommandId(command.type)
     const result = await matchService.submitCommand({
@@ -290,14 +384,30 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
       payload: command.payload,
     }) as { ok?: boolean; [key: string]: any }
 
+    if (
+      activeCommandGeneration !== commandGeneration
+      || !snapshotCoordinator.isCurrent(scope)
+    ) {
+      return
+    }
+
     if (result.ok === false) {
       const rejectedPrivateDelta = result.privateDelta ?? privateDelta.value
-      if (result.publicSnapshot) {
-        publicSnapshot.value = result.publicSnapshot
-        privateDelta.value = rejectedPrivateDelta
-        refreshMergedSnapshot()
-      } else {
-        await refreshMatchViews(targetMatchId)
+      const applied = result.publicSnapshot
+        ? applySnapshotPair(scope, result.publicSnapshot, rejectedPrivateDelta)
+        : false
+      if (!applied) {
+        await refreshMatchViewsUntil(
+          targetMatchId,
+          Number(result.revision ?? 0) || undefined,
+          scope,
+        )
+      }
+      if (
+        activeCommandGeneration !== commandGeneration
+        || !snapshotCoordinator.isCurrent(scope)
+      ) {
+        return
       }
       const rejected: CommandRejectedPayload = {
         matchId: result.matchId,
@@ -306,9 +416,7 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
         message: result.message ?? 'command_rejected',
         details: result.details,
         revision: result.revision,
-			snapshot: result.publicSnapshot
-			  ? mergeMatchSnapshots(result.publicSnapshot, rejectedPrivateDelta) ?? undefined
-			  : mergedSnapshot.value ?? undefined,
+        snapshot: mergedSnapshot.value ?? undefined,
       }
       lastRejected.value = rejected
       errorMessage.value = `${rejected.code}: ${rejected.message}`
@@ -317,8 +425,11 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
         type: 'COMMAND_REJECTED',
         payload: rejected,
       })
-      const acked = await sendCurrentServerSnapshotToDefoldUntilAck(Number(result.revision ?? 0) || undefined)
-      if (!acked) {
+      const acked = await sendCurrentServerSnapshotToDefoldUntilAck(
+        Number(result.revision ?? 0) || undefined,
+        scope,
+      )
+      if (!acked && snapshotCoordinator.isCurrent(scope)) {
         errorMessage.value = `SNAPSHOT_NOT_ACKED: revision ${result.revision ?? '?'}`
       }
       return rejected
@@ -330,21 +441,38 @@ async function submitPlayerCommand(command: PlayerCommandPayload) {
 
     // Prefer mutation-returned snapshots: they are authoritative and avoid
     // racing Convex query read-your-writes lag after submitMatchCommand.
-    if (result.publicSnapshot) {
-      publicSnapshot.value = result.publicSnapshot
-      privateDelta.value = result.privateDelta ?? privateDelta.value
-      refreshMergedSnapshot()
-    } else {
-      await refreshMatchViewsUntil(targetMatchId, Number(result.revision ?? 0) || undefined)
+    const applied = result.publicSnapshot
+      ? applySnapshotPair(scope, result.publicSnapshot, result.privateDelta)
+      : false
+    if (!applied) {
+      await refreshMatchViewsUntil(
+        targetMatchId,
+        Number(result.revision ?? 0) || undefined,
+        scope,
+      )
+    }
+    if (
+      activeCommandGeneration !== commandGeneration
+      || !snapshotCoordinator.isCurrent(scope)
+    ) {
+      return
     }
     await nextTick()
-    const acked = await sendCurrentServerSnapshotToDefoldUntilAck(Number(result.revision ?? 0) || undefined)
-    if (!acked) {
+    const acked = await sendCurrentServerSnapshotToDefoldUntilAck(
+      Number(result.revision ?? 0) || undefined,
+      scope,
+    )
+    if (!acked && snapshotCoordinator.isCurrent(scope)) {
       errorMessage.value = `SNAPSHOT_NOT_ACKED: revision ${result.revision ?? '?'}`
     }
     return undefined
   } finally {
-    commandInFlight.value = false
+    if (
+      activeCommandGeneration === commandGeneration
+      && snapshotCoordinator.isCurrent(scope)
+    ) {
+      commandInFlight.value = false
+    }
   }
 }
 
@@ -352,9 +480,13 @@ async function drainPlayerCommandQueue() {
   if (drainingPlayerCommands) {
     return
   }
+  const activeCommandGeneration = commandGeneration
   drainingPlayerCommands = true
   try {
-    while (pendingPlayerCommands.length > 0) {
+    while (
+      activeCommandGeneration === commandGeneration
+      && pendingPlayerCommands.length > 0
+    ) {
       const command = pendingPlayerCommands.shift()
       if (!command) {
         continue
@@ -366,7 +498,9 @@ async function drainPlayerCommandQueue() {
       }
     }
   } finally {
-    drainingPlayerCommands = false
+    if (activeCommandGeneration === commandGeneration) {
+      drainingPlayerCommands = false
+    }
   }
 }
 
@@ -379,7 +513,13 @@ async function handleDefoldMessage(message: GameBridgeMessage) {
   if (message.type === 'SERVER_SNAPSHOT_RECEIVED') {
     const payload = (message.payload ?? {}) as Record<string, unknown>
     const revision = Number(payload.revision ?? 0)
-    if (revision > 0 && payload.applied !== false) {
+    const matchId = typeof payload.matchId === 'string' ? payload.matchId : ''
+    if (
+      matchId === createdMatch.value?.matchId
+      && Number.isSafeInteger(revision)
+      && revision > 0
+      && payload.applied !== false
+    ) {
       defoldSnapshotAckRevision.value = Math.max(defoldSnapshotAckRevision.value ?? 0, revision)
     }
     return
@@ -389,7 +529,25 @@ async function handleDefoldMessage(message: GameBridgeMessage) {
     return
   }
 
-  pendingPlayerCommands.push(message.payload as PlayerCommandPayload)
+  if (
+    commandInFlight.value
+    || drainingPlayerCommands
+    || pendingPlayerCommands.length > 0
+  ) {
+    return
+  }
+
+  if (!message.payload || typeof message.payload !== 'object' || Array.isArray(message.payload)) {
+    return
+  }
+  const command = message.payload as PlayerCommandPayload
+  if (
+    command?.matchId
+    && command.matchId !== createdMatch.value?.matchId
+  ) {
+    return
+  }
+  pendingPlayerCommands.push(command)
   void drainPlayerCommandQueue()
 }
 
@@ -435,8 +593,26 @@ watchEffect(() => {
   }
 })
 
+watch(
+  () => props.matchId,
+  (nextMatchId, previousMatchId) => {
+    if (!nextMatchId || nextMatchId === previousMatchId) {
+      return
+    }
+    linkedMatchId.value = nextMatchId
+    if (canStart.value) {
+      void loadExistingMatch(nextMatchId)
+    }
+  },
+)
+
 onUnmounted(() => {
+  disposed = true
+  screenRequestGeneration += 1
+  commandGeneration += 1
+  pendingPlayerCommands.length = 0
   publicUnsubscribe?.unsubscribe()
+  snapshotCoordinator.invalidate()
 })
 </script>
 
@@ -446,9 +622,7 @@ onUnmounted(() => {
       <button class="convex-play-screen__back" type="button" @click="emit('back')">
         Back
       </button>
-      <div>
-        <h1>{{ screenTitle }}</h1>
-        <p>{{ status }}</p>
+      <div v-if="errorMessage" class="convex-play-screen__notice">
         <p v-if="errorMessage" class="convex-play-screen__error">{{ errorMessage }}</p>
       </div>
       <button class="convex-play-screen__restart" type="button" :disabled="!canStart || loadingMatch" @click="createDevMatch">
@@ -482,7 +656,6 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
-.convex-play-screen__header h1,
 .convex-play-screen__header p {
   margin: 0;
 }

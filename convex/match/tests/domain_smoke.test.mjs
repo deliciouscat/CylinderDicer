@@ -3,12 +3,13 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 
 const require = createRequire(import.meta.url)
-const { createInitialMatchState } = require('../../../.tmp/convex-domain/match/state.js')
-const { reduceMatchState } = require('../../../.tmp/convex-domain/match/reducer.js')
-const { buildPrivateDelta, buildPublicSnapshot, hudKind } = require('../../../.tmp/convex-domain/match/snapshots.js')
-const { automaticTransitionFor, automaticTransitionScheduleArgs, matchesAutomaticTransition } = require('../../../.tmp/convex-domain/match/flow.js')
-const { deriveAvailableActions } = require('../../../.tmp/convex-domain/match/capabilities.js')
-const { buildPlacementResult, finalizeMatchResult } = require('../../../.tmp/convex-domain/match/results.js')
+const { createInitialMatchState } = require('../../../.tmp/convex-domain/convex/match/state.js')
+const { reduceMatchState } = require('../../../.tmp/convex-domain/convex/match/reducer.js')
+const { buildPrivateDelta, buildPublicSnapshot, hudKind } = require('../../../.tmp/convex-domain/convex/match/snapshots.js')
+const { automaticTransitionFor, automaticTransitionScheduleArgs, matchesAutomaticTransition } = require('../../../.tmp/convex-domain/convex/match/flow.js')
+const { deriveAvailableActions } = require('../../../.tmp/convex-domain/convex/match/capabilities.js')
+const { buildPlacementResult, finalizeMatchResult } = require('../../../.tmp/convex-domain/convex/match/results.js')
+const { duelRequiredCount, judgeDuel } = require('../../../.tmp/convex-domain/convex/match/rulesDuel.js')
 
 function action(type, actorPlayerId, payload) {
 	return {
@@ -111,6 +112,32 @@ test('legacy default skins project to deterministic seat characters', () => {
 	)
 })
 
+test('explicit character identity survives a noncanonical bot seat', () => {
+	const state = createInitialMatchState({
+		matchId: 'character-identity-match',
+		mode: 'casual',
+		localPlayerId: 'human-1',
+		players: [
+			{ id: 'human-1', name: 'Human One' },
+			{ id: 'human-2', name: 'Human Two' },
+			{
+				id: 'player-3',
+				virtualOpponentId: 'virtual-hush',
+				participantKind: 'virtual',
+				name: 'Hush Feather',
+				characterKey: 'hush-feather',
+			},
+		],
+	})
+	const player = buildPublicSnapshot(state).players.find(
+		(candidate) => candidate.id === 'player-3',
+	)
+
+	assert.equal(player.name, 'Hush Feather')
+	assert.equal(player.characterKey, 'hush-feather')
+	assert.equal(player.skin, 'hush-feather')
+})
+
 test('challenge pairs the active Samuel seat with previous bidder Hush', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
@@ -126,6 +153,44 @@ test('challenge pairs the active Samuel seat with previous bidder Hush', () => {
 	assert.equal(snapshot.duel.previousBidderId, 'opponent-1')
 	assert.equal(snapshot.duel.players.find((player) => player.id === 'opponent-2').skin, 'samuel-saber')
 	assert.equal(snapshot.duel.players.find((player) => player.id === 'opponent-1').skin, 'hush-feather')
+})
+
+test('Skull duel adjudication halves the rail count and floors odd values', () => {
+	const players = [
+		{ eliminated: false, dice: [1, 1, 1, 2, 3] },
+		{ eliminated: false, dice: [2, 3, 4, 5, 6] },
+	]
+
+	assert.equal(duelRequiredCount({ count: 7, face: 1 }), 3)
+	assert.equal(duelRequiredCount({ count: 8, face: 1 }), 4)
+	assert.equal(duelRequiredCount({ count: 1, face: 1 }), 0)
+	assert.equal(duelRequiredCount({ count: 7, face: 4 }), 7)
+
+	assert.deepEqual(judgeDuel({ playerId: 'bidder', count: 7, face: 1 }, players), {
+		verdict: 'EXACT',
+		actual: 3,
+		requiredCount: 3,
+		delta: 0,
+		rawDelta: 0,
+	})
+})
+
+test('Skull duel shot count uses the difference from the halved requirement', () => {
+	const short = judgeDuel(
+		{ playerId: 'bidder', count: 8, face: 1 },
+		[{ eliminated: false, dice: [1, 1, 2, 3, 4] }],
+	)
+	const over = judgeDuel(
+		{ playerId: 'bidder', count: 4, face: 1 },
+		[{ eliminated: false, dice: [1, 1, 1, 2, 3] }],
+	)
+
+	assert.equal(short.verdict, 'SHORT')
+	assert.equal(short.requiredCount, 4)
+	assert.equal(short.delta, 2)
+	assert.equal(over.verdict, 'OVER')
+	assert.equal(over.requiredCount, 2)
+	assert.equal(over.delta, 1)
 })
 
 test('SHORT gives the challenger attack chances against the previous bidder', () => {
@@ -144,11 +209,13 @@ test('SHORT gives the challenger attack chances against the previous bidder', ()
 	state = dispatch(state, 'bid.challenge', 'local-player')
 	assert.equal(state.duel.judge.verdict, 'SHORT')
 	assert.equal(state.duel.revolverSpin.playerId, 'local-player')
+	const cylinderSlotsBefore = [...state.players.byId['local-player'].cylinder.slots]
 	state = dispatchAutomaticTransition(state, 'duel.execute')
 
 	assert.equal(state.duel.resolution.shooterId, 'local-player')
 	assert.equal(state.duel.resolution.rouletteSubjectId, 'local-player')
 	assert.equal(state.duel.resolution.targetId, 'opponent-1')
+	assert.deepEqual(state.duel.resolution.cylinderSlotsBefore, cylinderSlotsBefore)
 	assert.equal(state.players.byId['local-player'].hp, 6)
 	assert.equal(state.players.byId['opponent-1'].hp, 3)
 })

@@ -18,10 +18,15 @@ local function reset_strip(self)
 	gui.set_position(self.rail_strip, vmath.vector3(0.0, 0.0, 0.0))
 end
 
-local function render_cells(center_count)
+local function render_cells(self, center_count)
 	for index = 1, rail_layout.CELL_COUNT do
 		local value = rail_layout.value_for_index(center_count, index)
-		gui_util.set_enabled("cell_" .. tostring(index) .. "_panel", value ~= nil)
+		local panel_id = "cell_" .. tostring(index) .. "_panel"
+		gui_util.set_enabled(panel_id, value ~= nil)
+		gui_util.play_flipbook(
+			panel_id,
+			rail_layout.panel_animation(value, self.current_bid_count)
+		)
 		gui_util.set_text("cell_" .. tostring(index), value or "")
 		gui_util.set_color(
 			"cell_" .. tostring(index),
@@ -35,7 +40,7 @@ local function snap_to_count(self, count)
 	self.displayed_count = count
 	self.target_count = count
 	reset_strip(self)
-	render_cells(count)
+	render_cells(self, count)
 end
 
 animate_to_target = function(self)
@@ -47,7 +52,7 @@ animate_to_target = function(self)
 	if math.abs(delta) > rail_layout.MAX_ANIMATED_STEP then
 		self.displayed_count = self.target_count - (delta > 0 and 1 or -1)
 		reset_strip(self)
-		render_cells(self.displayed_count)
+		render_cells(self, self.displayed_count)
 	end
 
 	local step = rail_layout.step_to_target(self.displayed_count, self.target_count)
@@ -67,7 +72,7 @@ animate_to_target = function(self)
 			self.displayed_count = self.displayed_count + step
 			self.is_animating = false
 			reset_strip(self)
-			render_cells(self.displayed_count)
+			render_cells(self, self.displayed_count)
 			if self.is_visible then
 				animate_to_target(self)
 			else
@@ -98,11 +103,13 @@ local function render(self, state)
 	})
 	gui_util.set_enabled("root", visible)
 	self.is_visible = visible
+	self.current_bid_count = current and current.count or nil
 
 	if not self.displayed_count or (not visible and not self.is_animating) then
 		snap_to_count(self, target_count)
 	else
 		self.target_count = target_count
+		render_cells(self, self.displayed_count)
 		animate_to_target(self)
 	end
 
@@ -157,6 +164,7 @@ function init(self)
 	self.rail_strip = gui.get_node("rail_strip")
 	self.displayed_count = nil
 	self.target_count = nil
+	self.current_bid_count = nil
 	self.is_animating = false
 	self.is_visible = false
 	if gui and gui.set_render_order then

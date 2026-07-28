@@ -1,6 +1,8 @@
+local ruleset = require("game.ruleset")
+
 local M = {}
 
-M.SKULL_FACE = 1
+M.SKULL_FACE = ruleset.SKULL_FACE
 
 local fallback_seed = 12345
 
@@ -28,7 +30,7 @@ end
 function M.roll(count, rng)
 	local values = {}
 	for i = 1, count do
-		values[i] = rng_int(rng, 1, 6)
+		values[i] = rng_int(rng, ruleset.DICE_FACE_MIN, ruleset.DICE_FACE_MAX)
 	end
 	return values
 end

@@ -29,6 +29,7 @@
  * ```
  */
 import type { CylinderState } from './state'
+import { GAME_RULESET } from '../../shared/game/ruleset'
 
 export interface TriggerResult {
 	cylinder: CylinderState
@@ -51,7 +52,7 @@ function wrapNext(index: number, size: number): number {
 	return next > size ? 1 : next
 }
 
-export function newCylinder(size = 6): CylinderState {
+export function newCylinder(size = GAME_RULESET.cylinder.slots): CylinderState {
 	return {
 		chamberIndex: 1,
 		slots: Array.from({ length: size }, () => false),
@@ -64,6 +65,9 @@ export function loadedCount(cylinder: CylinderState): number {
 
 export function loadBullet(cylinder: CylinderState, slotIndex: number): CylinderState {
 	const next = cloneCylinder(cylinder)
+	if (!Number.isSafeInteger(slotIndex)) {
+		return cylinder
+	}
 	const zeroIndex = slotIndex - 1
 	if (zeroIndex < 0 || zeroIndex >= next.slots.length || next.slots[zeroIndex]) {
 		return cylinder
@@ -77,10 +81,15 @@ export function tryLoadBullet(
 	cylinder: CylinderState,
 	slotIndex: number,
 ): { cylinder: CylinderState; ok: boolean; error?: string } {
+	if (
+		!Number.isFinite(slotIndex)
+		|| !Number.isSafeInteger(slotIndex)
+		|| slotIndex < 1
+		|| slotIndex > cylinder.slots.length
+	) {
+		return { cylinder, ok: false, error: 'invalid_slot' }
+	}
 	if (!cylinder.slots[slotIndex - 1]) {
-		if (slotIndex < 1 || slotIndex > cylinder.slots.length) {
-			return { cylinder, ok: false, error: 'invalid_slot' }
-		}
 		return { cylinder: loadBullet(cylinder, slotIndex), ok: true }
 	}
 	return { cylinder, ok: false, error: 'slot_loaded' }

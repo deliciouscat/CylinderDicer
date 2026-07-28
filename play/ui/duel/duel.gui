@@ -39,6 +39,18 @@ textures {
   name: "status"
   texture: "/assets/atlases/status_indicators.atlas"
 }
+textures {
+  name: "revolver"
+  texture: "/assets/atlases/revolver_default.atlas"
+}
+textures {
+  name: "cylinder"
+  texture: "/assets/atlases/cylinder_default.atlas"
+}
+textures {
+  name: "ui"
+  texture: "/assets/atlases/ui.atlas"
+}
 nodes {
   position {
     x: 640.0
@@ -529,21 +541,129 @@ nodes {
 }
 nodes {
   position {
-    y: -12.0
-    z: 0.94
-  }
-  size {
-    x: 220.0
-    y: 220.0
-  }
-  color {
-    y: 0.18
-    z: 0.1
+    y: -20.0
+    z: 0.93
   }
   type: TYPE_BOX
-  id: "hit_flash"
+  id: "duel_cylinder_group"
   parent: "combat_group"
   alpha: 0.0
+}
+nodes {
+  size {
+    x: 220.0
+    y: 228.0
+  }
+  type: TYPE_BOX
+  texture: "cylinder/cylinder"
+  id: "duel_cylinder_plate"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    y: 70.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_1"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    x: 60.0
+    y: 37.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_2"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    x: 62.0
+    y: -32.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_3"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    y: -68.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_4"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    x: -62.0
+    y: -32.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_5"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    x: -60.0
+    y: 37.0
+    z: 0.02
+  }
+  size {
+    x: 48.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "revolver/bullet_bottom"
+  id: "duel_primer_6"
+  parent: "duel_cylinder_group"
+}
+nodes {
+  position {
+    y: 124.0
+    z: 0.98
+  }
+  scale {
+    x: 0.7
+    y: 0.7
+  }
+  size {
+    x: 72.0
+    y: 48.0
+  }
+  type: TYPE_BOX
+  texture: "ui/down_indicator"
+  id: "duel_cylinder_marker"
+  parent: "combat_group"
 }
 nodes {
   type: TYPE_BOX

@@ -2,8 +2,9 @@ import {
 	LADDER_MIN_WAIT_MS,
 	LADDER_TARGET_PLAYER_COUNT,
 } from './matchmaking'
+import { GAME_RULESET } from '../game/ruleset'
 
-export const LADDER_QA_MAX_PLAYER_COUNT = 6
+export const LADDER_QA_MAX_PLAYER_COUNT = GAME_RULESET.players.max
 export const LADDER_DEV_MATCH_RESUME_WINDOW_MS = 5 * 60 * 1000
 
 export function ladderQaFinalizeDelayMs(input: {

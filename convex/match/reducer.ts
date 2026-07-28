@@ -65,6 +65,7 @@ import {
 	recordElimination,
 	recordResolutionEliminations,
 } from './results'
+import { parseCommandPayload } from '../protocol/commandPayloads'
 
 export interface MatchEvent<TPayload = unknown> {
   type: string
@@ -309,18 +310,25 @@ function completeDuelLoadIfReady(state: MatchState): string | undefined {
 	})
 }
 
-function parseSlotIndex(payload: unknown): number {
+function parseSlotIndex(payload: unknown): number | undefined {
 	const record = (payload ?? {}) as Record<string, unknown>
-	return Number(record.slotIndex ?? record.slot_index)
+	const slotIndex = record.slotIndex
+	return Number.isSafeInteger(slotIndex) ? slotIndex as number : undefined
 }
 
-function parseBid(payload: unknown, fallback: BidState): BidState {
+function parseBid(payload: unknown, fallback: BidState): BidState | undefined {
 	const record = (payload ?? {}) as Record<string, unknown>
 	const rawBid = (record.bid ?? record) as Record<string, unknown>
+	if (
+		!Number.isSafeInteger(rawBid.count)
+		|| !Number.isSafeInteger(rawBid.face)
+	) {
+		return undefined
+	}
 	return {
 		playerId: String(rawBid.playerId ?? rawBid.player_id ?? fallback.playerId),
-		count: Number(rawBid.count ?? fallback.count),
-		face: Number(rawBid.face ?? fallback.face),
+		count: rawBid.count as number,
+		face: rawBid.face as number,
 	}
 }
 
@@ -335,6 +343,15 @@ function activeActorGuard(state: MatchState, action: MatchAction): ReduceRejecte
 }
 
 export function reduceMatchState(state: MatchState, action: MatchAction): ReduceResult {
+	const parsedPayload = parseCommandPayload(action.type, action.payload)
+	if (!parsedPayload.ok) {
+		return domainError(parsedPayload.reason)
+	}
+	action = {
+		...action,
+		payload: parsedPayload.payload,
+	}
+
 	switch (action.type) {
 		case 'setup.load_initial': {
 			if (state.turn.kind !== 'setup') {
@@ -354,7 +371,11 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 				return domainError('unknown_player')
 			}
 
-			const result = tryLoadBullet(player.cylinder, parseSlotIndex(action.payload))
+			const slotIndex = parseSlotIndex(action.payload)
+			if (slotIndex === undefined) {
+				return domainError('slot_index_range')
+			}
+			const result = tryLoadBullet(player.cylinder, slotIndex)
 			if (!result.ok) {
 				return domainError(result.error ?? 'invalid_slot')
 			}
@@ -528,7 +549,11 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 				return domainError('unknown_player')
 			}
 
-			const result = tryLoadBullet(player.cylinder, parseSlotIndex(action.payload))
+			const slotIndex = parseSlotIndex(action.payload)
+			if (slotIndex === undefined) {
+				return domainError('slot_index_range')
+			}
+			const result = tryLoadBullet(player.cylinder, slotIndex)
 			if (!result.ok) {
 				return domainError(result.error ?? 'invalid_slot')
 			}
@@ -618,6 +643,9 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 				count: state.bidding.myBid.count,
 				face: state.bidding.myBid.face,
 			})
+			if (!bid) {
+				return domainError('bid_payload_shape')
+			}
 			bid.playerId = bid.playerId || action.actorPlayerId
 
 			if (bid.playerId !== action.actorPlayerId) {

@@ -27,12 +27,24 @@ function M.test_server_snapshot_preserves_character_and_duel_identity()
 			},
 			players = {
 				{ id = "qa-player-1", name = "You", hp = 6, bullets = 3, skin = "rosemund", portraitState = "front" },
-				{ id = "qa-player-2", name = "Hush Feather", hp = 6, bullets = 3, skin = "hush-feather", portraitState = "front" },
-				{ id = "qa-player-3", name = "Samuel Saber", hp = 6, bullets = 3, skin = "samuel-saber", portraitState = "damage" },
+				{ id = "qa-player-2", name = "Hush Feather", hp = 6, bullets = 3, characterKey = "hush-feather", skin = "hush-feather", portraitState = "front" },
+				{ id = "qa-player-3", name = "Samuel Saber", hp = 6, bullets = 3, characterKey = "samuel-saber", skin = "samuel-saber", portraitState = "damage" },
 			},
 			duel = {
 				challengerId = "qa-player-3",
 				previousBidderId = "qa-player-2",
+				judge = {
+					verdict = "EXACT",
+					actual = 3,
+					requiredCount = 3,
+					delta = 0,
+					rawDelta = 0,
+				},
+				resolution = {
+					kind = "duel_shots",
+					cylinderSlotsBefore = { true, false, true, false, true, false },
+					steps = {},
+				},
 				players = {
 					{ id = "qa-player-2", name = "Hush Feather", skin = "hush-feather" },
 					{ id = "qa-player-3", name = "Samuel Saber", skin = "samuel-saber" },
@@ -48,9 +60,14 @@ function M.test_server_snapshot_preserves_character_and_duel_identity()
 	assert_eq(result.state.players.by_id["qa-player-1"].skin, "rosemund", "local skin")
 	assert_eq(result.state.players.by_id["qa-player-2"].skin, "hush-feather", "Hush skin")
 	assert_eq(result.state.players.by_id["qa-player-3"].skin, "samuel-saber", "Samuel skin")
+	assert_eq(result.state.players.by_id["qa-player-2"].character_key, "hush-feather", "Hush character identity")
+	assert_eq(result.state.players.by_id["qa-player-3"].character_key, "samuel-saber", "Samuel character identity")
 	assert_eq(result.state.players.by_id["qa-player-3"].portrait_state, "damage", "portrait state")
 	assert_eq(result.state.duel.challenger_id, "qa-player-3", "duel challenger")
 	assert_eq(result.state.duel.previous_bidder_id, "qa-player-2", "duel previous bidder")
+	assert_eq(result.state.duel.judge.required_count, 3, "duel required count normalized")
+	assert_eq(result.state.duel.resolution.cylinder_slots_before[1], true, "loaded slot normalized")
+	assert_eq(result.state.duel.resolution.cylinder_slots_before[2], false, "empty slot normalized")
 end
 
 function M.test_server_snapshot_normalizes_result_and_reopens_after_spectating()

@@ -13,6 +13,7 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 import {
 	applyMatchCommand,
+	matchCommandPayloadValidator,
 	matchCommandTypeValidator,
 	type ApplyMatchCommandInput,
 } from './commands'
@@ -29,84 +30,18 @@ import type { MatchCommandType } from './protocol/commands'
 import type { MatchState } from './match/state'
 import { getLadderQaAdminState, stageLadderQaOpponent } from './ladder'
 import { qaToolsEnabled, requireQaToolsEnabled } from './qa/guards'
+import { identityHasAdminRole } from './qa/adminAuthorization'
+import {
+	insertAdminAudit,
+	listRecentAdminAuditRows,
+} from './qa/adminAudit'
 
 const DEFAULT_ADMIN_MATCH_LIMIT = 20
 const MAX_ADMIN_MATCH_LIMIT = 50
 const DEFAULT_PURGE_DELETE_LIMIT = 200
 const MAX_PURGE_DELETE_LIMIT = 500
-const MAX_AUDIT_PAYLOAD_JSON_LENGTH = 4096
-const ADMIN_ROLES = new Set(['admin', 'org:admin', 'cylinderdicer_admin', 'cylinder_dicer_admin'])
-const ROLE_KEYS = [
-	'role',
-	'roles',
-	'permission',
-	'permissions',
-	'org_role',
-	'organizationRole',
-	'organization_role',
-]
-const METADATA_KEYS = [
-	'metadata',
-	'publicMetadata',
-	'public_metadata',
-	'privateMetadata',
-	'private_metadata',
-	'unsafeMetadata',
-	'unsafe_metadata',
-	'claims',
-	'authorization',
-]
-const ADMIN_BOOLEAN_KEYS = ['admin', 'isAdmin', 'is_admin', 'cylinderdicerAdmin', 'cylinderdicer_admin']
-
-type IdentityRecord = Record<string, unknown>
-
 function toConvexValue<T>(value: T): T {
 	return JSON.parse(JSON.stringify(value)) as T
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function isAdminRole(value: unknown): boolean {
-	if (Array.isArray(value)) {
-		return value.some(isAdminRole)
-	}
-	if (typeof value !== 'string') {
-		return false
-	}
-
-	return value
-		.split(/[,\s]+/)
-		.map((role) => role.trim().toLowerCase())
-		.some((role) => ADMIN_ROLES.has(role) || role.endsWith(':admin'))
-}
-
-function metadataHasAdmin(value: unknown, depth = 0): boolean {
-	if (!isRecord(value) || depth > 2) {
-		return false
-	}
-
-	for (const key of ADMIN_BOOLEAN_KEYS) {
-		if (value[key] === true) {
-			return true
-		}
-	}
-	for (const key of ROLE_KEYS) {
-		if (isAdminRole(value[key])) {
-			return true
-		}
-	}
-	for (const key of METADATA_KEYS) {
-		if (metadataHasAdmin(value[key], depth + 1)) {
-			return true
-		}
-	}
-	return false
-}
-
-function identityHasAdmin(identity: IdentityRecord): boolean {
-	return metadataHasAdmin(identity)
 }
 
 async function requireAdminIdentity(ctx: GenericCtx) {
@@ -114,7 +49,7 @@ async function requireAdminIdentity(ctx: GenericCtx) {
 	if (!identity) {
 		throw new Error('UNAUTHENTICATED')
 	}
-	if (!identityHasAdmin(identity as unknown as IdentityRecord)) {
+	if (!identityHasAdminRole(identity)) {
 		throw new Error('UNAUTHORIZED')
 	}
 	requireQaToolsEnabled()
@@ -143,26 +78,6 @@ function boundedPurgeLimit(limit: unknown): number {
 		return DEFAULT_PURGE_DELETE_LIMIT
 	}
 	return Math.max(1, Math.min(Math.floor(limit), MAX_PURGE_DELETE_LIMIT))
-}
-
-function safeAuditPayload(value: unknown) {
-	if (value === undefined) {
-		return {}
-	}
-	try {
-		const encoded = JSON.stringify(value)
-		if (encoded.length <= MAX_AUDIT_PAYLOAD_JSON_LENGTH) {
-			return value
-		}
-		return {
-			omitted: 'payload_too_large',
-			length: encoded.length,
-		}
-	} catch (error) {
-		return {
-			omitted: 'payload_not_serializable',
-		}
-	}
 }
 
 async function deleteDocs(ctx: GenericCtx, rows: any[], dryRun: boolean) {
@@ -395,41 +310,6 @@ function buildPlayerDeltas(state: MatchState) {
 		deltas[playerId] = buildPrivateDelta(state, playerId)
 	}
 	return deltas
-}
-
-async function insertAdminAudit(
-	ctx: GenericCtx,
-	input: {
-			adminUserId: string
-			matchId?: string
-			customGameRoomId?: string
-			targetUserId?: string
-			targetVirtualOpponentId?: string
-			targetPlayerId?: string
-		commandId?: string
-		commandType?: string
-		payload?: unknown
-		result: Record<string, any>
-	},
-) {
-	return await ctx.db.insert(
-		'adminAudit',
-		toConvexValue({
-				adminUserId: input.adminUserId,
-				matchId: input.matchId,
-				customGameRoomId: input.customGameRoomId,
-				targetUserId: input.targetUserId,
-				targetVirtualOpponentId: input.targetVirtualOpponentId,
-				targetPlayerId: input.targetPlayerId,
-			commandId: input.commandId,
-			commandType: input.commandType,
-			payload: safeAuditPayload(input.payload),
-			resultOk: input.result.ok === true,
-			resultCode: input.result.code,
-			resultRevision: input.result.revision,
-			createdAt: Date.now(),
-		}),
-	)
 }
 
 export const createDevMatchWithBots = mutationGeneric({
@@ -874,7 +754,7 @@ export const submitOpponentCommand = mutationGeneric({
 		commandId: v.string(),
 		revision: v.number(),
 		type: matchCommandTypeValidator,
-		payload: v.optional(v.any()),
+		payload: v.optional(matchCommandPayloadValidator),
 	},
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: any) => {
@@ -1161,13 +1041,13 @@ export const probeAdminAccess = queryGeneric({
 				message: 'sign_in_required',
 			}
 		}
-		if (!identityHasAdmin(identity as unknown as IdentityRecord)) {
+		if (!identityHasAdminRole(identity)) {
 			return {
 				ok: false,
 				authorized: false,
 				code: 'UNAUTHORIZED',
 				message: 'admin_claim_missing',
-				hint: 'Add {"role":"admin"} to the Clerk JWT template named "convex", then sign out and sign in again.',
+				hint: 'Add the exact signed claim {"role":"admin"} to the Clerk JWT template named "convex", then sign out and sign in again.',
 				templateExample: { role: 'admin' },
 			}
 		}
@@ -1209,31 +1089,11 @@ export const listRecentAdminAudit = queryGeneric({
 	handler: async (ctx: GenericCtx, args: any) => {
 		const adminUser = await getAdminExistingUser(ctx)
 		const limit = boundedLimit(args.limit)
-
-		if (args.matchId) {
-			return await ctx.db
-				.query('adminAudit')
-				.withIndex('by_match_created', (q: any) => q.eq('matchId', args.matchId))
-				.order('desc')
-				.take(limit)
-		}
-
-		if (!adminUser) {
-			return []
-		}
-
-		const rows = await ctx.db
-			.query('adminAudit')
-			.withIndex('by_admin_created', (q: any) => q.eq('adminUserId', adminUser._id))
-			.order('desc')
-			.take(args.customGameRoomId ? limit * 4 : limit)
-
-		if (args.customGameRoomId) {
-			return rows
-				.filter((row: any) => row.customGameRoomId === args.customGameRoomId)
-				.slice(0, limit)
-		}
-
-		return rows
+		return await listRecentAdminAuditRows(ctx, {
+			limit,
+			adminUserId: adminUser?._id,
+			matchId: args.matchId,
+			customGameRoomId: args.customGameRoomId,
+		})
 	},
 })

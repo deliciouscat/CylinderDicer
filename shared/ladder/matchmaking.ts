@@ -1,5 +1,7 @@
-export const LADDER_TARGET_PLAYER_COUNT = 6
-export const LADDER_MIN_PLAYER_COUNT = 2
+import { GAME_RULESET } from '../game/ruleset'
+
+export const LADDER_TARGET_PLAYER_COUNT = GAME_RULESET.players.max
+export const LADDER_MIN_PLAYER_COUNT = GAME_RULESET.players.min
 export const LADDER_MIN_WAIT_MS = 40_000
 export const LADDER_MAX_WAIT_MS = 45_000
 export const LADDER_QUEUE_HEARTBEAT_MS = 8_000

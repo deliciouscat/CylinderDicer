@@ -2,6 +2,8 @@
 import { useAuth } from '@clerk/vue'
 import { useConvexClient } from 'convex-vue'
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { GAME_RULESET } from '@shared/game/ruleset'
+import { customGameBackAction } from '@shared/custom-game/navigation'
 import { assetLoader } from '../assets/assetLoader'
 import { t } from '../i18n'
 import {
@@ -9,6 +11,7 @@ import {
 } from '../services/convex/matchService'
 import {
   createCustomGameService,
+  removeMyCustomGameOpponent,
   type CustomGameRoomListRow,
   type CustomGameRoomUnsubscribe,
   type CustomGameRoomView,
@@ -90,7 +93,7 @@ const roomPlayers = computed<RoomPlayer[]>(() => [
       return {
         id: participant.playerId,
         nickname: participant.displayName,
-        isHost: participant.playerId === 'local-player',
+        isHost: participant.userId === roomView.value?.room.hostUserId,
         isReady: participant.ready,
         kind: participant.participantKind,
         archetype: participant.archetype,
@@ -101,7 +104,7 @@ const selectedPlayer = computed(() => {
   return roomPlayers.value.find((player) => player.id === selectedPlayerId.value) ?? roomPlayers.value[0]
 })
 const selectedCountLabel = computed(() => {
-  return `${roomPlayers.value.length}/6`
+  return `${roomPlayers.value.length}/${GAME_RULESET.players.max}`
 })
 const allOpponentsReady = computed(() => {
   return roomView.value?.allReady === true
@@ -110,7 +113,12 @@ const canShowStart = computed(() => isHost.value && !roomStarted.value)
 const canAddBot = computed(() => {
   return isHost.value
     && !roomStarted.value
-    && roomPlayers.value.length < 6
+    && roomPlayers.value.length < GAME_RULESET.players.max
+})
+const canRemoveBot = computed(() => {
+  return isHost.value
+    && !roomStarted.value
+    && selectedPlayer.value?.kind === 'virtual'
 })
 const createDisabled = computed(() => !canUseConvex.value || busy.value || initialRoomLoadPending.value)
 const joinDisabled = computed(() => !canUseConvex.value || busy.value)
@@ -314,8 +322,16 @@ function queueInvite() {
   inviteNameInput.value = ''
 }
 
+async function handleBack() {
+  if (customGameBackAction(Boolean(roomView.value)) === 'lobby') {
+    emit('back')
+    return
+  }
+  await leaveRoom()
+}
+
 async function leaveRoom() {
-  if (!roomView.value || !isGuest.value || busy.value) {
+  if (!roomView.value || !roomView.value.viewer || busy.value) {
     return
   }
   busy.value = true
@@ -332,8 +348,10 @@ async function leaveRoom() {
       return
     }
     roomUnsubscribe?.unsubscribe()
+    roomUnsubscribe = undefined
     roomView.value = null
     inviteCodeInput.value = ''
+    await loadPublicRooms(generation)
     statusMessage.value = t('customGame.leftRoom')
   } catch (error) {
     if (generation !== roomStateGeneration) {
@@ -443,6 +461,41 @@ async function addBot() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error)
     statusMessage.value = t('customGame.addBotError')
+  } finally {
+    busy.value = false
+  }
+}
+
+async function removeBot() {
+  if (!roomView.value || !canUseConvex.value || !canRemoveBot.value || busy.value || !selectedPlayer.value) {
+    return
+  }
+
+  const removedPlayerId = selectedPlayer.value.id
+  busy.value = true
+  errorMessage.value = ''
+  statusMessage.value = t('customGame.removeBotQueued')
+  try {
+    const updated = await withTimeout(
+      removeMyCustomGameOpponent(convex, {
+        roomId: roomView.value.room._id,
+        playerId: removedPlayerId,
+      }),
+      CONVEX_REQUEST_TIMEOUT_MS,
+      'custom_room_remove_bot_timeout',
+    )
+    if (!isRoomView(updated)) {
+      throw new Error(`${(updated as any)?.code ?? 'REMOVE_BOT_FAILED'}: ${(updated as any)?.message ?? 'remove_bot_failed'}`)
+    }
+    roomView.value = updated
+    selectedPlayerId.value = roomPlayers.value.find((player) => player.kind === 'virtual')?.id
+      ?? roomView.value.viewer?.playerId
+      ?? roomPlayers.value[0]?.id
+      ?? 'local-player'
+    statusMessage.value = t('customGame.botRemoved')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : String(error)
+    statusMessage.value = t('customGame.removeBotError')
   } finally {
     busy.value = false
   }
@@ -612,7 +665,8 @@ onUnmounted(() => {
           <button
             class="texture-button texture-button--small texture-button--toolbar"
             type="button"
-            @click="emit('back')"
+            :disabled="Boolean(roomView) && busy"
+            @click="handleBack"
           >
             <span>{{ t('customGame.back') }}</span>
           </button>
@@ -627,7 +681,7 @@ onUnmounted(() => {
             <span>{{ t('customGame.create') }}</span>
           </button>
 
-          <div v-else-if="!isHost" class="custom-game-toolbar__spacer" />
+          <div v-else class="custom-game-toolbar__spacer" />
 
           <input
             v-if="!roomView"
@@ -722,7 +776,10 @@ onUnmounted(() => {
             </aside>
           </div>
 
-          <div class="room-action-bar">
+          <div
+            class="room-action-bar"
+            :class="{ 'room-action-bar--host': isHost && !roomStarted }"
+          >
             <button
               v-if="isHost && !roomStarted"
               class="texture-button texture-button--large texture-button--wood"
@@ -734,6 +791,16 @@ onUnmounted(() => {
               <span>{{ t('customGame.addBot') }}</span>
             </button>
             <button
+              v-if="isHost && !roomStarted"
+              class="texture-button texture-button--large texture-button--wood"
+              data-testid="remove-custom-game-bot"
+              type="button"
+              :disabled="busy || !canUseConvex || !canRemoveBot"
+              @click="removeBot"
+            >
+              <span>{{ t('customGame.removeBot') }}</span>
+            </button>
+            <button
               v-if="isGuest && !roomStarted"
               class="texture-button texture-button--large texture-button--wood"
               type="button"
@@ -741,15 +808,6 @@ onUnmounted(() => {
               @click="toggleMyReady"
             >
               <span>{{ roomView.viewer?.ready ? t('customGame.unready') : t('customGame.ready') }}</span>
-            </button>
-            <button
-              v-if="isGuest && !roomStarted"
-              class="texture-button texture-button--large texture-button--toolbar"
-              type="button"
-              :disabled="busy || !canUseConvex"
-              @click="leaveRoom"
-            >
-              <span>{{ t('customGame.leaveRoom') }}</span>
             </button>
             <button
               v-if="canShowStart"

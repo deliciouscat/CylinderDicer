@@ -30,8 +30,9 @@
  * ```
  */
 import type { PlayerState } from './state'
+import { GAME_RULESET } from '../../shared/game/ruleset'
 
-export const SKULL_FACE = 1
+export const SKULL_FACE = GAME_RULESET.dice.skullFace
 
 export interface SeedStep {
 	seed: number
@@ -50,7 +51,11 @@ export function rollDiceWithSeed(count: number, seed: number): { seed: number; v
 	let nextSeed = seed
 	const values: number[] = []
 	for (let index = 0; index < count; index += 1) {
-		const step = nextSeedInt(nextSeed, 1, 6)
+		const step = nextSeedInt(
+			nextSeed,
+			GAME_RULESET.dice.faceMin,
+			GAME_RULESET.dice.faceMax,
+		)
 		nextSeed = step.seed
 		values.push(step.value)
 	}
@@ -59,7 +64,11 @@ export function rollDiceWithSeed(count: number, seed: number): { seed: number; v
 }
 
 export function rollDice(count: number, random = Math.random): number[] {
-	return Array.from({ length: count }, () => Math.floor(random() * 6) + 1)
+	const faceRange = GAME_RULESET.dice.faceMax - GAME_RULESET.dice.faceMin + 1
+	return Array.from(
+		{ length: count },
+		() => Math.floor(random() * faceRange) + GAME_RULESET.dice.faceMin,
+	)
 }
 
 export function countFace(players: PlayerState[], face: number): number {

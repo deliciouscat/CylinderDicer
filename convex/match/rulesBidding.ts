@@ -28,6 +28,7 @@
  * ```
  */
 import type { BidState } from './state'
+import { GAME_RULESET } from '../../shared/game/ruleset'
 
 export interface BidLimits {
 	minCount: number
@@ -42,10 +43,10 @@ export interface BidValidationResult {
 }
 
 export const DEFAULT_BID_LIMITS: BidLimits = {
-	minCount: 1,
-	maxCount: 36,
-	minFace: 1,
-	maxFace: 6,
+	minCount: GAME_RULESET.bidding.countMin,
+	maxCount: GAME_RULESET.bidding.countMax,
+	minFace: GAME_RULESET.dice.faceMin,
+	maxFace: GAME_RULESET.dice.faceMax,
 }
 
 function rank(bid: BidState): number {
@@ -57,11 +58,11 @@ export function validateBidRaise(
 	nextBid: BidState,
 	limits: BidLimits = DEFAULT_BID_LIMITS,
 ): BidValidationResult {
-	if (!nextBid || typeof nextBid.count !== 'number') {
+	if (!nextBid || !Number.isFinite(nextBid.count) || !Number.isSafeInteger(nextBid.count)) {
 		return { ok: false, reason: 'count_range' }
 	}
 
-	if (typeof nextBid.face !== 'number') {
+	if (!Number.isFinite(nextBid.face) || !Number.isSafeInteger(nextBid.face)) {
 		return { ok: false, reason: 'face_range' }
 	}
 
@@ -111,7 +112,7 @@ export function suggestedBid(currentBid: BidState | undefined, fallback = { coun
 			face: Math.max(1, fallback.face),
 		}
 	}
-	if (currentBid.face < 6) {
+	if (currentBid.face < GAME_RULESET.dice.faceMax) {
 		return {
 			count: currentBid.count,
 			face: currentBid.face + 1,

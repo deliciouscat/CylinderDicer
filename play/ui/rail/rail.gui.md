@@ -1,5 +1,5 @@
 # 개요
-0..36 베팅 count 레일 GUI. visible window만 표시하고 bid marker와 pointer를 얹는다.
+0..36 베팅 count 레일 GUI. visible window만 표시하고 `ui/down_indicator`/`ui/up_indicator` pointer를 얹는다.
 
 # 의존성
 - `rail.gui_script`
@@ -11,7 +11,7 @@
 - 입력:
   - visible range.
   - selected count.
-  - recent bids.
+- authoritative current bid.
 - 출력:
   - rail cells.
   - selected pointer.
@@ -22,8 +22,7 @@
 # Pattern: Clipping window + template 재사용. 보이는 구간(window)만 렌더.
 root (box, clipping = stencil)        # 화면 밖 칸은 잘림
 ├─ track (sprite: rail/<map>/track)
-├─ cell_template (box)                # window 칸 수만큼 재사용 (n, selected, skull)
+├─ cell_template (box)                # window 칸 수만큼 재사용 (normal / previous-bid check)
 ├─ marker_template -> badge + dice_face   # recent bids
-└─ pointer (sprite: ui/rail/caret)    # my_bid.count 위치
+└─ pointer_top / pointer_bottom       # ui/down_indicator, ui/up_indicator
 ```
-

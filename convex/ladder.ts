@@ -24,7 +24,6 @@ import {
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
 import {
 	createInitialMatchState,
-	DEFAULT_PLAYER_SKINS,
 	type CreateInitialStateInput,
 	type MatchMode,
 } from './match/state'
@@ -36,20 +35,15 @@ import {
 } from './users'
 import { ensureVirtualOpponent } from './virtualOpponents'
 import { qaToolsEnabled, requireQaToolsEnabled } from './qa/guards'
-import { selectGameplayBots } from './bots/catalog'
+import { GAMEPLAY_BOT_SPECS, selectGameplayBots } from './bots/catalog'
 import { scheduleNextBotAction } from './bots/scheduling'
+import { GAME_RULESET } from '../shared/game/ruleset'
+import { DEFAULT_CHARACTER_KEY, legacySeatCharacterKey } from '../shared/game/characters'
 
-const DEFAULT_MMR = 1000
+const DEFAULT_MMR = GAME_RULESET.rating.defaultMmr
 const MAX_ROSTER_SIZE = LADDER_QA_MAX_PLAYER_COUNT
 const LADDER_QA_POOL_KEY = 'default'
-const LADDER_QA_OPPONENT_NAMES = [
-	'Hush Feather',
-	'Samuel Saber',
-	'Zippo Jay',
-	'Calamity Kate',
-	'The Kid',
-] as const
-const CHARACTER_KEYS = DEFAULT_PLAYER_SKINS
+const LADDER_QA_OPPONENTS = GAMEPLAY_BOT_SPECS
 
 type LadderStatsRow = {
 	mmr: number
@@ -212,9 +206,10 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 		const opponent = await ensureVirtualOpponent(
 			ctx,
 			`ladder-fixture-${opponentIndex + 1}`,
-			LADDER_QA_OPPONENT_NAMES[opponentIndex],
+			LADDER_QA_OPPONENTS[opponentIndex].displayName,
 			'ladder-fixture',
 			'qa_fixture',
+			LADDER_QA_OPPONENTS[opponentIndex].characterKey,
 		)
 		await ctx.db.insert('ladderQaWaitingOpponents', {
 			poolKey: LADDER_QA_POOL_KEY,
@@ -246,9 +241,10 @@ export async function stageLadderQaOpponent(ctx: GenericCtx, adminUserId: string
 	const opponent = await ensureVirtualOpponent(
 		ctx,
 		`ladder-fixture-${opponentIndex + 1}`,
-		LADDER_QA_OPPONENT_NAMES[opponentIndex],
+		LADDER_QA_OPPONENTS[opponentIndex].displayName,
 		'ladder-fixture',
 		'qa_fixture',
+		LADDER_QA_OPPONENTS[opponentIndex].characterKey,
 	)
 	const entry = await ctx.db.get(session.queueEntryId)
 	if (!entry || entry.status !== 'waiting') {
@@ -370,7 +366,9 @@ async function buildRoster(ctx: GenericCtx, matchId: string, viewerUserId: strin
 			displayName: user?.displayName ?? virtualOpponent?.displayName ?? `Player ${participant.seatIndex + 1}`,
 			seatIndex: participant.seatIndex,
 			isSelf: participant.userId === viewerUserId,
-			characterKey: CHARACTER_KEYS[participant.seatIndex % CHARACTER_KEYS.length],
+			characterKey: participant.characterKey
+				?? virtualOpponent?.characterKey
+				?? legacySeatCharacterKey(participant.seatIndex),
 			stats: row
 				? statsView(row)
 				: botProfile
@@ -454,8 +452,11 @@ async function matchWaitingRoster(ctx: GenericCtx, now: number) {
 			userId: user._id,
 			participantKind: 'human' as const,
 			name: user.displayName ?? `Player ${seatIndex + 1}`,
+			characterKey: user.characterKey ?? DEFAULT_CHARACTER_KEY,
 			startingMmr: candidate.mmr,
-			initialLoadedSlots: seatIndex === 0 ? undefined : [1, 3, 5],
+			initialLoadedSlots: seatIndex === 0
+				? undefined
+				: [...GAME_RULESET.cylinder.initialLoadedSlots],
 		})
 	}
 
@@ -471,11 +472,13 @@ async function matchWaitingRoster(ctx: GenericCtx, now: number) {
 				participantKind: 'virtual' as const,
 				controlMode: 'server_bot' as const,
 				botProfileId: profile._id,
+				botStrategyKey: profile.strategyKey,
 				botStrategyVersion: profile.strategyVersion,
 				botParameters: profile.parameters,
 				name: opponent.displayName,
+				characterKey: opponent.characterKey,
 				startingMmr: profile.baseMmr,
-				initialLoadedSlots: [1, 3, 5],
+				initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 			})
 		}
 	}
@@ -693,6 +696,7 @@ export const finalizeQaRoster = internalMutationGeneric({
 			userId: user._id,
 			participantKind: 'human',
 			name: user.displayName ?? 'You',
+			characterKey: user.characterKey ?? DEFAULT_CHARACTER_KEY,
 		}]
 		for (const row of opponents) {
 			const opponent = await ctx.db.get(row.virtualOpponentId)
@@ -704,7 +708,8 @@ export const finalizeQaRoster = internalMutationGeneric({
 				virtualOpponentId: opponent._id,
 				participantKind: 'virtual',
 				name: opponent.displayName,
-				initialLoadedSlots: [1, 3, 5],
+				characterKey: opponent.characterKey,
+				initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 			})
 		}
 		if (players.length < 2) {
@@ -735,21 +740,24 @@ export const createDevFixture = mutationGeneric({
 			userId: currentUser._id,
 			participantKind: 'human',
 			name: currentUser.displayName ?? 'You',
+			characterKey: currentUser.characterKey ?? DEFAULT_CHARACTER_KEY,
 		}]
 		for (let index = 1; index < playerCount; index += 1) {
 			const opponent = await ensureVirtualOpponent(
 				ctx,
 				`ladder-fixture-${index}`,
-				LADDER_QA_OPPONENT_NAMES[index - 1],
+				LADDER_QA_OPPONENTS[index - 1].displayName,
 				'ladder-fixture',
 				'qa_fixture',
+				LADDER_QA_OPPONENTS[index - 1].characterKey,
 			)
 			players.push({
 				id: `fixture-player-${index + 1}`,
 				virtualOpponentId: opponent._id,
 				participantKind: 'virtual',
 				name: opponent.displayName,
-				initialLoadedSlots: [1, 3, 5],
+				characterKey: opponent.characterKey,
+				initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 			})
 		}
 

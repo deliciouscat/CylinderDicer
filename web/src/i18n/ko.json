@@ -37,6 +37,10 @@
     "addBotQueued": "봇 추가 중...",
     "botAdded": "봇을 추가했습니다",
     "addBotError": "봇을 추가할 수 없음",
+    "removeBot": "봇 제거",
+    "removeBotQueued": "봇 제거 중...",
+    "botRemoved": "봇을 제거했습니다",
+    "removeBotError": "봇을 제거할 수 없음",
     "notReady": "대기",
     "waitingForReady": "상대 ready 대기 중",
     "allReady": "모든 상대 ready 완료",
@@ -101,6 +105,7 @@
     "signIn": "로그인",
     "signUp": "회원가입",
     "localeLabel": "언어 선택",
+    "shopComingSoon": "준비중입니다",
     "locales": {
       "en": "English",
       "ko": "한국어",
@@ -111,6 +116,30 @@
       "customGame": "커스텀 게임",
       "itemShop": "아이템 상점",
       "settings": "설정"
+    }
+  },
+  "settings": {
+    "screenLabel": "캐릭터 설정",
+    "back": "뒤로",
+    "title": "캐릭터 선택",
+    "previous": "이전 캐릭터",
+    "next": "다음 캐릭터",
+    "characterAlt": "{name} 캐릭터 일러스트",
+    "loading": "캐릭터 설정을 불러오는 중…",
+    "ready": "선택한 캐릭터는 새 매치부터 적용됩니다.",
+    "saving": "캐릭터를 저장하는 중…",
+    "saved": "캐릭터가 저장되었습니다.",
+    "saveError": "캐릭터를 저장하지 못했습니다.",
+    "loadError": "캐릭터 설정을 불러오지 못했습니다.",
+    "signInRequired": "캐릭터 선택을 저장하려면 로그인하세요.",
+    "retry": "다시 시도",
+    "characters": {
+      "rosemund": "Rosmund",
+      "hush-feather": "Hush Feather",
+      "samuel-saber": "Samuel Saber",
+      "zippo-jay": "Zippo Jay",
+      "calamity-kate": "Calamity Kate",
+      "the-kid": "The Kid"
     }
   },
   "music": {

@@ -103,7 +103,11 @@ export function mergeMatchSnapshots(
     return null
   }
 
-  if (!privateDelta || privateDelta.matchId !== publicSnapshot.matchId) {
+  if (
+    !privateDelta
+    || privateDelta.matchId !== publicSnapshot.matchId
+    || privateDelta.revision !== publicSnapshot.revision
+  ) {
     return publicSnapshot
   }
 

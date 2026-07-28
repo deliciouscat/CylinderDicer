@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/vue'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import lobbyConfig from '../config/lobby.config.json'
 import { assetLoader } from '../assets/assetLoader'
 import DropdownButton, { type DropdownOption } from '../components/ui/DropdownButton.vue'
@@ -33,6 +33,10 @@ const selectedLocale = computed({
   set: (value: string) => setLocale(value as LocaleCode),
 })
 
+const shopNoticeVisible = ref(false)
+const shopNoticeKey = ref(0)
+let shopNoticeTimer: number | undefined
+
 const backgroundAsset = assetLoader('background-lobby')
 const menuPanelAsset = assetLoader('menu-panel')
 const titleAsset = assetLoader('title')
@@ -52,8 +56,21 @@ const lobbyStyles = {
 }
 
 function openMenuItem(item: MenuEntry) {
+  if (item.id === 'item-shop') {
+    window.clearTimeout(shopNoticeTimer)
+    shopNoticeKey.value += 1
+    shopNoticeVisible.value = true
+    shopNoticeTimer = window.setTimeout(() => {
+      shopNoticeVisible.value = false
+    }, 3200)
+    return
+  }
   emit('navigate', item.url)
 }
+
+onBeforeUnmount(() => {
+  window.clearTimeout(shopNoticeTimer)
+})
 </script>
 
 <template>
@@ -93,5 +110,15 @@ function openMenuItem(item: MenuEntry) {
         </button>
       </nav>
     </section>
+
+    <div
+      v-if="shopNoticeVisible"
+      :key="shopNoticeKey"
+      class="lobby-coming-soon"
+      role="status"
+      aria-live="polite"
+    >
+      {{ t('lobby.shopComingSoon') }}
+    </div>
   </main>
 </template>

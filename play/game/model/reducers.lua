@@ -4,10 +4,12 @@ local bidding = require("game.model.rules.bidding")
 local cylinder = require("game.model.rules.cylinder")
 local dice = require("game.model.rules.dice")
 local duel = require("game.model.rules.duel")
+local ruleset = require("game.ruleset")
+local server_snapshot = require("game.model.server_snapshot")
 
 local M = {}
 
-local SHAKE_REQUIRED_COUNT = 6
+local SHAKE_REQUIRED_COUNT = ruleset.SHAKE_REQUIRED_ACTIONS
 local DICE_CHECK_DELAY_SECONDS = 3
 local BID_RELOAD_COUNTDOWN_SECONDS = 3
 
@@ -61,6 +63,7 @@ local DEFAULT_STATE = {
 	},
 	duel = nil,
 	pending_load = nil,
+	available_actions = {},
 	ui = {
 		locale = "ko",
 		hint_key = "hud.hint.waiting",
@@ -147,7 +150,7 @@ local function append_event_hash(state, action)
 end
 
 local function publish_all()
-	return { "match", "players", "turn", "bidding", "duel", "flow", "shake", "ui" }
+	return { "match", "players", "turn", "bidding", "duel", "flow", "shake", "capabilities", "ui" }
 end
 
 local set_hint
@@ -333,269 +336,6 @@ local function enter_bidding(next, event)
 	return true
 end
 
-local function normalize_player(player, local_player_id)
-	local next = clone(player)
-	next.id = next.id or next.player_id
-	next.name = next.name or next.id
-	next.hp = next.hp or 6
-	next.dice_count = next.dice_count or 5
-	next.dice = next.dice or {}
-	next.skin = next.skin or "default"
-	next.portrait_state = next.portrait_state or "front"
-	next.eliminated = next.eliminated == true
-	next.is_local = next.id == local_player_id
-	next.cylinder = next.cylinder or cylinder.new(6)
-
-	if next.initial_loaded_slots then
-		next.cylinder = cylinder.load_many(next.cylinder, next.initial_loaded_slots)
-	end
-
-	update_bullets(next)
-	return next
-end
-
-local KEY_MAP = {
-	actorChoice = "actor_choice",
-	activePlayerId = "active_player_id",
-	chamberIndex = "chamber_index",
-	challengerId = "challenger_id",
-	currentBid = "current_bid",
-	diceCheckDelaySeconds = "dice_check_delay_seconds",
-	countdownSeconds = "countdown_seconds",
-	eventsHash = "events_hash",
-	hpChanges = "hp_changes",
-	isFirstShake = "is_first_shake",
-	isLocal = "is_local",
-	localPlayerId = "local_player_id",
-	matchId = "match_id",
-	needsChoice = "needs_choice",
-	pendingLoad = "pending_load",
-	playerId = "player_id",
-	portraitState = "portrait_state",
-	previousBidderId = "previous_bidder_id",
-	previousPlayerId = "previous_player_id",
-	requiredCount = "required_count",
-	reloadPlayerId = "reload_player_id",
-	reloadSource = "reload_source",
-	rouletteSubjectId = "roulette_subject_id",
-	roundIndex = "round_index",
-	skullRoulette = "skull_roulette",
-	spinSteps = "spin_steps",
-	hpBefore = "hp_before",
-	hpAfter = "hp_after",
-	shooterId = "shooter_id",
-	slotIndex = "slot_index",
-	suggestedBid = "suggested_bid",
-	targetChoice = "target_choice",
-	targetId = "target_id",
-	turnCount = "turn_count",
-	viewerPlayerId = "viewer_player_id",
-	winnerId = "winner_id",
-	playerCount = "player_count",
-	mmrBefore = "mmr_before",
-	mmrAfter = "mmr_after",
-	mmrDelta = "mmr_delta",
-}
-
-local function snake_key(key)
-	return KEY_MAP[key] or key
-end
-
-local function normalize_snapshot_keys(value)
-	if type(value) ~= "table" then
-		return value
-	end
-
-	local next = {}
-	for key, item in pairs(value) do
-		next[snake_key(key)] = normalize_snapshot_keys(item)
-	end
-	return next
-end
-
-local function normalize_server_cylinder(raw)
-	if type(raw) ~= "table" then
-		return nil
-	end
-
-	local raw_slots = raw.slots
-	if type(raw_slots) ~= "table" then
-		return nil
-	end
-
-	local slots = {}
-	local slot_count = 0
-	for index, _ in pairs(raw_slots) do
-		local numeric = tonumber(index)
-		if numeric and numeric > slot_count then
-			slot_count = numeric
-		end
-	end
-	-- Also honor array length from ipairs when Convex sends a dense boolean[].
-	for index, _ in ipairs(raw_slots) do
-		if index > slot_count then
-			slot_count = index
-		end
-	end
-	if slot_count == 0 then
-		return nil
-	end
-
-	for index = 1, slot_count do
-		local loaded = raw_slots[index]
-		if loaded == nil then
-			loaded = raw_slots[tostring(index)]
-		end
-		if type(loaded) == "table" then
-			slots[index] = {
-				loaded = loaded.loaded == true,
-			}
-		else
-			slots[index] = {
-				loaded = loaded == true,
-			}
-		end
-	end
-
-	return {
-		chamber_index = raw.chamber_index or raw.chamberIndex or 1,
-		slots = slots,
-	}
-end
-
-local PHASE_TURN_KIND = {
-	bidding = "bidding",
-	complete = "complete",
-	cup_shake = "shaking",
-	dice_check = "shaking",
-	bidding_gap = "shaking",
-	duel = "dualing",
-}
-
-local function turn_kind_for_server_phase(phase, pending)
-	if phase == "revolver_reload" then
-		if pending and pending.source == "bid" then
-			return "bidding"
-		end
-		if pending and pending.source == "setup" then
-			return "setup"
-		end
-		return "shaking"
-	end
-	return PHASE_TURN_KIND[phase] or phase
-end
-
-local function server_snapshot_public(payload)
-	return payload.publicSnapshot or payload.public_snapshot or payload.snapshot or payload
-end
-
-local function server_snapshot_private(payload)
-	return payload.privateDelta or payload.private_delta or (payload.snapshot and payload.snapshot.private) or {}
-end
-
-local function apply_server_snapshot(state, payload)
-	local public = normalize_snapshot_keys(server_snapshot_public(payload or {}) or {})
-	local private = normalize_snapshot_keys(server_snapshot_private(payload or {}) or {})
-	local snapshot = normalize_snapshot_keys((payload or {}).snapshot or {})
-	local incoming_revision = tonumber(public.revision or snapshot.revision or (payload or {}).revision) or 0
-	local current_revision = tonumber(state.match.revision) or 0
-	if incoming_revision > 0 and current_revision > 0 and incoming_revision < current_revision then
-		return state
-	end
-
-	local next = clone(state)
-	local match = public.match or snapshot.match or {}
-	local turn = public.turn or snapshot.turn or {}
-	local bidding_snapshot = public.bidding or snapshot.bidding or {}
-	local local_player_id = private.viewer_player_id
-		or snapshot.viewer_player_id
-		or match.local_player_id
-		or next.match.local_player_id
-
-	next.match.match_id = public.match_id or snapshot.match_id or (payload or {}).matchId or next.match.match_id
-	local previous_match_status = next.match.status
-	next.match.status = match.status or next.match.status
-	next.match.mode = match.mode or next.match.mode
-	next.match.local_player_id = local_player_id
-	next.match.turn_count = match.turn_count or next.match.turn_count
-	next.match.events_hash = match.events_hash or next.match.events_hash
-	next.match.winner_id = match.winner_id
-	next.match.result = match.result
-	if next.match.status == "complete" and previous_match_status ~= "complete" then
-		next.ui.spectating = false
-	end
-	next.match.revision = public.revision or snapshot.revision or (payload or {}).revision or next.match.revision
-
-	next.flow.phase = public.phase or snapshot.phase or next.flow.phase
-	next.flow.dice_check_delay_seconds = public.dice_check_delay_seconds
-		or snapshot.dice_check_delay_seconds
-		or next.flow.dice_check_delay_seconds
-
-	next.pending_load = normalize_snapshot_keys(public.pending_load or snapshot.pending_load)
-	next.turn.active_player_id = turn.active_player_id or public.active_player_id or snapshot.active_player_id
-	next.turn.previous_player_id = turn.previous_player_id or public.previous_player_id or snapshot.previous_player_id
-	next.turn.round_index = turn.round_index or next.turn.round_index
-	if turn.is_first_shake ~= nil then
-		next.turn.is_first_shake = turn.is_first_shake == true
-	end
-	next.turn.kind = turn.kind or turn_kind_for_server_phase(next.flow.phase, next.pending_load)
-
-	if public.players then
-		next.players.order = {}
-		for _, player in ipairs(public.players or {}) do
-			local player_id = player.id or player.player_id
-			if player_id then
-				next.players.order[#next.players.order + 1] = player_id
-				local existing = next.players.by_id[player_id] or normalize_player({
-					id = player_id,
-					name = player.name,
-				}, local_player_id)
-				existing.id = player_id
-				existing.name = player.name or existing.name
-				existing.hp = player.hp or existing.hp
-				existing.bullets = player.bullets or existing.bullets
-				existing.eliminated = player.eliminated == true
-				existing.skin = player.skin or existing.skin
-				existing.portrait_state = player.portrait_state or existing.portrait_state
-				existing.is_local = player_id == local_player_id
-				next.players.by_id[player_id] = existing
-			end
-		end
-	end
-
-	local local_player = local_player_id and next.players.by_id[local_player_id]
-	if local_player then
-		if private.dice then
-			local_player.dice = clone(private.dice)
-		end
-		local server_cylinder = normalize_server_cylinder(private.cylinder)
-		if server_cylinder then
-			local_player.cylinder = server_cylinder
-			update_bullets(local_player)
-		end
-	end
-
-	next.bidding.current_bid = normalize_snapshot_keys(bidding_snapshot.current_bid)
-	next.bidding.skull_roulette = normalize_snapshot_keys(bidding_snapshot.skull_roulette)
-	next.bidding.reload_gate = normalize_snapshot_keys(bidding_snapshot.reload_gate)
-	local draft_bid = bidding_snapshot.current_bid or bidding_snapshot.suggested_bid
-	if draft_bid then
-		next.bidding.my_bid = {
-			count = draft_bid.count or next.bidding.my_bid.count,
-			face = draft_bid.face or next.bidding.my_bid.face,
-		}
-		next.bidding.rail.selected_count = next.bidding.my_bid.count
-	end
-
-	if public.shake or snapshot.shake then
-		next.shake = normalize_snapshot_keys(public.shake or snapshot.shake)
-	end
-	next.duel = normalize_snapshot_keys(public.duel or snapshot.duel)
-
-	set_hint(next)
-	return next
-end
-
 local function alive_count(players)
 	local count = 0
 	local last
@@ -734,13 +474,13 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 	next.ui.cosmetics = clone(payload.cosmetics or {})
 
 	for _, player in ipairs(payload.players or {}) do
-		local normalized = normalize_player(player, local_player_id)
+		local normalized = server_snapshot.normalize_player(player, local_player_id)
 		next.players.order[#next.players.order + 1] = normalized.id
 		next.players.by_id[normalized.id] = normalized
 	end
 
 	if #next.players.order == 0 and local_player_id then
-		local local_player = normalize_player({
+		local local_player = server_snapshot.normalize_player({
 			id = local_player_id,
 			name = "Player",
 		}, local_player_id)
@@ -783,7 +523,10 @@ handlers[actions.types.COSMETICS_APPLY] = function(state, action)
 end
 
 handlers[actions.types.SERVER_SNAPSHOT_APPLY] = function(state, action)
-	local next = apply_server_snapshot(state, action.payload or {})
+	local next = server_snapshot.apply(state, action.payload or {})
+	if next ~= state then
+		set_hint(next)
+	end
 	return next, publish_all()
 end
 

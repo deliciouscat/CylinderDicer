@@ -6,6 +6,104 @@ Opponent Controller 사용 절차는 [shared/docs/OPPONENT_CONTROLLER.md](shared
 
 ---
 
+진행 상태 (2026-07-28, local player character settings):
+
+- Lobby의 Settings 메뉴가 실제 `/settings` 화면으로 연결된다. Rosmund, Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid의 기존 web asset bundle을 사용하는 가로 carousel을 추가했다. 원본 종횡비와 무관하게 portrait 높이를 같은 기준으로 정규화하고, 선택 항목만 확대·완전 불투명하게 표시한다.
+- 기존 단일-chevron 모양을 유지한 프레임 없는 대형 `‹`/`›` icon, 카드 click, 화면 전역 키보드 Left/Right/Home/End, mouse wheel, track scroll/touch swipe가 하나의 선택 상태를 갱신한다. 선택 카드는 scroll-snap과 `scrollIntoView`로 중앙 정렬되고 carousel 양 끝은 alpha gradient로 사라진다. Back은 Custom Room과 같은 board 상단 toolbar 행에서 board 왼쪽 모서리에 정렬한다. 화면에는 `Choose your character`에 해당하는 locale title만 남기고 구현 용어가 드러나는 eyebrow/조작 설명은 제거했다.
+- 로그인 사용자의 선택은 stable `users.characterKey`에 저장한다. 빠른 연속 선택은 client write worker가 순서대로 저장하고 마지막 intent만 success/error UI를 갱신한다. 기존 user row는 optional widen과 Rosmund default로 읽으므로 backfill migration이 필요 없다.
+- Ladder, Custom Game, Dev/QA match 생성은 human participant의 최신 profile character를 읽어 `matchParticipants`와 MatchState에 동결한다. 이미 생성되거나 진행 중인 match는 소급 변경하지 않고 새 match부터 적용한다. 기존 GameBridge/Defold character rendering 계약은 변경하지 않았다.
+- Defold의 bidding carousel, duel combat, 좌하단 local HUD가 모두 frozen `characterKey`를 사용한다. 공용 `character_art.lua`가 각 원본 PNG 비율을 소유하고 GUI의 높이는 유지하되 폭을 원본 비율로 계산하므로 951:907의 Calamity Kate도 좁은 고정 box에 눌리지 않는다.
+- `ko`/`en`/`ja` 설정·상태·접근성 문구와 carousel 순환/default/wheel focused test를 추가했다.
+- 검증: `phase0:test` 전체 통과(Convex domain 39, Ladder 19, Custom Game 7, play-wrapper 3, admin model 2, Settings 3, Lua 62, Vue production build), `phase4:deploy`, `phase4:check` 통과. `http://127.0.0.1:5173/settings`에서 1440×900/1280×720/375×812의 확대·휠/화살표/track scroll 이동, 0px page overflow, console error 없음을 확인했다. 사용 가능한 browser session이 모두 signed-out이라 authenticated 저장→새로고침 manual E2E는 이번 검증 범위 밖이다.
+
+진행 상태 (2026-07-27, duel 공개 주사위 겹침/안내 영역 정리):
+
+- 결투 전 패 공개의 runtime clone 주사위는 GUI `z` 값에 의존하지 않고 `gui.move_above()`로 위 행 `2, 4`를 먼저, 아래 행 `1, 3, 5`를 나중에 그리도록 강제한다. 아래쪽 3개가 위쪽 2개를 자연스럽게 덮는다.
+- 로컬 공개 주사위 묶음을 기존 위치보다 20px 위로 옮겨 하단 안내 패널과 겹치지 않게 했다. 상대 컵 주사위와 하단 정면 tray의 배치는 변경하지 않았다.
+- 검증: Defold Lua 62/62, `phase0:test`, release HTML5 bundle/sync freshness, HTML5 `duel_reveal` focused visual/console check, `git diff --check`를 통과했다.
+
+진행 상태 (2026-07-27, bot character identity 고정):
+
+- gameplay bot catalog에 이름·성향과 독립된 명시적 `characterKey`를 추가했다. Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid는 각각 고유 character key를 가지며 이름이나 `opponent-N`/좌석 번호로 일러스트를 추론하지 않는다.
+- `virtualOpponents`, Custom Game composition participant, match participant에는 optional `characterKey`를 widen-only로 추가했다. Catalog ensure가 기존 bot row를 lazy backfill하고, 새 Custom Game/Ladder/Dev/QA match는 매치 생성 시 character identity를 MatchState에 동결한다.
+- public/duel snapshot과 GameBridge가 `characterKey`를 전달하고 Defold snapshot codec이 `character_key`로 정규화한다. carousel/duel의 중복 texture map은 `ui/common/character_art.lua`로 통합했으며 unknown key는 Rosmund로 위장하지 않고 일러스트를 숨긴다.
+- 좌석 기반 character 배정은 character identity가 없는 legacy/human fixture에만 남겼다. 이미 생성되어 잘못된 skin으로 동결된 진행 중 매치는 소급 변경하지 않으며 새 match부터 identity 고정이 적용된다.
+- 검증: bot 이름↔character catalog, 비정규 좌석, TS↔Lua catalog parity, snapshot camel/snake 변환, unknown fallback을 focused Convex/Lua test로 고정했다.
+
+진행 상태 (2026-07-27, Skull 결투 절반 수량 판정):
+
+- Skull(face 1) 입찰은 rail의 원래 count와 입찰 순서를 유지하되, challenge 판정에서만 `floor(count / 2)`를 요구 수량으로 사용한다. Skull 7 콜은 실제 Skull 3개, Skull 8 콜은 실제 Skull 4개를 기준으로 부족/초과/정확을 판정한다.
+- 격발 횟수는 실제 Skull 개수와 이 요구 수량의 차이다. 일반 face 입찰은 기존 count를 그대로 사용하고 Skull을 wild로 포함하는 기존 집계 규칙을 유지한다.
+- Convex와 Defold local simulator의 judge가 `requiredCount`/`required_count`를 같은 snapshot 계약으로 노출한다. 결투 공개 HUD의 콜 표시는 선언한 rail 원본 count를 유지해 입찰 자체가 절반으로 바뀐 것처럼 보이지 않게 한다.
+- 홀수·짝수·최소 Skull count, 일반 face 불변, SHORT/OVER 격발 차이를 TS/Lua parity test로 고정했다.
+
+진행 상태 (2026-07-27, Custom Game host succession):
+
+- 방 상세의 `Back`은 현재 human participant의 `leaveMyCustomGameRoom`을 실행한 뒤 방 목록으로 이동한다. 방 목록의 `Back`만 로비로 이동하며 별도 `나가기` 버튼은 두지 않는다.
+- 방장이 나가면 active human 중 가장 작은 `seatIndex`를 가진, 즉 방장 다음으로 먼저 입장한 user에게 `customGameRooms.hostUserId`를 승계한다. virtual participant는 승계 후보에서 제외한다.
+- 새 방장은 ready 고정 상태가 되고, host 표시·ready 집계·room browser host 이름은 `playerId`가 아니라 authoritative `hostUserId`로 판정한다. participant playerId와 좌석은 보존되어 기존 match handoff 계약을 유지한다.
+- 남은 human이 없으면 모든 bot/host participant를 removed 처리하고 room을 `cancelled`로 닫는다. cancelled room은 composing room 목록과 active membership 조회에서 제외된다.
+- focused Custom Game test 7개, `convex:typecheck`, Vue production build, `phase0:test`, `phase4:deploy`, `phase4:check`, `git diff --check`를 통과했다.
+
+진행 상태 (2026-07-27, Custom Game room browser back / service shadow fix):
+
+- Custom Game의 Back 화면 계약을 `방 상세 → 방 목록 → 로비` 2단계로 고정했다. 방 상세의 Back은 membership을 먼저 정리하고, 구독 generation을 무효화한 뒤 public composing room 목록을 다시 조회한다.
+- bot 제거 UI는 factory 반환 객체의 HMR 시점 shape에 의존하지 않고 named `removeMyCustomGameOpponent` service 함수로 Convex mutation을 호출한다.
+- 과거 컴파일 산출물 `customGameService.js`와 `functionReferences.js`가 최신 TypeScript 원본을 shadowing해 제거 메서드를 숨기던 원인을 제거했다. `web/tsconfig.json`은 `noEmit`으로 소스 옆 JS 재생성을 막는다.
+- focused Custom Game test 5개, Vue production build, `phase0:test`, live `phase4:check`, `git diff --check`를 통과했다. 공개 Convex 함수는 변경하지 않아 이 수정에서 재배포는 수행하지 않았다.
+
+진행 상태 (2026-07-27, Custom Game host bot removal / toolbar sizing):
+
+- 방장 Custom Game toolbar에서 누락된 grid spacer를 복구했다. 초대 버튼은 입력창용 가변 열이 아니라 Back과 동일한 180px toolbar 열을 사용하며 responsive breakpoint에서도 두 버튼의 폭 계약이 같다.
+- 방장이 선택한 virtual participant를 composing room에서 제거하는 `removeMyCustomGameOpponent` mutation과 `봇 제거` UI를 추가했다. UI는 방장에게만 보이고 virtual row 선택 시에만 활성화된다.
+- 방장 action bar는 `봇 추가 / 봇 제거 / 시작` 3열 고정 grid를 사용한다. 세 버튼은 board 내부 폭을 균등 분할하며 desktop/mobile 모두 한 줄을 유지한다.
+- 서버는 봇 추가와 제거 모두 현재 인증 사용자가 room host인지, room이 composing인지 검사한다. 제거는 active virtual participant만 허용하며 host/guest human이나 시작된 room에는 적용되지 않는다.
+- `ko`/`en`/`ja` 제거 문구와 focused composition test를 추가했다. `phase0:test`, `phase4:deploy`, `phase4:check`, `git diff --check`를 통과했다. 로그인된 Chrome 연결을 사용할 수 없어 이 실행의 authenticated add/remove visual E2E는 수행하지 못했다.
+
+진행 상태 (2026-07-27, result action button artwork):
+
+- 웹 button bundle과 동일한 임시 PNG를 Defold 원본 `assets/images/ui/results/result_button.png`로 이동하고 `rank_result.atlas`에 등록했다.
+- 탈락/완료 결과 HUD의 `로비로 나가기`와 `관전하기`가 동일한 wood plaque 이미지를 사용한다. 기존 locale label, 클릭 영역, one-shot lobby handoff와 spectate 동작은 유지한다.
+- `result.gui_script`가 title/rating/odometer/button/plaque 좌표와 크기를 runtime에 재배치하던 경로를 제거했다. 외부 배치는 Editor의 `result.gui`가 source of truth이며, 완료용 중앙 로비 버튼은 별도 정적 `complete_lobby_button`으로 두어 위치 이동 없이 상태별 enabled만 전환한다. Lua는 등수 texture, locale/visibility, odometer reel 내부 digit frame만 갱신한다.
+- 검증: Defold Editor build, `phase0:test`, release HTML5 bundle/sync를 통과했다. `http://127.0.0.1:5173/play/index.html`의 result fixture에서 탈락 상태 두 버튼, 관전 전환, 완료 상태 단일 로비 버튼과 `EXIT_TO_LOBBY`를 확인했고 console/network error는 없었다.
+
+진행 상태 (2026-07-27, previous bidder face / local cylinder ownership):
+
+- bidding carousel에서 authoritative `current_bid.player_id`의 HP/장탄 indicator 옆에 그 bid의 정면 주사위 눈을 표시한다. 다른 slot과 current bid가 없는 상태에서는 숨긴다.
+- `cylinder_overlay`의 visual player 선택을 HUD별로 분리했다. `bidding` 우하단은 항상 local private cylinder를 사용하고, `revolver_reload`/`loading` 중앙 연출만 pending player를 사용한다. 따라서 상대 bid reload가 pipeline으로 pending일 때 상대 실린더가 local HUD 위치에 순간 노출되지 않는다.
+- Lua 회귀 테스트는 current bidder face 소유권, invalid face 숨김, opponent pending 중 local cylinder 소유권을 검증한다.
+- 검증: Defold Lua 55/55, Defold Editor build, release HTML5 bundle/sync, `phase0:test`가 통과했다. HTML5 focused gate에서 opponent bid face 2가 이전 bidder slot에 표시되고, 같은 frame의 pending player가 opponent여도 우하단 cylinder owner가 `local-player`인 것을 확인했다.
+
+진행 상태 (2026-07-27, rail indicator assets):
+
+- `rail.gui`의 문자 `v`/`^` 포인터를 `ui/down_indicator`/`ui/up_indicator` image box로 교체했다. `up_indicator.png`는 `play/assets/images/ui/indicators/`로 이동하고 공용 `ui.atlas`에 등록했다.
+- Defold Editor build, release HTML5 bundle/sync, `phase0:test`가 통과했다. 브라우저 bidding 캡처에서 두 PNG 포인터가 중앙 count를 위·아래에서 가리키는 것을 확인했다.
+
+진행 상태 (2026-07-27, duel cylinder trigger indicator):
+
+- 결투 집행 화면의 중앙 빨간 `hit_flash` placeholder를 회전 cylinder 연출로 교체했다. 각 격발은 서버/Lua resolution step의 authoritative `slotIndex`/`slot_index`, `hit`, `consumed`를 그대로 사용한다.
+- resolution의 `cylinderSlotsBefore`/`cylinder_slots_before`가 격발 직전 6개 약실 배열을 보존한다. combat 시작부터 실제 장전된 약실 전부에 탄을 표시하고, 각 step이 집행될 때 `consumed=true`인 현재 약실의 탄만 제거한다.
+- cylinder 위에는 제공된 `down_indicator.png`를 `play/assets/images/ui/indicators/`와 `ui.atlas`에 배치해 고정 표지로 사용한다. 현재 약실이 표지 아래로 ease-in-out 회전하며 장전되어 있으면 `bang`, 비어 있으면 `tick`이 재생된다.
+- 검증: Convex domain 34/34, Defold Lua 52/52, Defold Editor build, release HTML5 bundle/sync freshness가 통과했다. HTML5 focused check에서 동시에 4개 장전 약실이 표시되는 장면을 캡처했고, step별 소모는 Lua HUD 회귀 테스트로 확인했다.
+
+진행 상태 (2026-07-26, correctness/security refactor Waves A–H):
+
+- command boundary를 command type별 payload parser로 고정하고 `Number()` coercion을 제거했다. slot/count/face/revision은 finite safe integer 및 ruleset range를 boundary와 reducer 양쪽에서 확인한다.
+- Convex admin 권한은 Clerk JWT의 exact top-level `role: "admin"`만 인정한다. frontend-writable `unsafeMetadata`, nested metadata, suffix role과 boolean alias는 더 이상 권한 근거가 아니다.
+- `customGameParticipants.by_room_and_status` index를 추가하고 active participant를 직접 조회한다. removed row가 active row를 가리는 `.take().filter()` 경로를 제거했다.
+- Defold가 private snapshot의 `availableActions`를 보존해 server capability를 HUD 입력 권한의 primary source로 사용한다. phase/turn 기반 local 추론은 명시적 local simulator에서만 fallback이다.
+- Vue play wrapper에 `{matchId, revision, generation}` snapshot coordinator를 추가했다. public/private revision이 일치할 때만 병합하고 stale fetch/subscription/ack, iframe remount 메시지, in-flight 중복 command를 차단한다. iframe bridge는 expected window와 exact origin도 검증한다.
+- `shared/game/ruleset.ts`, Lua paired ruleset, golden fixture로 player/dice/cylinder/rail/MMR/flow timing 상수를 공용화했다. gameplay/QA bot character catalog를 통합하고 participant에 고정된 strategy key/version을 실제 registry가 해석한다.
+- behavior-neutral 1차 분해로 Defold server snapshot codec, Convex admin authorization/audit, Opponent Controller 순수 model을 별도 모듈로 추출했다. lifecycle/purge 및 화면 panel 추가 분해는 별도 change set으로 남겼다.
+- 검증: `phase0:test` 전체 통과(Convex domain 34, Ladder 19, Custom Game 3, play-wrapper 3, admin model 2, Lua 51, Vue production build), `phase4:deploy`/`phase4:check`, release HTML5 bundle/sync freshness, `git diff --check` 통과. 배포 대상은 `https://rugged-elephant-149.convex.cloud`.
+- 브라우저 smoke URL은 `http://127.0.0.1:5174/`였다. unauthenticated admin gate와 single Defold iframe/archive 요청은 확인했으나 headless Chromium의 WebGL 부재로 engine runtime이 중단되어 authenticated gameplay/bridge visual E2E는 이 실행에서 검증하지 못했다.
+
+진행 상태 (2026-07-27, gameplay bot shake auto-ready):
+
+- 실제 `server_bot`은 `cup_shake`에 진입해 `shake_complete` capability를 받으면 profile의 일반 반응 지연을 기다리지 않고 0ms checkpoint job으로 자동 Ready 처리한다.
+- 여러 bot은 기존 revision/phase/epoch guard와 command 후 재스케줄을 유지해 한 명씩 authoritative `shake.complete`를 제출한다. `qa_manual`과 human은 제외되며 6초 `shake.timeout` fallback도 유지한다.
+- focused bot pacing test에 checkpoint delay 0ms 계약을 추가했다.
+
 진행 상태 (2026-07-26, bidding 가독성 / bot raise variation):
 
 - carousel과 결투 HUD의 생존자는 portrait와 HP/탄환 indicator를 alpha 1.0으로 표시한다. 탈락자는 portrait와 두 indicator만 alpha 0.5로 낮추며, 치명타 연출에서는 표시 HP가 0이 되는 시점에 함께 전환한다.
@@ -846,7 +944,7 @@ Phase 5에서 opponent controller가 담당하는 QA 범위:
   - `ko` / `en` / `ja` searching, roster, recent-N/all-time average, cancel, countdown, retry/error copy를 추가했다.
   - 검증: `ladder:test` 7/7, `convex:typecheck`, Web production build, `phase4:deploy`, `phase4:check`, authenticated Chrome 1440×900 / 1280×720 / 375×812 QA 통과.
   - 브라우저 roster 2/4/6과 Ready → real dev fixture matchId → single `ConvexPlayScreen` iframe은 deterministic dev fixture로 확인했다. 실제 2-user FIFO production matchmaking은 한 계정 브라우저만 사용한 이번 QA 범위 밖이다.
-- 의도적으로 미룬 것: tier boundary, season reset, leaderboard, rating/result writeback, queue ETA/인원, sophisticated opponent selection, persisted fidget rewards, character selection pipeline.
+- 의도적으로 미룬 것: tier boundary, season reset, leaderboard, rating/result writeback, queue ETA/인원, sophisticated opponent selection, persisted fidget rewards.
 - Runbook: [shared/docs/LADDER_QA.md](shared/docs/LADDER_QA.md)
 
 ---

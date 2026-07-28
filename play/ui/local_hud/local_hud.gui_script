@@ -4,6 +4,10 @@ local i18n = require("game.core.i18n")
 local anchors = require("game.core.anchors")
 local gui_util = require("ui.common.gui_util")
 local dice_art = require("ui.common.dice_art")
+local character_art = require("ui.common.character_art")
+local dice = require("game.model.rules.dice")
+
+local LOCAL_PORTRAIT_HEIGHT = 220.0
 
 local function register_anchor()
 	local position = gui_util.world_position("cylinder_anchor")
@@ -20,6 +24,15 @@ local function set_dice_enabled(enabled)
 	gui_util.set_enabled("dice_values", false)
 end
 
+local function hint_text(state)
+	local bid = state.bidding and state.bidding.my_bid
+	if selectors.is_hud(state, "bidding") and selectors.is_my_turn(state) and bid and bid.face == dice.SKULL_FACE then
+		return i18n.t("hud.hint.bidding_skull")
+	end
+
+	return i18n.t(selectors.hint_key(state))
+end
+
 local function render(self, state)
 	local player = selectors.local_player(state)
 	if not player then
@@ -31,7 +44,18 @@ local function render(self, state)
 	gui_util.set_text("name", player.name or player.id)
 	gui_util.set_text("hp", player.hp or 0)
 	gui_util.set_text("bullets", selectors.player_bullets(player))
-	gui_util.set_text("hint", i18n.t(selectors.hint_key(state)))
+	gui_util.set_text("hint", hint_text(state))
+	local portrait_texture = character_art.texture_name(player)
+	gui_util.set_enabled("portrait_placeholder", portrait_texture ~= nil)
+	if portrait_texture then
+		gui_util.set_texture("portrait_placeholder", portrait_texture)
+		gui_util.play_flipbook("portrait_placeholder", player.portrait_state or "front")
+		gui_util.set_size("portrait_placeholder", vmath.vector3(
+			character_art.portrait_width(player, LOCAL_PORTRAIT_HEIGHT),
+			LOCAL_PORTRAIT_HEIGHT,
+			0.0
+		))
+	end
 	for index = 1, 5 do
 		local face = player.dice[index]
 		if face then
@@ -59,7 +83,7 @@ local function bind_store(self)
 		return false
 	end
 
-	for _, topic in ipairs({ "players", "turn", "flow", "ui" }) do
+	for _, topic in ipairs({ "players", "turn", "flow", "ui", "bidding" }) do
 		self.subs[#self.subs + 1] = self.store:subscribe(topic, function(_state)
 			request_render(self)
 		end)

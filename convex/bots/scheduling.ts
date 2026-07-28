@@ -31,12 +31,20 @@ export async function scheduleNextBotAction(ctx: GenericCtx, state: MatchState) 
 	}
 
 	const availableActions = deriveAvailableActions(state, participant.playerId)
-	const pacing = availableActions.some((action) => {
-		return action.type === 'bid' || action.type === 'challenge'
-	})
-		? 'bidding'
-		: 'routine'
-	const seed = `${state.matchId}:${state.revision}:${participant.playerId}:${participant.botStrategyVersion ?? '1'}`
+	const pacing = availableActions.some((action) => action.type === 'shake_complete')
+		? 'checkpoint'
+		: availableActions.some((action) => {
+			return action.type === 'bid' || action.type === 'challenge'
+		})
+			? 'bidding'
+			: 'routine'
+	const seed = [
+		state.matchId,
+		state.revision,
+		participant.playerId,
+		participant.botStrategyKey ?? 'weighted_baseline',
+		participant.botStrategyVersion ?? '1',
+	].join(':')
 	const delayMs = botReactionDelayMs(
 		participant.botParameters as Partial<BotPersonalityParameters> | undefined,
 		seed,

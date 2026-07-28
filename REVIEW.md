@@ -15,7 +15,7 @@
 
 ### Wave A — command trust boundary
 
-상태: 미착수.
+상태: 완료 (2026-07-26).
 
 1. `submitMatchCommand`의 `payload: v.any()`를 command type별 discriminated validator로 교체한다.
 2. `setup.load_initial`, `bullet.load`, `bid.raise` 숫자는 finite safe integer와 domain range를 boundary와 reducer 양쪽에서 확인한다.
@@ -32,7 +32,7 @@
 
 ### Wave B — admin authorization boundary
 
-상태: 미착수.
+상태: 완료 (2026-07-26).
 
 1. `unsafeMetadata`, recursive metadata walk, `*:admin` suffix 허용을 제거한다.
 2. Clerk JWT template가 서명한 exact backend claim 하나와 exact role literal 하나만 허용한다.
@@ -47,7 +47,7 @@
 
 ### Wave C — indexed active room membership
 
-상태: 미착수.
+상태: 완료 (2026-07-26).
 
 1. `customGameParticipants`에 `by_room_and_status` index를 widen 단계로 추가한다.
 2. `.take(8).filter(status)` 호출을 index query로 교체한다.
@@ -64,7 +64,7 @@
 
 ### Wave D — server capability propagation
 
-상태: 미착수.
+상태: 완료 (2026-07-26).
 
 1. private snapshot의 `availableActions`를 Defold state에 보존한다.
 2. bidding/load/shake/check controls는 server capability를 primary source로 사용한다.
@@ -79,7 +79,7 @@
 
 ### Wave E — versioned snapshot coordinator
 
-상태: 미착수.
+상태: 완료 (2026-07-26).
 
 1. bridge listener는 expected iframe `contentWindow`, allowed origin, message schema를 모두 검증한다.
 2. snapshot fetch/merge key를 `{matchId, revision}`으로 고정하고 latest-request generation guard를 둔다.
@@ -97,7 +97,7 @@
 
 ### Wave F — ruleset and protocol contracts
 
-상태: Fix-first 이후.
+상태: 완료 (2026-07-26).
 
 - 6 players, 36 rail cells, dice/cylinder limits, initial slots, default MMR, flow timings를 versioned ruleset으로 모은다.
 - TypeScript DTO를 canonical contract로 정하고 Lua codec을 한 모듈로 모은다.
@@ -106,7 +106,7 @@
 
 ### Wave G — bot catalog and strategy registry
 
-상태: Fix-first 이후.
+상태: 완료 (2026-07-26).
 
 - `DEFAULT_VIRTUAL_OPPONENT_SPECS`와 `GAMEPLAY_BOT_SPECS`의 identity 충돌을 하나의 catalog로 합친다.
 - stored `strategyKey`를 실제 strategy registry lookup에 사용하고 unknown version은 명시적으로 reject/fallback한다.
@@ -114,12 +114,22 @@
 
 ### Wave H — oversized orchestration split
 
-상태: 마지막.
+상태: 1차 behavior-neutral 분해 완료 (2026-07-26).
 
 - `reducers.lua`: snapshot decode/apply, local simulator reduction, presentation-derived state를 분리한다.
 - `adminMatches.ts`: authorization, lifecycle, audit, purge를 분리한다.
 - `OpponentControllerScreen.vue`: room list, match controls, Ladder QA panel을 composable/panel로 분리한다.
 - 각 추출은 behavior-neutral change로 진행하고 characterization test 외의 기능 변경을 넣지 않는다.
+
+완료 범위:
+
+- `reducers.lua`의 server snapshot key codec/apply를 `server_snapshot.lua`로 분리했다.
+- `adminMatches.ts`의 authorization과 audit 기록/조회 경계를 각각 `qa/adminAuthorization.ts`, `qa/adminAudit.ts`로 분리했다.
+- Opponent Controller의 순수 표시/선택/QA 단계 계산을 `opponentControllerModel.ts`로 분리하고 characterization test를 추가했다.
+
+후속 후보:
+
+- `adminMatches.ts`의 lifecycle/purge와 `OpponentControllerScreen.vue`의 room/match/Ladder panel 분리는 현재 correctness 변경과 섞지 않고 별도 change set으로 진행한다.
 
 ## 5. 실행 순서
 
@@ -133,3 +143,14 @@
 8. Wave H orchestration split
 
 Wave A–E는 correctness/security 작업이다. Wave F–H는 중복과 모듈 크기를 줄이는 작업이므로 앞 단계 gate가 안정된 뒤 시작한다.
+
+## 6. 2026-07-26 완료 결과
+
+- public/admin command 입력은 command type과 payload 조합을 boundary에서 검증하며 숫자 coercion을 허용하지 않는다.
+- admin 권한은 JWT의 exact top-level `role: "admin"`만 인정한다.
+- active custom room participant는 `by_room_and_status` index로 직접 조회한다.
+- Defold controls는 server `availableActions`를 primary capability로 사용하고 local simulator에서만 추론 fallback을 사용한다.
+- Vue/iframe bridge는 expected window/origin과 `{matchId, revision, generation}`을 검증하며 stale snapshot/ack와 중복 in-flight command를 버린다.
+- TS/Lua가 versioned ruleset golden fixture로 player/dice/cylinder/rail/timing 상수 parity를 검증한다.
+- gameplay/QA bot identity는 단일 catalog를 사용하고 stored strategy key/version을 registry lookup에 실제 사용한다.
+- 검증: `phase0:test`, `phase4:deploy`, `phase4:check`, release HTML5 bundle/sync, `git diff --check` 통과.

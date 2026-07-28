@@ -25,7 +25,7 @@ Vue web shell이 Convex/Clerk SDK를 붙이고, Defold는 Vue `GameBridge`를 �
 - Defold deciding final match result.
 - Vue/Defold writing authoritative match documents directly.
 - Duplicating game rules permanently in both Lua and Convex.
-- Treating client-side `availableActions` as authority. It is UX only.
+- Treating client-side inference as authority. Snapshot `availableActions` is server-derived UX capability and the server still revalidates every submitted command.
 - Sending animation frames, shake ticks, pointer positions, button repeat events, or transient HUD state to Convex.
 - Writing full public + every private snapshot on every accepted command.
 - Querying large tables with `.collect()` followed by client-side filtering in Convex functions.
@@ -67,7 +67,7 @@ High-frequency examples:
 
 - Cup shake gesture: Defold/Vue maintain a bounded local gauge and send one `shake.complete` command at 100; no per-tick mutation exists.
 - Count/face spinner repeat: client keeps local draft value and sends only final `bid.raise`.
-- Duel animation: server returns ordered resolution steps once; Defold plays timing, easing, hit flashes, vibration, and camera effects locally.
+- Duel animation: server returns ordered resolution steps once plus the authoritative pre-shot `cylinderSlotsBefore` layout. Defold displays every loaded chamber, removes only a consumed chamber as its step fires, and plays timing, easing, vibration, and camera effects locally.
 - SHORT/OVER duel ownership: verdict는 `actual - bid` 기준이다. `SHORT`에서는 challenger가 previous bidder를, `OVER`에서는 previous bidder가 challenger를 공격한다. 각 step의 `shooterId`와 `rouletteSubjectId`는 공격자 및 소모할 실린더를, `targetId`는 HP가 감소할 피격자를 뜻한다.
 - Delayed phase progression: Convex schedules `shake.timeout`, `dice.check.timeout`, `bidding.open`, `bidding.timeout` (40 seconds per active bidding turn), `bid.reload_timeout`, `duel.execute`, and `round.advance`; clients render the resulting phase and animation timeline.
 - Pointer hover/drag, HUD open/close, disabled-button feedback: local only.
@@ -112,6 +112,8 @@ Clerk owns:
 - JWT issuance for Convex authentication
 
 Clerk identity must be mapped to a Convex `users` row.
+
+`users`는 human의 stable profile을 소유하며 선택한 local-player portrait identity를 optional `characterKey`로 저장한다. Lobby `/settings`의 carousel은 authenticated `users.setCurrentUserCharacter` mutation만 호출하고 match/queue 문서에 직접 쓰지 않는다. 기존 user row는 `characterKey`가 없으면 `shared/game/characters.ts`의 Rosmund default로 읽는 widen-only 계약이므로 별도 backfill을 하지 않는다.
 
 ### Vue
 
@@ -217,6 +219,7 @@ web/src/services/convex/
   authService.ts
   matchService.ts
   profileService.ts
+  characterProfileService.ts
   inventoryService.ts
   rankingService.ts
   ladderService.ts
@@ -423,7 +426,7 @@ The exact dashboard path can differ by Clerk UI version. Look for API keys, Fron
 
 For the operator-facing `/admin/opponents` usage guide, see [Opponent Controller Runbook](./OPPONENT_CONTROLLER.md).
 
-The Phase 4 admin opponent controller checks custom claims on the Clerk JWT identity returned by `ctx.auth.getUserIdentity()`. For the current implementation in `convex/adminMatches.ts`, the simplest Convex JWT template claim is:
+The admin opponent controller checks one backend-controlled signed claim on the Clerk JWT identity returned by `ctx.auth.getUserIdentity()`. The only accepted shape is:
 
 ```json
 {
@@ -431,40 +434,7 @@ The Phase 4 admin opponent controller checks custom claims on the Clerk JWT iden
 }
 ```
 
-Another accepted shape is:
-
-```json
-{
-  "roles": ["admin"]
-}
-```
-
-The guard also accepts admin-like values in these keys, including nested metadata objects:
-
-- `role`
-- `roles`
-- `permission`
-- `permissions`
-- `org_role`
-- `organizationRole`
-- `organization_role`
-- `metadata`
-- `publicMetadata`
-- `public_metadata`
-- `privateMetadata`
-- `private_metadata`
-- `unsafeMetadata`
-- `unsafe_metadata`
-- `claims`
-- `authorization`
-
-Boolean admin flags are also accepted:
-
-- `admin`
-- `isAdmin`
-- `is_admin`
-- `cylinderdicerAdmin`
-- `cylinderdicer_admin`
+No nested metadata, `unsafeMetadata`, suffix role, role array, permission alias, or boolean admin flag is accepted. Clerk documents `unsafeMetadata` as frontend-writable, so it must never participate in Convex authorization. Route visibility and `QA_TOOLS_ENABLED` remain independent gates and do not grant admin authority.
 
 After editing the Clerk JWT template, sign out and sign back in so Clerk issues a fresh token. To verify the claim reaches Convex:
 
@@ -515,6 +485,7 @@ export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
     displayName: v.optional(v.string()),
+    characterKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_clerk_id", ["clerkId"]),
@@ -633,6 +604,8 @@ Bid reloads are pipelined inside the authoritative `bidding` phase. `pendingLoad
 
 A face-1 Skull `bid.raise` is still a single player intent, but the authoritative reducer resolves a self Russian-roulette attempt before accepting it. Convex derives the spin from match RNG, triggers the bidder's own cylinder once, consumes any fired bullet, and applies one HP damage on a hit. A surviving bidder's Skull bid is accepted and enters the normal bid-reload pipeline. A lethal attempt is rejected without replacing the prior `currentBid`; the eliminated bidder is skipped, or the match completes when one player remains. The public snapshot projects `bidding.skullRoulette` with a monotonic sequence and the hit/HP outcome so Defold can animate the affected portrait without client-authored damage.
 
+At challenge adjudication, a face-1 Skull bid uses `floor(currentBid.count / 2)` as its effective required count while preserving the original rail count and bid ordering. Only actual Skull dice count toward that bid. `duel.judge.requiredCount` is projected in the public snapshot, and both the Convex reducer and Defold local simulator calculate verdict and shot delta from `actual - requiredCount`.
+
 Scheduler payloads contain only `matchId`, transition type, expected phase, expected revision, and expected epoch. Timing metadata such as `delayMs` is used by `runAfter` but is not passed to the internal mutation validator. The web reconnect path calls `resumeMatchFlow`, which only re-schedules the guarded internal transition; it never applies phase changes directly.
 
 Clients never submit:
@@ -681,6 +654,12 @@ write private delta only for affected viewers when needed
 return accepted/rejected result
 ```
 
+`convex/protocol/commandPayloads.ts` owns the public/admin player-command boundary. It validates the command type and payload as one contract, rejects unknown keys/shapes, and requires revision, slot, count, and face values to be finite safe integers inside the versioned ruleset range. Reducer/rule functions repeat the domain checks and never use `Number()` coercion. Broad `v.any()` fields that remain in event/snapshot persistence are storage contracts, not permission to accept arbitrary client command input.
+
+`customGameParticipants` active membership uses the compound `by_room_and_status` index. Readers query the exact room/status pair and then apply the six-player bound; they do not take old room rows first and filter removed participants in memory.
+
+Custom Game host ownership is authoritative in `customGameRooms.hostUserId`; `local-player` is only a legacy/player identity and is not used to infer the current host. When a composing-room host calls `leaveMyCustomGameRoom`, the same transaction removes that participant and transfers `hostUserId` to the remaining human with the lowest `seatIndex` (earliest arrival). Bots are never succession candidates. The successor keeps the existing playerId/seat, becomes ready, and is excluded from non-host ready checks. If no human remains, every active participant is marked removed and the room becomes `cancelled`, which excludes it from composing-room lists and active-room recovery.
+
 ### Ladder queue and roster introduction
 
 `/play/ladder`의 waiting/roster contract는 [web/LADDER_LAYOUT.md](../../web/LADDER_LAYOUT.md)의 `# 개요`, `# LadderShell.vue`, `## phase 전이`가 SSOT다.
@@ -706,7 +685,9 @@ Web ownership:
 - fidget chips/die는 server write가 없는 local-only state다.
 - roster 종료 후 `LadderShell`이 `acknowledgeMatchHandoff`로 queue row를 consume하고, `App.vue`가 같은 route를 `/play/ladder?matchId=...`로 replace한 뒤 기존 `ConvexPlayScreen`을 mount한다. refresh는 query matchId로 current match를 복원하고, Back → Lobby → Ladder는 새 waiting session을 만든다. GameBridge 메시지 종류와 transport는 그대로 사용한다.
 
-Gameplay character identity는 authoritative player state가 소유한다. 초기 seat 순서의 기본 skin은 Rosmund, Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid이며 caller가 명시한 skin은 이를 덮어쓴다. Public player snapshot은 `skin`과 `portraitState`를 포함하고 Vue는 같은 `SERVER_SNAPSHOT`으로 전달한다. Defold reducer는 두 필드를 render cache에 병합하므로 carousel과 duel이 player id/challenger id를 임의의 fallback portrait와 혼동하지 않는다.
+Gameplay character identity는 authoritative player state가 소유한다. Lobby Settings에서 고른 human `users.characterKey`는 Ladder/Custom Game/Dev match 생성 시 최신 profile에서 읽어 participant와 MatchState에 동결한다. Custom Game은 composing participant의 cached 값보다 match 생성 시 실제 user profile을 우선하므로 방을 연 뒤 설정을 바꿔도 새 match에는 최신 선택이 적용된다. 기존 match는 소급 변경하지 않는다.
+
+초기 seat 순서의 legacy 기본 character는 Rosmund, Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid이며 caller가 명시한 `characterKey`는 이를 덮어쓴다. Public player snapshot은 `characterKey`, `skin`, `portraitState`를 포함하고 Vue는 같은 `SERVER_SNAPSHOT`으로 전달한다. Defold reducer는 해당 필드를 render cache에 병합하므로 carousel, duel, local HUD가 player id/challenger id를 임의의 fallback portrait와 혼동하지 않는다. Defold의 공용 `ui/common/character_art.lua`는 source portrait 종횡비도 소유하며, 각 HUD는 GUI-authored height를 유지한 채 runtime width를 계산해 wide silhouette을 왜곡하지 않는다. Settings 구현은 기존 bridge payload를 재사용하며 새로운 Defold message를 요구하지 않는다.
 
 Placement normalization은 `shared/ladder/placement.ts`의 단일 구현을 Web/Convex가 같이 import한다. 1인전은 1.0, 그 외는 `(place - 1) / (playerCount - 1) * 5 + 1`이며 표시만 소수 1자리로 반올림한다.
 
@@ -731,15 +712,17 @@ Arrival-rate estimate는 현재 active/eligible cohort만 사용한다. 장기 h
 QA controller와 실제 플레이 bot은 identity와 권한이 다르다.
 
 - `matchParticipants.controlMode`은 `human`, `qa_manual`, `server_bot`을 구분한다. Legacy row는 identity 기반 default로 읽는다.
-- `virtualOpponents.catalogScope`은 gameplay catalog와 QA fixture identity를 구분한다.
+- `convex/bots/specs.ts`의 단일 character catalog가 gameplay와 QA fixture identity를 제공하고 `virtualOpponents.catalogScope`가 사용 범위를 구분한다.
+- Bot personality는 좌석과 별개인 `characterKey`를 명시적으로 참조한다. `shared/game/characters.ts`가 web/Convex character key와 skin 계약을 소유하고, `play/game/characters.lua`가 Defold paired contract를 제공한다. 이름, `opponent-N` player id, MMR 정렬 순서로 character를 추론하지 않는다.
 - `botProfiles`는 virtual opponent별 strategy key/version, difficulty, 기준 MMR, enabled flag와 honesty/aggression/bluff/challenge/risk/skull/caution/randomness/reaction parameter를 저장한다. `by_virtual_opponent`, `by_enabled_and_base_mmr` index로 bounded lookup한다.
-- match 생성 시 profile id/version/parameter를 participant row에 고정한다. Catalog tuning이 이미 진행 중인 match behavior를 소급 변경하지 않는다.
+- match 생성 시 profile id/version/parameter, strategy key, character key를 participant row와 MatchState에 고정한다. `convex/bots/strategies.ts`의 exact key/version registry가 strategy를 해석하며 unknown strategy는 `BOT_STRATEGY_UNSUPPORTED`로 거부한다. Catalog tuning이나 좌석 재배치가 이미 진행 중인 match behavior/외형을 소급 변경하지 않는다.
 - `convex/bots/observation.ts`는 bot 자신의 private dice/cylinder와 모든 player의 public HP/bullet/dice-count/elimination만 제공한다. Opponent private dice/cylinder는 decision input에 포함하지 않는다.
-- `convex/bots/decision.ts`는 reducer의 `deriveAvailableActions`와 bid validator를 사용해 legal player command만 만든다. Seeded randomness와 reaction delay도 parameter에서 bounded하게 계산한다. Routine action은 profile reaction 범위를 사용하고, `bid`/`challenge` 선택지는 사람의 숙고를 표현하는 deterministic extra delay를 더해 1.8–4.2초로 제한한다.
+- `convex/bots/decision.ts`는 reducer의 `deriveAvailableActions`와 bid validator를 사용해 legal player command만 만든다. Seeded randomness와 reaction delay도 parameter에서 bounded하게 계산한다. Routine action은 profile reaction 범위를 사용하고, `bid`/`challenge` 선택지는 사람의 숙고를 표현하는 deterministic extra delay를 더해 1.8–4.2초로 제한한다. `cup_shake`의 `shake.complete`는 checkpoint pacing(0ms)으로 즉시 제출한다.
 - `convex/bots/scheduling.ts`와 `convex/botRunner.ts`는 현재 revision/phase/epoch/participant를 guard한 internal mutation으로 command 하나를 제출한다. Stale scheduled work는 authoritative state를 덮지 않고 no-op/re-schedule한다.
 - command는 기존 `applyMatchCommand`를 통과하고 `source: bot`, `actorVirtualOpponentId`로 command log에 기록된다. Shake/check timeout, bidding timeout/open, duel execute, round advance 같은 system transition은 계속 match flow scheduler가 소유한다.
 - Client는 bot의 speculative draft를 command로 중계하지 않는다. 상대 턴에는 직전 authoritative `currentBid`를 표시하고, 확정 `bid.raise`가 reducer를 통과하면 Convex snapshot으로 모든 구독자에게 동일한 count/face를 전달한다. 다음 local turn의 draft도 server `suggestedBid`가 아니라 직전 `currentBid`에서 시작한다.
-- Custom Game composing room은 host 한 명으로 생성된다. Host의 `addMyCustomGameOpponent` 호출 한 번이 enabled gameplay catalog에서 아직 room에 없는 bot 한 명을 빈 seat에 transactionally 추가한다. 6인 상한, room ownership/status, duplicate bot과 human seat 충돌은 서버가 검증한다. 추가된 virtual participant는 ready이며 Start 뒤 기존 `server_bot` profile snapshot 경로를 사용한다.
+- Custom Game composing room은 host 한 명으로 생성된다. Host의 `addMyCustomGameOpponent` 호출 한 번이 enabled gameplay catalog에서 아직 room에 없는 bot 한 명을 빈 seat에 transactionally 추가한다. Host가 선택한 virtual participant는 `removeMyCustomGameOpponent`로 composing room에서 제거할 수 있다. 두 mutation 모두 authenticated user와 `room.hostUserId`, composing status를 다시 검사하며 제거 mutation은 active `participantKind: virtual`만 `removed`로 전환한다. Guest와 human participant는 이 경로로 추가/제거할 수 없다. 6인 상한, duplicate bot과 human seat 충돌은 서버가 검증하며, 추가된 virtual participant는 ready이고 Start 뒤 기존 `server_bot` profile snapshot 경로를 사용한다.
+- `virtualOpponents.characterKey`, `customGameParticipants.characterKey`, `matchParticipants.characterKey`는 legacy row 호환을 위해 optional widen 상태다. Catalog ensure와 새 composition write가 값을 채우고, reader는 명시 key → virtual opponent key → legacy seat fallback 순으로 dual-read한다. 이 소규모 catalog는 별도 unbounded scan/backfill migration 없이 접근 시 lazy backfill한다.
 - `/admin/opponents`는 QA gate가 열린 `qa_manual`/dev 대상만 조작하고 `server_bot` command를 거부한다. Custom Game의 virtual participants는 자동 ready이며 Start 뒤 `server_bot`이 된다.
 - `GAMEPLAY_BOTS_ENABLED=false`는 scheduling kill switch다. QA server surface는 `QA_TOOLS_ENABLED=true`, web production controller route는 별도로 `VITE_ENABLE_QA_TOOLS=true`일 때만 연다.
 
@@ -787,6 +770,8 @@ getPrivateView(matchId) or usePrivateDelta(matchId)
 - reject obviously impossible local drafts before network calls, while still treating server rejection as final.
 - unsubscribe from match views when leaving the play screen.
 
+`ConvexPlayScreen.vue`의 snapshot coordinator는 `{matchId, generation, revision}`을 단일 적용 키로 사용한다. Public/private snapshot은 revision이 같을 때만 합치고 route 교체, subscription 재시작, 늦은 fetch/ack는 generation과 matchId가 다르면 버린다. 한 command가 in flight인 동안 후속 click은 queue하지 않고 drop하며 최신 authoritative snapshot 뒤에만 다시 입력할 수 있다.
+
 ## Defold bridge messages
 
 Extend `shared/protocol/game-bridge.ts`:
@@ -819,6 +804,14 @@ Defold migration rule:
 - `client_controller.script` emits `PLAYER_COMMAND` through GameBridge.
 - Existing local reducer/store remains as dev simulator until Convex loop is ready.
 
+Bridge security/lifecycle rule:
+
+- Vue listener는 expected iframe `contentWindow`, exact configured origin, known message type를 모두 확인한다.
+- iframe으로 보낼 때도 wildcard가 아닌 exact target origin을 사용한다.
+- Defold HTML5 transport는 parent source/origin을 확인한다.
+- iframe reload/remount 시 listener와 generation을 함께 교체해 이전 engine message가 새 match에 적용되지 않게 한다.
+- Defold model은 private snapshot의 `availableActions`를 보존하고 bidding/load/shake/check controls가 이를 primary source로 사용한다. phase/turn inference는 local simulator에서만 fallback이다.
+
 ## QA migration
 
 Current QA path:
@@ -848,9 +841,17 @@ For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-
 
 Each accepted `shake.complete` rolls only the actor's private dice. The phase remains `cup_shake` until every alive player has completed it, then enters reload/dice check once. Tests must assert the intermediate one-player-complete state so a regression where one actor rolls the whole table cannot pass a final-phase-only test.
 
-`cup_shake` phase 진입 시 Convex flow scheduler는 6초짜리 `shake.timeout`을 예약한다. 이 guard는 개별 `shake.complete`가 revision을 올려도 phase/epoch 기준으로 유지되며, 만료 시 미완료 생존 플레이어만 자동 완료하고 dice를 굴린다. 이미 완료한 플레이어의 dice는 다시 굴리지 않는다. `dice_check` phase 진입 시에도 6초짜리 `dice.check.timeout`을 예약해 미확인 생존 플레이어만 자동 확인 처리하고 `bidding_gap`으로 진행한다. Opponent Controller의 `Complete Shake`/dice check는 이 제한시간을 기다리지 않고 bot checkpoint를 즉시 제출한다.
+`cup_shake` phase 진입 시 Convex flow scheduler는 6초짜리 `shake.timeout`을 예약한다. 이 guard는 개별 `shake.complete`가 revision을 올려도 phase/epoch 기준으로 유지되며, 만료 시 미완료 생존 플레이어만 자동 완료하고 dice를 굴린다. 이미 완료한 플레이어의 dice는 다시 굴리지 않는다. 실제 `server_bot`은 `cup_shake` capability를 받는 즉시 0ms checkpoint job으로 `shake.complete`를 제출한다. 여러 bot은 동일 revision을 경쟁시키지 않고, 각 승인 command 뒤 다음 bot을 새 revision으로 연속 schedule한다. `qa_manual`과 human은 이 자동 bot 경로에 포함되지 않는다. `dice_check` phase 진입 시에도 6초짜리 `dice.check.timeout`을 예약해 미확인 생존 플레이어만 자동 확인 처리하고 `bidding_gap`으로 진행한다. Opponent Controller의 `Complete Shake`/dice check는 이 제한시간을 기다리지 않고 QA checkpoint를 즉시 제출한다.
 
-Convex snapshot keys are camelCase and the Defold model is snake_case. `play/game/model/reducers.lua` normalizes nested keys through `KEY_MAP`; structured fields such as `shake.requiredCount` must have explicit protocol types and adapter assertions. Otherwise a missing map entry can silently activate a Lua fallback while server state remains correct.
+Convex snapshot keys are camelCase and the Defold model is snake_case. `play/game/model/server_snapshot.lua` owns the server snapshot key codec/apply boundary; structured fields such as `shake.requiredCount` and `availableActions` must have explicit protocol mappings and adapter assertions. Otherwise a missing map entry can silently activate a Lua fallback while server state remains correct.
+
+## Versioned ruleset and extracted boundaries
+
+- `shared/game/ruleset.ts` is the canonical TypeScript ruleset for player count, dice/cylinder capacity, rail/bid limits, default MMR, initial chamber slots, and automatic-flow timings.
+- `shared/game/ruleset.golden.json` and `play/game/ruleset.lua` are checked for TS/Lua parity by the domain suite. Runtime-specific animation state remains local.
+- `convex/qa/adminAuthorization.ts` owns the exact signed admin claim; `convex/qa/adminAudit.ts` owns audit writes/reads.
+- `web/src/admin/opponentControllerModel.ts` contains pure controller labels, QA step derivation, and preferred bot selection.
+- Further splitting of admin lifecycle/purge and large Vue panels is behavior-neutral follow-up work; it is not a reason to duplicate authority or protocol rules.
 
 ## Data lifecycle
 

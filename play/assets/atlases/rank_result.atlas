@@ -7,4 +7,7 @@ images {
 images {
   image: "/assets/images/ui/results/rank_4_6.png"
 }
+images {
+  image: "/assets/images/ui/results/result_button.png"
+}
 extrude_borders: 2

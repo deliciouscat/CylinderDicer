@@ -17,13 +17,19 @@
 
 Profile의 `reactionMinMs`/`reactionMaxMs`는 routine player action의 기본 반응 속도다. 입찰 선택지(`bid` 또는 `challenge`)가 있는 checkpoint는 사람의 숙고가 보이도록 seeded extra delay를 더하고 최종 간격을 1.8–4.2초로 제한한다. 같은 match/revision/profile이면 결과가 deterministic하며, 예약 실행 시 revision/phase/epoch를 다시 확인하므로 오래 생각한 bot이 새 상태를 덮지 않는다.
 
+## Character identity
+
+Bot 이름과 일러스트는 좌석으로 연결하지 않는다. `convex/bots/specs.ts`의 각 bot은 `characterKey`를 명시하고, `virtualOpponents` row와 match participant/MatchState가 이를 보존한다. Ladder의 MMR 정렬, Custom Game의 human 중간 좌석, bot 제거·재추가가 발생해도 같은 bot은 같은 character를 유지한다.
+
+Defold는 snapshot `characterKey`를 `character_key`로 정규화하고 `play/ui/common/character_art.lua`에서 atlas texture를 해석한다. Unknown key는 Rosmund fallback을 사용하지 않는다. 좌석 기반 character는 `characterKey`가 없는 legacy/human fixture에만 허용된다.
+
 Bot이 생각하는 동안 client는 직전 authoritative `currentBid`를 계속 표시한다. Bot의 local draft를 고빈도 command로 중계하지 않으며, 확정된 `bid.raise` 한 건이 reducer를 통과한 뒤 모든 구독자에게 새 count/face가 보인다.
 
 Bot의 count raise는 직전 authoritative bid보다 1–3칸 높게 선택한다. Raise 폭은 match/revision seed에 대해 deterministic하며 aggression, bluff, randomness가 높은 profile일수록 2–3칸 선택 확률이 커진다. Face는 그 count 안에서 private observation과 personality score로 선택한다.
 
 ## Personality tuning
 
-현재 기본 personality는 `convex/bots/catalog.ts`에 versioned spec으로 정의된다. parameter를 바꾸면 보수성, bluff/challenge 빈도, Skull 위험 감수, HP/장탄 상태에 따른 caution, reaction 속도와 randomness를 바꿀 수 있다.
+현재 기본 identity/personality spec은 `convex/bots/specs.ts`, strategy registry와 version은 `convex/bots/strategies.ts`에 정의된다. parameter를 바꾸면 보수성, bluff/challenge 빈도, Skull 위험 감수, HP/장탄 상태에 따른 caution, reaction 속도와 randomness를 바꿀 수 있다.
 
 - 행동 의미가 달라지는 변경은 `strategyVersion`도 올린다.
 - 배포 뒤 새 match부터 새 parameter snapshot을 사용한다.

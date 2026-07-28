@@ -30,6 +30,13 @@ function M.install()
 
 			if (!window.CylinderDicerBridgeInstalled) {
 				window.CylinderDicerBridgeInstalled = true;
+				window.CylinderDicerParentOrigin = (function () {
+					try {
+						return document.referrer ? new URL(document.referrer).origin : window.location.origin;
+					} catch (_error) {
+						return window.location.origin;
+					}
+				})();
 
 				window.CylinderDicerSendToDefold = function (message) {
 					window.CylinderDicerToDefoldQueue.push(message);
@@ -68,7 +75,12 @@ function M.install()
 				window.addEventListener("message", function (event) {
 					var data = event.data;
 
-					if (data && data.source === "CylinderDicerVue") {
+					if (
+						event.source === window.parent
+						&& event.origin === window.CylinderDicerParentOrigin
+						&& data
+						&& data.source === "CylinderDicerVue"
+					) {
 						window.CylinderDicerToDefoldQueue.push(data);
 					}
 				});
@@ -102,7 +114,8 @@ function M.emit(message_type, payload)
 			window.dispatchEvent(new CustomEvent(']] .. FROM_DEFOLD_EVENT .. [[', { detail: message }));
 			if (window.parent && window.parent !== window) {
 				var parentMessage = Object.assign({ source: 'CylinderDicerDefold' }, message);
-				window.parent.postMessage(parentMessage, '*');
+				var targetOrigin = window.CylinderDicerParentOrigin || window.location.origin;
+				window.parent.postMessage(parentMessage, targetOrigin);
 			}
 		})();
 	]])

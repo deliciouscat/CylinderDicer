@@ -1,8 +1,12 @@
 import { internalMutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
-import { decideBotIntent } from './bots/decision'
 import { buildBotObservation } from './bots/observation'
 import { gameplayBotsEnabled } from './bots/scheduling'
+import {
+	DEFAULT_BOT_STRATEGY_KEY,
+	DEFAULT_BOT_STRATEGY_VERSION,
+	resolveBotStrategy,
+} from './bots/strategies'
 import type { BotPersonalityParameters } from './bots/types'
 import { applyMatchCommand } from './commands'
 import { getLatestMatchState, getMatchParticipantByPlayerId } from './matches'
@@ -55,10 +59,21 @@ export const advanceBot = internalMutationGeneric({
 		if (!observation) {
 			return { ok: true, skipped: true, code: 'BOT_OBSERVATION_NOT_FOUND' }
 		}
-		const strategyVersion = participant.botStrategyVersion ?? '1'
-		const seed = `${state.matchId}:${state.revision}:${participant.playerId}:${strategyVersion}`
-		const intent = decideBotIntent(observation, {
-			strategyKey: 'weighted_baseline',
+		const strategyKey = participant.botStrategyKey ?? DEFAULT_BOT_STRATEGY_KEY
+		const strategyVersion = participant.botStrategyVersion ?? DEFAULT_BOT_STRATEGY_VERSION
+		const strategy = resolveBotStrategy(strategyKey, strategyVersion)
+		if (!strategy) {
+			return {
+				ok: true,
+				skipped: true,
+				code: 'BOT_STRATEGY_UNSUPPORTED',
+				strategyKey,
+				strategyVersion,
+			}
+		}
+		const seed = `${state.matchId}:${state.revision}:${participant.playerId}:${strategyKey}:${strategyVersion}`
+		const intent = strategy(observation, {
+			strategyKey,
 			strategyVersion,
 			parameters: participant.botParameters as Partial<BotPersonalityParameters> | undefined,
 			seed,

@@ -11,10 +11,16 @@ images {
   image: "/assets/images/ui/buttons/challenge_button.png"
 }
 images {
+  image: "/assets/images/ui/indicators/down_indicator.png"
+}
+images {
+  image: "/assets/images/ui/indicators/up_indicator.png"
+}
+images {
   image: "/assets/images/ui/rail/bid_normal.png"
 }
 images {
-  image: "/assets/images/ui/rail/bid_skull.png"
+  image: "/assets/images/ui/rail/bid_check.png"
 }
 images {
   image: "/assets/images/ui/turn_indicator/turn_indicator.png"

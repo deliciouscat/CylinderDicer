@@ -49,6 +49,7 @@ play/
    │  │   ├─ turn_indicator/    # 턴 배너 프레임
    │  │   ├─ buttons/           # 넘기기 / 결투신청 (normal/pressed/disabled)
    │  │   ├─ arrows/            # 주사위 눈 ▲▼ (normal/pressed/disabled)
+   │  │   ├─ indicators/        # 결투 cylinder 등 고정 위치 표지
    │  │   ├─ rail/              # 포인터 캐럿 등 맵 테마와 무관한 레일 UI만
    │  │   ├─ results/           # 매치 결과 순위 프레임
    │  │   ├─ hud/               # 안내(hint) 패널
@@ -83,7 +84,8 @@ play/
 | PlayerSlot.Portrait | characters/<id>/* (+atlas 등록된 캐릭터만 화면 표시) |
 | StatusBadge | `icons/bullet_indicator`, `icons/hp_indicator`, 숫자 폰트 |
 | BidControls | `ui/buttons/bid_button`, `ui/buttons/challenge_button`, `ui/arrows/{up,down}` |
-| rail (셀 프레임 포함) | `rail/<mapId>/*` (테마 종속), `ui/rail/bid_normal` (숫자칸 배경), `ui/rail/bid_skull` (향후 skull 전용 칸) |
+| Duel cylinder marker | `ui/indicators/down_indicator` |
+| rail (셀 프레임 포함) | `rail/<mapId>/*` (테마 종속), `ui/rail/bid_normal` (일반 숫자칸), `ui/rail/bid_check` (직전 확정 bid 칸), `ui/indicators/{down_indicator,up_indicator}` (중앙 상·하 포인터) |
 | BidMarker | icons/cylinder_badge + DiceFace |
 | DiceTray / DiceFace | dice/<skinId>/* (f1=해골) |
 | cylinderOverlay | `revolver/<skinId>/cylinder.png` + `bullet_bottom` (장전된 약실) + `bullet_unloaded` (재장전 대기 탄환) |
@@ -106,10 +108,10 @@ play/
 
 ## 적용된 HUD 자산
 
-- `assets/atlases/ui.atlas`: 입찰/결투 버튼, ▲▼, 턴 배너, 레일 숫자칸 배경.
+- `assets/atlases/ui.atlas`: 입찰/결투 버튼, ▲▼, 턴 배너, 레일 숫자칸 배경, 레일·결투 cylinder 포인터.
 - `assets/atlases/dices/dice_default.atlas`: default 주사위 36장 전체. bidding face와 하단 리스트에는 정면 `a0`, 컵 앞 테이블 주사위에만 `a1`–`a5` 굴림 각도를 사용한다.
 - `assets/atlases/status_indicators.atlas`: `player_carousel`과 `duel`의 장탄·HP 배지.
 - `assets/atlases/cylinder_default.atlas`: `cylinder_overlay`의 실린더 본체. HTML5에서도 실린더 투명 영역을 독립 texture page로 유지한다.
 - `assets/atlases/revolver_default.atlas`: `cylinder_overlay`의 장전된 약실과 재장전 대기 탄환.
-- `assets/atlases/rank_result.atlas`: `result` HUD의 `rank_{1,2_3,4_6}` 순위 프레임. 1위 승리, 2–3위, 4–6위 결과 panel에 연결한다.
+- `assets/atlases/rank_result.atlas`: `result` HUD의 `rank_{1,2_3,4_6}` 순위 프레임과 `result_button` wood plaque. 순위 panel과 로비/관전 선택 버튼에 연결한다.
 - 모든 gameplay GUI의 `system_font` mapping은 `assets/fonts/noto_serif_cjk_kr_semibold.font`를 사용한다.

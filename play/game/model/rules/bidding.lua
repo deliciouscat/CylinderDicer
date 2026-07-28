@@ -1,10 +1,12 @@
+local ruleset = require("game.ruleset")
+
 local M = {}
 
 M.DEFAULT_LIMITS = {
-	min_count = 1,
-	max_count = 36,
-	min_face = 1,
-	max_face = 6,
+	min_count = ruleset.BID_COUNT_MIN,
+	max_count = ruleset.BID_COUNT_MAX,
+	min_face = ruleset.DICE_FACE_MIN,
+	max_face = ruleset.DICE_FACE_MAX,
 }
 
 local function rank(bid)

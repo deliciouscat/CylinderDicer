@@ -28,6 +28,12 @@
  * ```
  */
 import type { MatchPhase } from '../protocol/snapshots'
+import { GAME_RULESET } from '../../shared/game/ruleset'
+import {
+	CHARACTER_KEYS,
+	isCharacterKey,
+	legacySeatCharacterKey,
+} from '../../shared/game/characters'
 
 export type MatchMode = 'dev' | 'casual' | 'ranked'
 export type MatchStatus = 'idle' | 'ready' | 'complete'
@@ -53,6 +59,7 @@ export interface PlayerState {
 	cylinder: CylinderState
 	eliminated: boolean
 	isLocal?: boolean
+	characterKey?: string
 	skin?: string
 	portraitState?: string
 }
@@ -125,6 +132,7 @@ export interface PendingLoadState {
 export interface DuelJudgeState {
 	verdict: 'SHORT' | 'OVER' | 'EXACT'
 	actual: number
+	requiredCount: number
 	delta: number
 	rawDelta: number
 }
@@ -153,6 +161,7 @@ export interface DuelResolutionState {
 	actorId?: string
 	shooterId?: string
 	targets?: string[]
+	cylinderSlotsBefore: boolean[]
 	steps: DuelStepState[]
 	hpChanges: Record<string, number>
 	reloadPlayerId?: string
@@ -242,9 +251,11 @@ export interface CreateInitialStateInput {
 		participantKind?: 'human' | 'virtual'
 		controlMode?: ParticipantControlMode
 		botProfileId?: string
+		botStrategyKey?: string
 		botStrategyVersion?: string
 		botParameters?: Record<string, unknown>
 		name: string
+		characterKey?: string
 		skin?: string
 		portraitState?: string
 		hp?: number
@@ -254,20 +265,13 @@ export interface CreateInitialStateInput {
 	}>
 }
 
-export const DEFAULT_PLAYER_SKINS = [
-	'rosemund',
-	'hush-feather',
-	'samuel-saber',
-	'zippo-jay',
-	'calamity-kate',
-	'the-kid',
-] as const
+export const DEFAULT_PLAYER_SKINS = CHARACTER_KEYS
 
-export const SHAKE_REQUIRED_COUNT = 6
+export const SHAKE_REQUIRED_COUNT = GAME_RULESET.shake.requiredActions
 export const DICE_CHECK_DELAY_SECONDS = 3
 export const BID_RELOAD_COUNTDOWN_SECONDS = 3
 
-export function createCylinder(size = 6): CylinderState {
+export function createCylinder(size = GAME_RULESET.cylinder.slots): CylinderState {
 	return {
 		chamberIndex: 1,
 		slots: Array.from({ length: size }, () => false),
@@ -284,27 +288,31 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 	const order: string[] = []
 
 	for (const [playerIndex, player] of input.players.entries()) {
-		const cylinder = createCylinder(6)
+		const cylinder = createCylinder()
 		for (const slotIndex of player.initialLoadedSlots ?? []) {
 			if (slotIndex >= 1 && slotIndex <= cylinder.slots.length) {
 				cylinder.slots[slotIndex - 1] = true
 			}
 		}
 
+		const fallbackCharacterKey = legacySeatCharacterKey(playerIndex)
+		const characterKey = player.characterKey
+			?? (isCharacterKey(player.skin) ? player.skin : fallbackCharacterKey)
 		const normalized: PlayerState = {
 			id: player.id,
 			userId: player.userId,
 			virtualOpponentId: player.virtualOpponentId,
 			participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
 			name: player.name || player.id,
-			hp: player.hp ?? 6,
+			hp: player.hp ?? GAME_RULESET.cylinder.initialHp,
 			bullets: cylinder.slots.filter(Boolean).length,
-			diceCount: player.diceCount ?? 5,
+			diceCount: player.diceCount ?? GAME_RULESET.dice.perPlayer,
 			dice: [],
 			cylinder,
 			eliminated: (player.hp ?? 6) <= 0,
 			isLocal: player.id === localPlayerId,
-			skin: player.skin ?? DEFAULT_PLAYER_SKINS[playerIndex % DEFAULT_PLAYER_SKINS.length],
+			characterKey,
+			skin: player.skin ?? characterKey,
 			portraitState: player.portraitState ?? 'front',
 		}
 

@@ -27,6 +27,16 @@
  */
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import type { CharacterKey } from '../shared/game/characters'
+
+const characterKeyValidator = v.union(
+	v.literal('rosemund'),
+	v.literal('hush-feather'),
+	v.literal('samuel-saber'),
+	v.literal('zippo-jay'),
+	v.literal('calamity-kate'),
+	v.literal('the-kid'),
+)
 
 export interface ConvexAuthIdentity {
 	subject: string
@@ -154,5 +164,25 @@ export const createOrUpdateCurrentUser = mutationGeneric({
 	returns: v.any(),
 	handler: async (ctx: GenericCtx) => {
 		return await upsertCurrentUser(ctx)
+	},
+})
+
+export const setCurrentUserCharacter = mutationGeneric({
+	args: {
+		characterKey: characterKeyValidator,
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: { characterKey: CharacterKey }) => {
+		const currentUser = await requireCurrentUser(ctx)
+		const updatedAt = Date.now()
+		await ctx.db.patch(currentUser._id, {
+			characterKey: args.characterKey,
+			updatedAt,
+		})
+		return {
+			...currentUser,
+			characterKey: args.characterKey,
+			updatedAt,
+		}
 	},
 })

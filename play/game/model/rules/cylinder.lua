@@ -1,6 +1,8 @@
+local ruleset = require("game.ruleset")
+
 local M = {}
 
-local DEFAULT_SIZE = 6
+local DEFAULT_SIZE = ruleset.CYLINDER_SLOTS
 
 local function clone_cylinder(cyl)
 	local next = {

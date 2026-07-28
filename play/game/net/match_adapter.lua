@@ -1,4 +1,5 @@
 local actions = require("game.model.actions")
+local characters = require("game.characters")
 local selectors = require("game.model.selectors")
 local server_command = require("game.net.server_command")
 
@@ -59,6 +60,11 @@ local function normalize_players(payload, local_player_id)
 		end
 
 		normalized[i].id = normalized[i].id or normalized[i].playerId or normalized[i].player_id
+		normalized[i].character_key = normalized[i].character_key or normalized[i].characterKey
+		if not normalized[i].character_key then
+			normalized[i].character_key = normalized[i].skin or characters.legacy_seat_key(i - 1)
+		end
+		normalized[i].skin = normalized[i].skin or normalized[i].character_key
 		if normalized[i].id ~= local_player_id and not normalized[i].initial_loaded_slots and not normalized[i].cylinder then
 			normalized[i].initial_loaded_slots = { 1, 3, 5 }
 		end

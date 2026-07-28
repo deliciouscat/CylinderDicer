@@ -131,6 +131,7 @@ export interface MatchPublicView {
     hp: number
     bullets: number
     eliminated: boolean
+    characterKey?: string
     skin?: string
     portraitState?: string
     isActive: boolean

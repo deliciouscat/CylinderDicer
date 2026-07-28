@@ -32,6 +32,7 @@ export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
     displayName: v.optional(v.string()),
+    characterKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_clerk_id', ['clerkId']),
@@ -97,6 +98,7 @@ export default defineSchema({
   virtualOpponents: defineTable({
     key: v.string(),
     displayName: v.string(),
+    characterKey: v.optional(v.string()),
     archetype: v.optional(v.string()),
     catalogScope: v.optional(v.union(v.literal('gameplay'), v.literal('qa_fixture'))),
     createdAt: v.number(),
@@ -153,8 +155,10 @@ export default defineSchema({
       v.literal('server_bot'),
     )),
     botProfileId: v.optional(v.id('botProfiles')),
+    botStrategyKey: v.optional(v.string()),
     botStrategyVersion: v.optional(v.string()),
     botParameters: v.optional(v.any()),
+    characterKey: v.optional(v.string()),
     playerId: v.string(),
     seatIndex: v.number(),
     status: v.union(v.literal('active'), v.literal('left'), v.literal('complete')),
@@ -244,6 +248,7 @@ export default defineSchema({
     participantKind: v.union(v.literal('human'), v.literal('virtual')),
     playerId: v.string(),
     displayName: v.string(),
+    characterKey: v.optional(v.string()),
     archetype: v.optional(v.string()),
     ready: v.boolean(),
     seatIndex: v.number(),
@@ -251,6 +256,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_room', ['roomId'])
+    .index('by_room_and_status', ['roomId', 'status'])
     .index('by_room_player', ['roomId', 'playerId'])
     .index('by_room_virtual_opponent', ['roomId', 'virtualOpponentId'])
     .index('by_virtual_opponent_status', ['virtualOpponentId', 'status'])

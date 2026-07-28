@@ -37,6 +37,10 @@
     "addBotQueued": "Adding bot...",
     "botAdded": "Bot added",
     "addBotError": "Could not add bot",
+    "removeBot": "Remove Bot",
+    "removeBotQueued": "Removing bot...",
+    "botRemoved": "Bot removed",
+    "removeBotError": "Could not remove bot",
     "notReady": "Waiting",
     "waitingForReady": "Waiting for opponents to ready",
     "allReady": "All opponents ready",
@@ -101,6 +105,7 @@
     "signIn": "Sign in",
     "signUp": "Sign up",
     "localeLabel": "Select language",
+    "shopComingSoon": "Coming soon.",
     "locales": {
       "en": "English",
       "ko": "한국어",
@@ -111,6 +116,30 @@
       "customGame": "Custom Game",
       "itemShop": "Item Shop",
       "settings": "Settings"
+    }
+  },
+  "settings": {
+    "screenLabel": "Character settings",
+    "back": "Back",
+    "title": "Choose your character",
+    "previous": "Previous character",
+    "next": "Next character",
+    "characterAlt": "{name} character artwork",
+    "loading": "Loading your character…",
+    "ready": "Your selected character will appear in new matches.",
+    "saving": "Saving character…",
+    "saved": "Character saved.",
+    "saveError": "Could not save this character.",
+    "loadError": "Could not load your character settings.",
+    "signInRequired": "Sign in to save your character selection.",
+    "retry": "Retry",
+    "characters": {
+      "rosemund": "Rosmund",
+      "hush-feather": "Hush Feather",
+      "samuel-saber": "Samuel Saber",
+      "zippo-jay": "Zippo Jay",
+      "calamity-kate": "Calamity Kate",
+      "the-kid": "The Kid"
     }
   },
   "music": {

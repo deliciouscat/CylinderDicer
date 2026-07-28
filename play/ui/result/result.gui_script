@@ -18,12 +18,12 @@ end
 
 local function plaque_for_place(place)
 	if place == 1 then
-		return "rank_1", vmath.vector3(610, 360, 0)
+		return "rank_1"
 	end
 	if place <= 3 then
-		return "rank_2_3", vmath.vector3(760, 432, 0)
+		return "rank_2_3"
 	end
-	return "rank_4_6", vmath.vector3(760, 432, 0)
+	return "rank_4_6"
 end
 
 local function set_digit_column(index, value, direction)
@@ -78,21 +78,6 @@ local function configure_digit_columns(before, after)
 	end
 end
 
-local function position_content(place, match_complete)
-	local victory = place == 1
-	gui.set_position(gui.get_node("title"), vmath.vector3(0, victory and 0 or 58, 0.2))
-	gui.set_position(gui.get_node("congratulations"), vmath.vector3(0, victory and -27 or 20, 0.2))
-	gui.set_position(gui.get_node("rating_label"), vmath.vector3(0, victory and -52 or -17, 0.2))
-	gui.set_position(gui.get_node("odometer"), vmath.vector3(0, victory and -91 or -67, 0.2))
-	gui.set_position(gui.get_node("rating_delta"), vmath.vector3(-175, victory and -91 or -67, 0.2))
-	gui.set_position(gui.get_node("unrated"), vmath.vector3(0, victory and -91 or -68, 0.2))
-	local button_y = victory and -159 or -148
-	gui.set_position(gui.get_node("lobby_button"), match_complete
-		and vmath.vector3(0, button_y, 0.3)
-		or vmath.vector3(-112, button_y, 0.3))
-	gui.set_position(gui.get_node("spectate_button"), vmath.vector3(112, button_y, 0.3))
-end
-
 local function render_static(self, state)
 	local placement, result = result_view.local_result(state)
 	self.place = math.max(1, math.min(6, tonumber(placement.place) or 1))
@@ -103,9 +88,7 @@ local function render_static(self, state)
 	self.elapsed = 0
 	self.match_complete = state.match.status == "complete"
 
-	local plaque, plaque_size = plaque_for_place(self.place)
-	gui.play_flipbook(gui.get_node("plaque"), plaque)
-	gui.set_size(gui.get_node("plaque"), plaque_size)
+	gui.play_flipbook(gui.get_node("plaque"), plaque_for_place(self.place))
 	gui_util.set_text("title", i18n.t(title_key(self.place)))
 	gui_util.set_text("congratulations", self.place == 1 and i18n.t("result.congratulations") or "")
 	gui_util.set_text("rating_label", i18n.t("result.rating"))
@@ -115,11 +98,15 @@ local function render_static(self, state)
 	gui_util.set_text("unrated", state.match.mode == "ranked" and not self.match_complete
 		and i18n.t("result.rating_pending")
 		or i18n.t("result.unrated"))
+	gui_util.set_enabled("lobby_button", not self.match_complete)
+	gui_util.set_enabled("lobby_label", not self.match_complete)
 	gui_util.set_enabled("spectate_button", not self.match_complete)
 	gui_util.set_enabled("spectate_label", not self.match_complete)
+	gui_util.set_enabled("complete_lobby_button", self.match_complete)
+	gui_util.set_enabled("complete_lobby_label", self.match_complete)
 	gui_util.set_text("spectate_label", i18n.t("result.spectate"))
 	gui_util.set_text("lobby_label", i18n.t("result.lobby"))
-	position_content(self.place, self.match_complete)
+	gui_util.set_text("complete_lobby_label", i18n.t("result.lobby"))
 
 	if self.rated and self.mmr_before and self.mmr_after then
 		self.direction = self.mmr_after >= self.mmr_before and 1 or -1
@@ -141,7 +128,10 @@ local function handle_pointer(self, x, y)
 	if not gui.is_enabled(gui.get_node("root")) then
 		return false
 	end
-	if gui_util.pick("lobby_button", x, y) then
+	local lobby_picked = self.match_complete
+		and gui_util.pick("complete_lobby_button", x, y)
+		or gui_util.pick("lobby_button", x, y)
+	if lobby_picked then
 		if not self.exit_requested then
 			self.exit_requested = true
 			bridge.emit("EXIT_TO_LOBBY", {

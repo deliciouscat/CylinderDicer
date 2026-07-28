@@ -23,5 +23,6 @@ root (box, layout = horizontal SPACE_BETWEEN)
 └─ slot_template (box)            # clone_tree로 복제되는 prefab
    ├─ portrait (box)              # cosmetics.resolve("characters", ...)
    ├─ badge_hp     -> template: ui/common/badge.gui
-   └─ badge_bullets-> template: ui/common/badge.gui
+   ├─ badge_bullets-> template: ui/common/badge.gui
+   └─ bid_face      -> current_bid player의 f{face}_a0
 ```

@@ -10,9 +10,11 @@ local shake_gauge = require("ui.shake.shake_gauge")
 local audio = require("game.core.audio")
 local i18n = require("game.core.i18n")
 local visual_status = require("game.dev.visual_status")
+local local_permissions = require("ui.common.local_permissions")
+local ruleset = require("game.ruleset")
 
-local MAX_OPPONENTS = 5
-local DICE_COUNT = 5
+local MAX_OPPONENTS = ruleset.PLAYER_MAX - 1
+local DICE_COUNT = ruleset.DICE_PER_PLAYER
 local DRAG_DISTANCE_PER_SHAKE = 72.0
 local LOCAL_CUP_CLOSED_Y = 8.0
 local LOCAL_CUP_REVEAL_Y = 88.0
@@ -191,7 +193,7 @@ local function dispatch_shake(self)
 	end
 
 	local state = self.store:get_state()
-	if selectors.phase(state) ~= PHASE_CUP_SHAKE then
+	if selectors.phase(state) ~= PHASE_CUP_SHAKE or not local_permissions.can_shake(state) then
 		return false
 	end
 
@@ -219,7 +221,7 @@ local function dispatch_dice_check(self)
 		return false
 	end
 	local state = self.store:get_state()
-	if selectors.phase(state) ~= PHASE_DICE_CHECK then
+	if selectors.phase(state) ~= PHASE_DICE_CHECK or not local_permissions.can_check(state) then
 		return false
 	end
 	local submission = server_command.submit(state, "dice.check")

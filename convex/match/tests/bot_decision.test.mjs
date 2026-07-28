@@ -3,14 +3,14 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 
 const require = createRequire(import.meta.url)
-const { createInitialMatchState } = require('../../../.tmp/convex-domain/match/state.js')
-const { buildBotObservation } = require('../../../.tmp/convex-domain/bots/observation.js')
+const { createInitialMatchState } = require('../../../.tmp/convex-domain/convex/match/state.js')
+const { buildBotObservation } = require('../../../.tmp/convex-domain/convex/bots/observation.js')
 const {
 	botRaiseCountStep,
 	botReactionDelayMs,
 	decideBotIntent,
 	normalizeBotParameters,
-} = require('../../../.tmp/convex-domain/bots/decision.js')
+} = require('../../../.tmp/convex-domain/convex/bots/decision.js')
 
 function createBotState() {
 	return createInitialMatchState({
@@ -127,6 +127,7 @@ test('personality parameters and reaction delay remain bounded', () => {
 	const delay = botReactionDelayMs(normalized, 'stable-seed')
 	assert.ok(delay >= 80 && delay <= 250)
 	assert.equal(delay, botReactionDelayMs(normalized, 'stable-seed'))
+	assert.equal(botReactionDelayMs(normalized, 'stable-seed', 'checkpoint'), 0)
 	const biddingDelay = botReactionDelayMs(normalized, 'stable-seed', 'bidding')
 	assert.ok(biddingDelay >= 1_800 && biddingDelay <= 4_200)
 	assert.ok(biddingDelay > delay)

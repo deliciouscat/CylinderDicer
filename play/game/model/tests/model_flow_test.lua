@@ -4,6 +4,7 @@ local cosmetics = require("game.core.cosmetics")
 local match_adapter = require("game.net.match_adapter")
 local qa_cli = require("game.dev.qa_cli")
 local reducers = require("game.model.reducers")
+local duel_rules = require("game.model.rules.duel")
 local selectors = require("game.model.selectors")
 local store_mod = require("game.model.store")
 
@@ -549,6 +550,44 @@ function M.test_skull_bid_triggers_the_bidders_own_roulette()
 	assert_eq(state.pending_load.player_id, "local", "surviving bidder keeps normal reload")
 end
 
+function M.test_skull_duel_adjudication_halves_and_floors_the_rail_count()
+	local players = {
+		by_id = {
+			first = {
+				eliminated = false,
+				dice = { 1, 1, 1, 2, 3 },
+			},
+			second = {
+				eliminated = false,
+				dice = { 2, 3, 4, 5, 6 },
+			},
+		},
+	}
+
+	assert_eq(duel_rules.required_count({ count = 7, face = 1 }), 3, "odd skull bid floors")
+	assert_eq(duel_rules.required_count({ count = 8, face = 1 }), 4, "even skull bid halves")
+	assert_eq(duel_rules.required_count({ count = 1, face = 1 }), 0, "minimum skull bid reaches zero")
+	assert_eq(duel_rules.required_count({ count = 7, face = 4 }), 7, "normal face is unchanged")
+
+	local exact = duel_rules.judge({ count = 7, face = 1 }, players)
+	assert_eq(exact.verdict, "EXACT", "three skulls exactly satisfy rail seven")
+	assert_eq(exact.actual, 3, "only skulls count for a skull bid")
+	assert_eq(exact.required_count, 3, "judge exposes effective requirement")
+	assert_eq(exact.delta, 0, "exact skull bid has no shot delta")
+
+	local short = duel_rules.judge({ count = 8, face = 1 }, {
+		by_id = {
+			first = { eliminated = false, dice = { 1, 1, 2, 3, 4 } },
+		},
+	})
+	assert_eq(short.verdict, "SHORT", "two skulls are short of effective four")
+	assert_eq(short.delta, 2, "short delta uses effective requirement")
+
+	local over = duel_rules.judge({ count = 4, face = 1 }, players)
+	assert_eq(over.verdict, "OVER", "three skulls exceed effective two")
+	assert_eq(over.delta, 1, "over delta uses effective requirement")
+end
+
 function M.test_match_result_payload_after_lethal_challenge()
 	local store = new_store()
 	local adapter = start_match(store, {
@@ -638,6 +677,10 @@ function M.test_duel_short_challenger_shoots_previous_bidder()
 	assert_eq(state.duel.resolution, nil, "challenge does not precompute short resolution")
 	assert_eq(state.duel.revolver_spin.player_id, "local", "short spins challenger shooter")
 	assert_eq(state.duel.revolver_spin.steps, 6, "short spin steps recorded")
+	local cylinder_slots_before = {}
+	for index, slot in ipairs(state.players.by_id["local"].cylinder.slots) do
+		cylinder_slots_before[index] = slot.loaded == true
+	end
 
 	dispatch_ok(store, actions.duel_execute())
 	state = store:get_state()
@@ -645,6 +688,13 @@ function M.test_duel_short_challenger_shoots_previous_bidder()
 	assert_eq(state.duel.resolution.shooter_id, "local", "short shooter is challenger")
 	assert_eq(state.duel.resolution.roulette_subject_id, "local", "short consumes challenger cylinder")
 	assert_eq(state.duel.resolution.target_id, "opponent-1", "short targets previous bidder")
+	for index, loaded in ipairs(cylinder_slots_before) do
+		assert_eq(
+			state.duel.resolution.cylinder_slots_before[index],
+			loaded,
+			"short resolution preserves pre-shot cylinder slot " .. tostring(index)
+		)
+	end
 	dispatch_ok(store, actions.round_advance())
 	state = store:get_state()
 	assert_eq(selectors.local_player(state).hp, 6, "short does not damage challenger")

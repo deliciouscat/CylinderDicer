@@ -1,5 +1,6 @@
 import type { AvailableAction } from '../protocol/snapshots'
 import type { PlayerMatchCommandType } from '../protocol/commands'
+import type { CharacterKey } from '../../shared/game/characters'
 
 export interface BotPersonalityParameters {
 	honesty: number
@@ -62,6 +63,7 @@ export interface BotDecisionContext {
 export interface GameplayBotSpec {
 	key: string
 	displayName: string
+	characterKey: CharacterKey
 	archetype: string
 	difficulty: 'easy' | 'normal' | 'hard'
 	baseMmr: number

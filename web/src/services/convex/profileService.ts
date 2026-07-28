@@ -21,8 +21,11 @@
  * return updated profile
  * ```
  */
+import type { CharacterKey } from '@shared/game/characters'
+
 export interface ProfilePatch {
   displayName?: string
+  characterKey?: CharacterKey
 }
 
 export function normalizeDisplayName(name: string): string {

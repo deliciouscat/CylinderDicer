@@ -7,12 +7,7 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 import type { GenericCtx } from './users'
 import { requireCurrentUser, requireExistingCurrentUser } from './users'
-
-export const DEFAULT_VIRTUAL_OPPONENT_SPECS = [
-	{ key: 'opponent-1', displayName: 'Hush Feather', archetype: 'balanced' },
-	{ key: 'opponent-2', displayName: 'Samuel Saber', archetype: 'bold' },
-	{ key: 'opponent-3', displayName: 'Zippo Jay', archetype: 'chaotic' },
-] as const
+import { GAMEPLAY_BOT_SPECS } from './bots/specs'
 
 export async function getVirtualOpponentByKey(ctx: GenericCtx, key: string) {
 	return await ctx.db
@@ -27,6 +22,7 @@ export async function ensureVirtualOpponent(
 	displayName: string,
 	archetype?: string,
 	catalogScope: 'gameplay' | 'qa_fixture' = 'gameplay',
+	characterKey?: string,
 ) {
 	const now = Date.now()
 	const existing = await getVirtualOpponentByKey(ctx, key)
@@ -34,6 +30,7 @@ export async function ensureVirtualOpponent(
 		displayName,
 		archetype,
 		catalogScope,
+		...(characterKey ? { characterKey } : {}),
 		updatedAt: now,
 	}
 	if (existing) {
@@ -41,6 +38,7 @@ export async function ensureVirtualOpponent(
 			existing.displayName === displayName
 			&& existing.archetype === archetype
 			&& existing.catalogScope === catalogScope
+			&& (!characterKey || existing.characterKey === characterKey)
 		) {
 			return existing
 		}
@@ -68,13 +66,14 @@ export async function ensureVirtualOpponent(
 
 export async function ensureDefaultVirtualOpponents(ctx: GenericCtx) {
 	const opponents = []
-	for (const spec of DEFAULT_VIRTUAL_OPPONENT_SPECS) {
+	for (const spec of GAMEPLAY_BOT_SPECS) {
 		opponents.push(await ensureVirtualOpponent(
 			ctx,
 			spec.key,
 			spec.displayName,
 			spec.archetype,
 			'gameplay',
+			spec.characterKey,
 		))
 	}
 	return opponents

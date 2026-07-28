@@ -8,6 +8,8 @@ import { v } from 'convex/values'
 import {
 	MAX_CUSTOM_GAME_PARTICIPANTS,
 	planCustomGameBotAddition,
+	planCustomGameBotRemoval,
+	planCustomGameDeparture,
 } from '../shared/custom-game/composition'
 import { ensureGameplayBotCatalog } from './bots/catalog'
 import { createCustomMatchFromRoomParticipants } from './matches'
@@ -104,11 +106,10 @@ async function getHumanParticipantForUser(ctx: GenericCtx, roomId: string, userI
 }
 
 async function activeRoomParticipants(ctx: GenericCtx, roomId: string) {
-	const participants = await ctx.db
+	return await ctx.db
 		.query('customGameParticipants')
-		.withIndex('by_room', (q: any) => q.eq('roomId', roomId))
+		.withIndex('by_room_and_status', (q: any) => q.eq('roomId', roomId).eq('status', 'active'))
 		.take(8)
-	return participants.filter((participant: any) => participant.status === 'active')
 }
 
 export async function getCustomGameRoomView(ctx: GenericCtx, roomId: string, viewerUserId?: string) {
@@ -118,8 +119,8 @@ export async function getCustomGameRoomView(ctx: GenericCtx, roomId: string, vie
 	}
 	const participants = await activeRoomParticipants(ctx, roomId)
 	const virtualParticipants = participants.filter((participant: any) => participant.participantKind === 'virtual')
-	const guestHumans = participants.filter(
-		(participant: any) => participant.participantKind === 'human' && participant.playerId !== 'local-player',
+	const nonHostHumans = participants.filter(
+		(participant: any) => participant.participantKind === 'human' && participant.userId !== room.hostUserId,
 	)
 	const viewerParticipant = viewerUserId
 		? participants.find((participant: any) => participant.userId === viewerUserId)
@@ -131,7 +132,7 @@ export async function getCustomGameRoomView(ctx: GenericCtx, roomId: string, vie
 		allReady:
 			virtualParticipants.length > 0 &&
 			virtualParticipants.every((participant: any) => participant.ready) &&
-			guestHumans.every((participant: any) => participant.ready),
+			nonHostHumans.every((participant: any) => participant.ready),
 		viewer: viewerParticipant && viewerUserId
 			? {
 					userId: viewerUserId,
@@ -235,6 +236,7 @@ async function upsertRoomParticipants(
 		participantKind: 'human',
 		playerId: 'local-player',
 		displayName: hostUser.displayName ?? 'You',
+		characterKey: hostUser.characterKey,
 		ready: true,
 		seatIndex: 0,
 		status: 'active',
@@ -265,6 +267,7 @@ async function upsertRoomParticipants(
 			participantKind: 'virtual',
 			playerId: `opponent-${index + 1}`,
 			displayName: opponent.displayName,
+			characterKey: opponent.characterKey,
 			archetype: opponent.archetype,
 			ready: true,
 			seatIndex: index + 1,
@@ -299,6 +302,10 @@ export const ensureMyCustomGameRoom = mutationGeneric({
 	returns: v.any(),
 	handler: async (ctx: GenericCtx) => {
 		const hostUser = await requireCurrentUser(ctx)
+		const existing = await getActiveRoomForHost(ctx, hostUser._id)
+		if (existing) {
+			return await getCustomGameRoomView(ctx, existing._id, hostUser._id)
+		}
 		const room = await ensureRoom(ctx, hostUser)
 		// Room creation is intentionally host-only. Gameplay bots are added one at
 		// a time through addMyCustomGameOpponent after the room exists.
@@ -339,10 +346,12 @@ export const listComposingCustomGameRooms = queryGeneric({
 		const rows = []
 		for (const room of rooms) {
 			const participants = await activeRoomParticipants(ctx, room._id)
-			const host = participants.find((participant: any) => participant.playerId === 'local-player')
+			const host = participants.find(
+				(participant: any) => participant.participantKind === 'human' && participant.userId === room.hostUserId,
+			)
 			const virtualParticipants = participants.filter((participant: any) => participant.participantKind === 'virtual')
-			const guestHumans = participants.filter(
-				(participant: any) => participant.participantKind === 'human' && participant.playerId !== 'local-player',
+			const nonHostHumans = participants.filter(
+				(participant: any) => participant.participantKind === 'human' && participant.userId !== room.hostUserId,
 			)
 			rows.push({
 				roomId: room._id,
@@ -354,7 +363,7 @@ export const listComposingCustomGameRooms = queryGeneric({
 				allReady:
 					virtualParticipants.length > 0 &&
 					virtualParticipants.every((participant: any) => participant.ready) &&
-					guestHumans.every((participant: any) => participant.ready),
+					nonHostHumans.every((participant: any) => participant.ready),
 				updatedAt: room.updatedAt,
 			})
 		}
@@ -441,7 +450,7 @@ export const joinCustomGameRoomByInviteCode = mutationGeneric({
 		}
 
 		const guestHumans = participants.filter(
-			(participant: any) => participant.participantKind === 'human' && participant.playerId !== 'local-player',
+			(participant: any) => participant.participantKind === 'human' && participant.userId !== room.hostUserId,
 		)
 		const nextGuestNumber = guestHumans.length + 1
 		const maxSeatIndex = participants.reduce(
@@ -455,6 +464,7 @@ export const joinCustomGameRoomByInviteCode = mutationGeneric({
 			participantKind: 'human',
 			playerId: `guest-${nextGuestNumber}`,
 			displayName: currentUser.displayName ?? 'Guest',
+			characterKey: currentUser.characterKey,
 			ready: false,
 			seatIndex: maxSeatIndex + 1,
 			status: 'active',
@@ -480,16 +490,18 @@ export const leaveMyCustomGameRoom = mutationGeneric({
 				message: 'custom_room_not_found',
 			}
 		}
-		if (room.hostUserId === currentUser._id) {
-			return {
-				ok: false,
-				code: 'HOST_CANNOT_LEAVE',
-				message: 'host_cannot_leave',
-			}
-		}
-
-		const participant = await getHumanParticipantForUser(ctx, args.roomId, currentUser._id)
-		if (!participant) {
+		const participants = await activeRoomParticipants(ctx, args.roomId)
+		const departure = planCustomGameDeparture(
+			participants.map((participant: any) => ({
+				playerId: participant.playerId,
+				seatIndex: participant.seatIndex,
+				userId: participant.userId ? String(participant.userId) : undefined,
+				participantKind: participant.participantKind,
+			})),
+			String(room.hostUserId),
+			String(currentUser._id),
+		)
+		if (!departure) {
 			return {
 				ok: false,
 				code: 'NOT_A_ROOM_PARTICIPANT',
@@ -497,13 +509,67 @@ export const leaveMyCustomGameRoom = mutationGeneric({
 			}
 		}
 
-		await ctx.db.patch(participant._id, {
+		const now = Date.now()
+		if (departure.kind === 'close') {
+			for (const participant of participants) {
+				await ctx.db.patch(participant._id, {
+					status: 'removed',
+					ready: false,
+					updatedAt: now,
+				})
+			}
+			await ctx.db.patch(args.roomId, {
+				status: 'cancelled',
+				updatedAt: now,
+			})
+			return {
+				ok: true,
+				closed: true,
+				roomId: args.roomId,
+			}
+		}
+
+		const departingParticipant = participants.find(
+			(participant: any) => participant.playerId === departure.departingPlayerId,
+		)
+		if (!departingParticipant) {
+			return {
+				ok: false,
+				code: 'NOT_A_ROOM_PARTICIPANT',
+				message: 'not_a_room_participant',
+			}
+		}
+		await ctx.db.patch(departingParticipant._id, {
 			status: 'removed',
 			ready: false,
-			updatedAt: Date.now(),
+			updatedAt: now,
 		})
-		await ctx.db.patch(args.roomId, { updatedAt: Date.now() })
-		return { ok: true }
+
+		if (departure.kind === 'transfer') {
+			const nextHost = participants.find(
+				(participant: any) => participant.playerId === departure.nextHostPlayerId,
+			)
+			if (!nextHost) {
+				throw new Error('CUSTOM_ROOM_SUCCESSOR_NOT_FOUND')
+			}
+			await ctx.db.patch(nextHost._id, {
+				ready: true,
+				updatedAt: now,
+			})
+			await ctx.db.patch(args.roomId, {
+				hostUserId: nextHost.userId,
+				updatedAt: now,
+			})
+			return {
+				ok: true,
+				closed: false,
+				hostUserId: nextHost.userId,
+				hostPlayerId: nextHost.playerId,
+			}
+		}
+
+		await ctx.db.patch(args.roomId, { updatedAt: now })
+		return { ok: true, closed: false }
 	},
 })
 
@@ -532,7 +598,7 @@ export const setMyCustomGameReady = mutationGeneric({
 				message: 'not_a_room_participant',
 			}
 		}
-		if (participant.playerId === 'local-player') {
+		if (room.hostUserId === currentUser._id) {
 			return {
 				ok: false,
 				code: 'HOST_READY_FIXED',
@@ -644,6 +710,7 @@ export const addMyCustomGameOpponent = mutationGeneric({
 			participantKind: 'virtual' as const,
 			playerId: addition.playerId,
 			displayName: selected.opponent.displayName,
+			characterKey: selected.opponent.characterKey,
 			archetype: selected.opponent.archetype,
 			ready: true,
 			seatIndex: addition.seatIndex,
@@ -655,6 +722,66 @@ export const addMyCustomGameOpponent = mutationGeneric({
 		} else {
 			await ctx.db.insert('customGameParticipants', values)
 		}
+		await ctx.db.patch(args.roomId, { updatedAt: now })
+		return await getCustomGameRoomView(ctx, args.roomId, hostUser._id)
+	},
+})
+
+export const removeMyCustomGameOpponent = mutationGeneric({
+	args: {
+		roomId: v.id('customGameRooms'),
+		playerId: v.string(),
+	},
+	returns: v.any(),
+	handler: async (ctx: GenericCtx, args: any) => {
+		const hostUser = await requireCurrentUser(ctx)
+		const room = await ctx.db.get(args.roomId)
+		if (!room || room.hostUserId !== hostUser._id || room.status !== 'composing') {
+			return {
+				ok: false,
+				code: 'CUSTOM_ROOM_NOT_FOUND',
+				message: 'custom_room_not_found',
+			}
+		}
+
+		const participants = await activeRoomParticipants(ctx, args.roomId)
+		const removal = planCustomGameBotRemoval(
+			participants.map((participant: any) => ({
+				playerId: participant.playerId,
+				seatIndex: participant.seatIndex,
+				virtualOpponentKey: participant.virtualOpponentId
+					? String(participant.virtualOpponentId)
+					: undefined,
+			})),
+			args.playerId,
+		)
+		if (!removal) {
+			return {
+				ok: false,
+				code: 'CUSTOM_ROOM_BOT_NOT_FOUND',
+				message: 'custom_room_bot_not_found',
+			}
+		}
+
+		const participant = participants.find((candidate: any) => {
+			return candidate.playerId === removal.playerId
+				&& candidate.participantKind === 'virtual'
+				&& Boolean(candidate.virtualOpponentId)
+		})
+		if (!participant) {
+			return {
+				ok: false,
+				code: 'CUSTOM_ROOM_BOT_NOT_FOUND',
+				message: 'custom_room_bot_not_found',
+			}
+		}
+
+		const now = Date.now()
+		await ctx.db.patch(participant._id, {
+			ready: false,
+			status: 'removed',
+			updatedAt: now,
+		})
 		await ctx.db.patch(args.roomId, { updatedAt: now })
 		return await getCustomGameRoomView(ctx, args.roomId, hostUser._id)
 	},

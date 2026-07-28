@@ -7,6 +7,7 @@ import LobbyScreen from '../lobby/LobbyScreen.vue'
 import ConvexPlayScreen from '../play-wrapper/ConvexPlayScreen.vue'
 import BackgroundMusic, { type BackgroundMusicMode } from '../play-wrapper/BackgroundMusic.vue'
 import LocalPlayScreen from '../play-wrapper/LocalPlayScreen.vue'
+import SettingsScreen from '../settings/SettingsScreen.vue'
 import { installButtonClickSound } from '../services/audio/buttonClickSound'
 import SignInView from '../views/sign-in.vue'
 import SignUpView from '../views/sign-up.vue'
@@ -44,6 +45,9 @@ const activeScreen = computed(() => {
   }
   if (currentPath.value === '/sign-up') {
     return 'sign-up'
+  }
+  if (currentPath.value === '/settings') {
+    return 'settings'
   }
   return 'lobby'
 })
@@ -102,5 +106,6 @@ onBeforeUnmount(() => {
   <LocalPlayScreen v-else-if="activeScreen === 'local-play'" @back="navigate('/')" />
   <SignInView v-else-if="activeScreen === 'sign-in'" />
   <SignUpView v-else-if="activeScreen === 'sign-up'" />
+  <SettingsScreen v-else-if="activeScreen === 'settings'" @back="navigate('/')" />
   <LobbyScreen v-else @navigate="navigate" />
 </template>

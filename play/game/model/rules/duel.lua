@@ -9,9 +9,17 @@ M.VERDICT = {
 	EXACT = "EXACT",
 }
 
+function M.required_count(bid)
+	if bid.face == dice.SKULL_FACE then
+		return math.floor(bid.count / 2)
+	end
+	return bid.count
+end
+
 function M.judge(bid, players)
 	local actual = dice.count_face(players, bid.face)
-	local raw_delta = actual - bid.count
+	local required_count = M.required_count(bid)
+	local raw_delta = actual - required_count
 	local verdict = M.VERDICT.EXACT
 
 	if raw_delta < 0 then
@@ -23,6 +31,7 @@ function M.judge(bid, players)
 	return {
 		verdict = verdict,
 		actual = actual,
+		required_count = required_count,
 		delta = math.abs(raw_delta),
 		raw_delta = raw_delta,
 	}
@@ -121,6 +130,14 @@ local function apply_hp_changes(players, hp_changes)
 	end
 end
 
+local function cylinder_slots_snapshot(cylinder_state)
+	local slots = {}
+	for index, slot in ipairs((cylinder_state and cylinder_state.slots) or {}) do
+		slots[index] = slot.loaded == true
+	end
+	return slots
+end
+
 local function resolve_duel_shots(state, duel_state)
 	local judge = duel_state.judge
 	local challenger_id = duel_state.challenger_id
@@ -135,6 +152,7 @@ local function resolve_duel_shots(state, duel_state)
 
 	local shooter = state.players.by_id[shooter_id]
 	local target = state.players.by_id[target_id]
+	local cylinder_slots_before = cylinder_slots_snapshot(shooter and shooter.cylinder)
 	local steps = {}
 	local hp_changes = {}
 
@@ -167,6 +185,7 @@ local function resolve_duel_shots(state, duel_state)
 		shooter_id = shooter_id,
 		target_id = target_id,
 		roulette_subject_id = shooter_id,
+		cylinder_slots_before = cylinder_slots_before,
 		steps = steps,
 		hp_changes = hp_changes,
 	}
@@ -180,6 +199,7 @@ local function resolve_perfect_duel(state, duel_state)
 	local challenger_id = duel_state.challenger_id
 	local targets = target_order_from_challenger(state.players, challenger_id, previous_id)
 	local actor = state.players.by_id[previous_id]
+	local cylinder_slots_before = cylinder_slots_snapshot(actor and actor.cylinder)
 	local steps = {}
 	local hp_changes = {}
 
@@ -213,6 +233,7 @@ local function resolve_perfect_duel(state, duel_state)
 		actor_id = previous_id,
 		shooter_id = previous_id,
 		targets = targets,
+		cylinder_slots_before = cylinder_slots_before,
 		steps = steps,
 		hp_changes = hp_changes,
 		reload_player_id = previous_id,

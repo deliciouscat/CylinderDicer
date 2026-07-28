@@ -37,6 +37,10 @@
     "addBotQueued": "ボットを追加中...",
     "botAdded": "ボットを追加しました",
     "addBotError": "ボットを追加できません",
+    "removeBot": "ボット削除",
+    "removeBotQueued": "ボットを削除中...",
+    "botRemoved": "ボットを削除しました",
+    "removeBotError": "ボットを削除できません",
     "notReady": "待機",
     "waitingForReady": "相手の準備待ち",
     "allReady": "全員準備完了",
@@ -101,6 +105,7 @@
     "signIn": "ログイン",
     "signUp": "新規登録",
     "localeLabel": "言語を選択",
+    "shopComingSoon": "準備中です。",
     "locales": {
       "en": "English",
       "ko": "한국어",
@@ -111,6 +116,30 @@
       "customGame": "カスタムゲーム",
       "itemShop": "アイテムショップ",
       "settings": "設定"
+    }
+  },
+  "settings": {
+    "screenLabel": "キャラクター設定",
+    "back": "戻る",
+    "title": "キャラクター選択",
+    "previous": "前のキャラクター",
+    "next": "次のキャラクター",
+    "characterAlt": "{name}のキャラクターイラスト",
+    "loading": "キャラクター設定を読み込み中…",
+    "ready": "選択したキャラクターは新しいマッチから反映されます。",
+    "saving": "キャラクターを保存中…",
+    "saved": "キャラクターを保存しました。",
+    "saveError": "キャラクターを保存できませんでした。",
+    "loadError": "キャラクター設定を読み込めませんでした。",
+    "signInRequired": "キャラクター選択を保存するにはログインしてください。",
+    "retry": "再試行",
+    "characters": {
+      "rosemund": "Rosmund",
+      "hush-feather": "Hush Feather",
+      "samuel-saber": "Samuel Saber",
+      "zippo-jay": "Zippo Jay",
+      "calamity-kate": "Calamity Kate",
+      "the-kid": "The Kid"
     }
   },
   "music": {

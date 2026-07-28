@@ -21,6 +21,13 @@ function M.test_out_of_range_cells_hide_their_number_boards()
 	assert_eq(rail_layout.value_for_index(36, rail_layout.CENTER_INDEX - 1), 35, "previous value visible")
 end
 
+function M.test_only_the_authoritative_previous_bid_count_uses_the_check_panel()
+	assert_eq(rail_layout.panel_animation(7, 7), "bid_check", "previous bid count")
+	assert_eq(rail_layout.panel_animation(8, 7), "bid_normal", "draft selection")
+	assert_eq(rail_layout.panel_animation(7, nil), "bid_normal", "first bid has no previous count")
+	assert_eq(rail_layout.panel_animation(nil, 7), "bid_normal", "hidden cell")
+end
+
 function M.test_large_jumps_are_bounded_to_the_cell_buffer()
 	assert_eq(rail_layout.step_to_target(1, 36), 1, "forward step bounded")
 	assert_eq(rail_layout.step_to_target(36, 1), -1, "backward step bounded")

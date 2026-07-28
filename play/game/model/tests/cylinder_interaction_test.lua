@@ -1,5 +1,6 @@
 local cylinder = require("game.model.rules.cylinder")
 local slot_geometry = require("ui.cylinder_overlay.slot_geometry")
+local cylinder_overlay_view = require("ui.cylinder_overlay.cylinder_overlay_view")
 
 local M = {}
 
@@ -66,6 +67,24 @@ function M.test_six_step_spin_is_full_rotation()
 	for index = 1, 6 do
 		assert_eq(spun.slots[index].loaded, current.slots[index].loaded, "full rotation slot " .. tostring(index))
 	end
+end
+
+function M.test_bidding_hud_keeps_local_cylinder_while_opponent_reload_is_pending()
+	local state = {
+		match = { local_player_id = "local" },
+		pending_load = { player_id = "opponent", source = "bid", count = 1 },
+	}
+
+	assert_eq(
+		cylinder_overlay_view.visual_player_id(state, "bidding"),
+		"local",
+		"bidding HUD cylinder owner"
+	)
+	assert_eq(
+		cylinder_overlay_view.visual_player_id(state, "loading"),
+		"opponent",
+		"loading overlay cylinder owner"
+	)
 end
 
 return M

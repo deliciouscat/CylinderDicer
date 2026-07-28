@@ -4,12 +4,14 @@ local audio = require("game.core.audio")
 local store_mod = require("game.model.store")
 local gui_util = require("ui.common.gui_util")
 local dice_art = require("ui.common.dice_art")
+local character_art = require("ui.common.character_art")
 local table_seat_layout = require("ui.common.table_seat_layout")
 local duel_view = require("ui.duel.duel_view")
 local visual_status = require("game.dev.visual_status")
+local ruleset = require("game.ruleset")
 
-local MAX_PLAYERS = 6
-local DICE_COUNT = 5
+local MAX_PLAYERS = ruleset.PLAYER_MAX
+local DICE_COUNT = ruleset.DICE_PER_PLAYER
 local GRID_MAX = 30
 local REVEAL_INTERVAL = flow_contract.DUEL_REVEAL_INTERVAL_SECONDS
 local REVEAL_DURATION = flow_contract.DUEL_REVEAL_DURATION_SECONDS
@@ -18,18 +20,10 @@ local CUP_HEIGHT = 202.0
 local EXECUTE_INTRO_SECONDS = flow_contract.DUEL_EXECUTE_INTRO_SECONDS
 local ROULETTE_STEP_SECONDS = flow_contract.DUEL_ROULETTE_STEP_SECONDS
 local PERFECT_DUEL_STEP_SECONDS = flow_contract.DUEL_PERFECT_STEP_SECONDS
-local HIT_APPLY_PROGRESS = 0.42
-local LOCAL_REVEAL_DICE_OFFSET_Y = 50.0
+local HIT_APPLY_PROGRESS = 0.62
+local CYLINDER_SLOT_COUNT = ruleset.CYLINDER_SLOTS
 local OPPONENT_REVEAL_DICE_OFFSET_Y = 64.0
-
-local TEXTURE_BY_SKIN = {
-	["rosemund"] = "rosemund",
-	["hush-feather"] = "hush_feather",
-	["samuel-saber"] = "samuel_saber",
-	["zippo-jay"] = "zippo_jay",
-	["calamity-kate"] = "calamity_kate",
-	["the-kid"] = "the_kid",
-}
+local COMBAT_PORTRAIT_HEIGHT = 420.0
 
 local REVEAL_NODE_IDS = {
 	"reveal_group",
@@ -99,13 +93,25 @@ local function clone_template(template_id)
 	return node
 end
 
+local function apply_reveal_dice_draw_order(nodes)
+	local previous_node = nil
+	for _, dice_index in ipairs(duel_view.reveal_dice_draw_order()) do
+		local node = nodes[dice_index]
+		if node and previous_node then
+			gui.move_above(node, previous_node)
+		end
+		previous_node = node or previous_node
+	end
+end
+
 local function build_runtime_nodes(self)
 	self.player_dice_nodes = {}
 	for player_index = 1, MAX_PLAYERS do
 		self.player_dice_nodes[player_index] = {}
-		for dice_index = 1, DICE_COUNT do
+		for _, dice_index in ipairs(duel_view.reveal_dice_draw_order()) do
 			self.player_dice_nodes[player_index][dice_index] = clone_template("player_dice_template")
 		end
+		apply_reveal_dice_draw_order(self.player_dice_nodes[player_index])
 	end
 
 	self.grid_dice_nodes = {}
@@ -137,10 +143,6 @@ end
 
 local function player_name(player)
 	return player and (player.name or player.id) or "-"
-end
-
-local function texture_name(player)
-	return player and (TEXTURE_BY_SKIN[player.skin] or TEXTURE_BY_SKIN[player.id]) or "rosemund"
 end
 
 local function alive_order(state)
@@ -201,21 +203,27 @@ local function hide_combat_nodes()
 end
 
 local function render_player_dice(self, index, player, seat, is_local, progress, round_index)
-	local scale = is_local and 0.86 or (0.64 + (seat.depth or 0.0) * -0.08)
-	local dice_size = is_local and 56.0 or 46.0
-	local anchor_y = seat.cup.y - (is_local and LOCAL_REVEAL_DICE_OFFSET_Y or OPPONENT_REVEAL_DICE_OFFSET_Y)
+	local scale = 0.64 + (seat.depth or 0.0) * -0.08
+	local dice_size = 46.0
+	local anchor_y = seat.cup.y - OPPONENT_REVEAL_DICE_OFFSET_Y
 	for dice_index = 1, DICE_COUNT do
 		local node = self.player_dice_nodes[index] and self.player_dice_nodes[index][dice_index]
 		local face = player.dice and player.dice[dice_index]
 		local offset = DICE_OFFSETS[dice_index]
 		set_node_enabled(node, progress > 0.02 and face ~= nil)
 		if face then
-			set_node_position(node, vmath.vector3(
-				seat.cup.x + offset.x * scale,
-				anchor_y + offset.y * scale,
-				0.42 + dice_index * 0.01
-			))
-			set_node_size(node, vmath.vector3(dice_size * scale, dice_size * scale, 0.0))
+			if is_local then
+				local layout = duel_view.local_reveal_die_layout(seat.cup.x, seat.cup.y, dice_index)
+				set_node_position(node, vmath.vector3(layout.x, layout.y, 0.42 + dice_index * 0.01))
+				set_node_size(node, vmath.vector3(layout.width, layout.height, 0.0))
+			else
+				set_node_position(node, vmath.vector3(
+					seat.cup.x + offset.x * scale,
+					anchor_y + offset.y * scale,
+					0.42 + dice_index * 0.01
+				))
+				set_node_size(node, vmath.vector3(dice_size * scale, dice_size * scale, 0.0))
+			end
 			set_node_alpha(node, progress)
 			play_node_flipbook(node, dice_art.table_animation(
 				face,
@@ -340,8 +348,17 @@ end
 local function set_portrait(prefix, player, side, hp_override, bullets_override, x_offset, entry_offset)
 	local body_id = "combat_" .. prefix .. "_body"
 	local status_alpha = player_status_alpha(player, hp_override)
-	gui_util.set_texture(body_id, texture_name(player))
-	gui_util.play_flipbook(body_id, player and (player.portrait_state or "front") or "front")
+	local body_texture = character_art.texture_name(player)
+	gui_util.set_enabled(body_id, body_texture ~= nil)
+	if body_texture then
+		gui_util.set_texture(body_id, body_texture)
+		gui_util.play_flipbook(body_id, player and (player.portrait_state or "front") or "front")
+		gui_util.set_size(body_id, vmath.vector3(
+			character_art.portrait_width(player, COMBAT_PORTRAIT_HEIGHT),
+			COMBAT_PORTRAIT_HEIGHT,
+			0.0
+		))
+	end
 	gui_util.set_text("combat_" .. prefix .. "_name", player_name(player))
 	gui_util.set_alpha("combat_" .. prefix .. "_name", 1.0)
 	set_badges(prefix, player, hp_override, bullets_override, status_alpha)
@@ -418,11 +435,62 @@ local function entry_offset(resolution, prefix, step_progress)
 	return 156.0 * (1.0 - t)
 end
 
-local function render_hit_flash(step, step_progress)
-	local hit = step and step.hit == true and step_progress >= HIT_APPLY_PROGRESS
-	local amount = hit and (1.0 - clamp01((step_progress - HIT_APPLY_PROGRESS) / 0.42)) or 0.0
-	gui_util.set_enabled("hit_flash", amount > 0.02)
-	gui_util.set_alpha("hit_flash", 0.42 * amount)
+local function render_duel_cylinder(self, resolution, step, step_index, step_progress, sequence_complete)
+	local visible = resolution and #(resolution.steps or {}) > 0
+	gui_util.set_enabled("duel_cylinder_group", visible)
+	gui_util.set_enabled("duel_cylinder_marker", visible)
+	if not visible then
+		for index = 1, CYLINDER_SLOT_COUNT do
+			gui_util.set_enabled("duel_primer_" .. tostring(index), false)
+		end
+		return nil
+	end
+
+	local visual
+	if step then
+		visual = duel_view.cylinder_step_visual(
+			resolution,
+			step_index,
+			step_progress,
+			sequence_complete,
+			CYLINDER_SLOT_COUNT,
+			HIT_APPLY_PROGRESS
+		)
+	else
+		visual = duel_view.cylinder_step_visual(
+			resolution,
+			1,
+			0.0,
+			false,
+			CYLINDER_SLOT_COUNT,
+			HIT_APPLY_PROGRESS
+		)
+		visual.slot_index = nil
+		visual.loaded = false
+		visual.angle = duel_view.cylinder_intro_angle(
+			clamp01((self.execute_elapsed or 0.0) / EXECUTE_INTRO_SECONDS),
+			CYLINDER_SLOT_COUNT
+		)
+	end
+
+	gui.set_rotation(self.nodes.duel_cylinder_group, vmath.quat_rotation_z(visual.angle))
+	for index = 1, CYLINDER_SLOT_COUNT do
+		gui_util.set_enabled(
+			"duel_primer_" .. tostring(index),
+			visual.slots and visual.slots[index] == true
+		)
+	end
+	return visual
+end
+
+local function loaded_slot_count(slots)
+	local count = 0
+	for _, loaded in ipairs(slots or {}) do
+		if loaded == true then
+			count = count + 1
+		end
+	end
+	return count
 end
 
 local function render_combat(self, state)
@@ -463,8 +531,27 @@ local function render_combat(self, state)
 	set_nodes_enabled(COMBAT_NODE_IDS, true)
 	set_portrait("left", left, "left", left_hp, left_bullets, shake_offset(left_id, step, step_progress), 0.0)
 	set_portrait("right", right, "right", right_hp, right_bullets, shake_offset(right_id, step, step_progress), entry_offset(resolution, "right", step_progress))
-	render_hit_flash(step, step_progress)
-
+	local cylinder_visual = render_duel_cylinder(
+		self,
+		resolution,
+		step,
+		step_index,
+		step_progress,
+		sequence_complete
+	)
+	visual_status.set("duel", {
+		visible = true,
+		mode = "combat",
+		has_resolution = true,
+		step_count = #(resolution.steps or {}),
+		step_index = step_index,
+		cylinder_visible = cylinder_visual and cylinder_visual.visible == true or false,
+		cylinder_slot_index = cylinder_visual and cylinder_visual.slot_index or nil,
+		cylinder_loaded = cylinder_visual and cylinder_visual.loaded == true or false,
+		cylinder_loaded_count = cylinder_visual and loaded_slot_count(cylinder_visual.slots) or 0,
+		marker_visible = cylinder_visual and cylinder_visual.visible == true or false,
+		progression_owner = state.match and state.match.local_simulator and "flow_coordinator" or "server",
+	})
 end
 
 local function duel_key(state)
@@ -604,6 +691,9 @@ function init(self)
 	self.duel_key = nil
 	self.execute_key = nil
 	self.last_execution_audio_key = nil
+	self.nodes = {
+		duel_cylinder_group = gui.get_node("duel_cylinder_group"),
+	}
 	gui.set_render_order(15)
 	build_runtime_nodes(self)
 	gui_util.set_enabled("root", false)

@@ -55,10 +55,12 @@ import { ensureDefaultVirtualOpponents, getVirtualOpponentByKey } from './virtua
 import { scheduleNextBotAction } from './bots/scheduling'
 import { ensureGameplayBotCatalog } from './bots/catalog'
 import { requireQaToolsEnabled } from './qa/guards'
+import { GAME_RULESET } from '../shared/game/ruleset'
+import { DEFAULT_CHARACTER_KEY } from '../shared/game/characters'
 
 const DEFAULT_COMPACTION_KEEP_REVISIONS = 12
 const DEFAULT_COMPACTION_MAX_DELETE = 200
-const MAX_CUSTOM_OPPONENTS = 5
+const MAX_CUSTOM_OPPONENTS = GAME_RULESET.players.max - 1
 
 export interface CreateDevMatchOptions {
 	localPlayerName?: string
@@ -180,8 +182,10 @@ export async function insertMatchParticipants(
 				participantKind: player.participantKind ?? (player.virtualOpponentId ? 'virtual' : 'human'),
 				controlMode: player.controlMode ?? (player.virtualOpponentId ? 'qa_manual' : 'human'),
 				botProfileId: player.botProfileId,
+				botStrategyKey: player.botStrategyKey,
 				botStrategyVersion: player.botStrategyVersion,
 				botParameters: player.botParameters,
+				characterKey: player.characterKey,
 				playerId: player.id,
 				seatIndex: index,
 				status: 'active',
@@ -239,13 +243,15 @@ export async function buildDevPlayers(ctx: GenericCtx, currentUser: any, localPl
 			userId: currentUser._id,
 			participantKind: 'human',
 			name: localPlayerName ?? currentUser.displayName ?? 'You',
+			characterKey: currentUser.characterKey ?? DEFAULT_CHARACTER_KEY,
 		},
 		...opponents.map((opponent, index) => ({
 			id: `opponent-${index + 1}`,
 			virtualOpponentId: opponent._id,
 			participantKind: 'virtual' as const,
 			name: opponent.displayName,
-			initialLoadedSlots: [1, 3, 5],
+			characterKey: opponent.characterKey,
+			initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 		})),
 	] satisfies CreateInitialStateInput['players']
 }
@@ -287,6 +293,7 @@ async function buildCustomPlayers(
 				userId: currentUser._id,
 				participantKind: 'human' as const,
 				name: options.localPlayerName ?? currentUser.displayName ?? 'You',
+				characterKey: currentUser.characterKey ?? DEFAULT_CHARACTER_KEY,
 			},
 			...opponents.map((opponent, index) => {
 				const profile = profileByOpponentId.get(opponent._id)
@@ -296,10 +303,12 @@ async function buildCustomPlayers(
 					participantKind: 'virtual' as const,
 					controlMode: 'server_bot' as const,
 					botProfileId: profile?._id,
+					botStrategyKey: profile?.strategyKey,
 					botStrategyVersion: profile?.strategyVersion,
 					botParameters: profile?.parameters,
 					name: opponent.displayName,
-					initialLoadedSlots: [1, 3, 5],
+					characterKey: opponent.characterKey,
+					initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 				}
 			}),
 		] satisfies CreateInitialStateInput['players'],
@@ -407,6 +416,7 @@ export async function createCustomMatchFromRoomParticipants(
 		userId?: string
 		virtualOpponentId?: string
 		displayName: string
+		characterKey?: string
 		seatIndex: number
 	}>,
 	options: { requiresSetupLoad?: boolean; firstPlayerId?: string } = {},
@@ -417,9 +427,25 @@ export async function createCustomMatchFromRoomParticipants(
 		opponent._id,
 		profile,
 	]))
+	const characterByOpponentId = new Map(gameplayCatalog.map(({ opponent }) => [
+		opponent._id,
+		opponent.characterKey,
+	]))
 	const ordered = roomParticipants
 		.slice()
 		.sort((left, right) => left.seatIndex - right.seatIndex)
+	const humanUsersById = new Map<string, any>()
+	for (const participant of ordered) {
+		if (participant.participantKind !== 'human' || !participant.userId) {
+			continue
+		}
+		const user = participant.userId === hostUser._id
+			? hostUser
+			: await ctx.db.get(participant.userId)
+		if (user) {
+			humanUsersById.set(String(participant.userId), user)
+		}
+	}
 	const hostParticipant = ordered.find(
 		(participant) => participant.participantKind === 'human' && participant.userId === hostUser._id,
 	)
@@ -435,10 +461,15 @@ export async function createCustomMatchFromRoomParticipants(
 				participantKind: 'virtual' as const,
 				controlMode: 'server_bot' as const,
 				botProfileId: profile?._id,
+				botStrategyKey: profile?.strategyKey,
 				botStrategyVersion: profile?.strategyVersion,
 				botParameters: profile?.parameters,
 				name: participant.displayName,
-				initialLoadedSlots: [1, 3, 5],
+				characterKey: participant.characterKey
+					?? (participant.virtualOpponentId
+						? characterByOpponentId.get(participant.virtualOpponentId)
+						: undefined),
+				initialLoadedSlots: [...GAME_RULESET.cylinder.initialLoadedSlots],
 			}
 		}
 		return {
@@ -446,8 +477,13 @@ export async function createCustomMatchFromRoomParticipants(
 			userId: participant.userId,
 			participantKind: 'human' as const,
 			name: participant.displayName,
+			characterKey: (participant.userId
+				? humanUsersById.get(String(participant.userId))?.characterKey
+				: undefined)
+				?? participant.characterKey
+				?? DEFAULT_CHARACTER_KEY,
 			initialLoadedSlots: participant.userId && participant.userId !== hostUser._id
-				? [1, 3, 5]
+				? [...GAME_RULESET.cylinder.initialLoadedSlots]
 				: undefined,
 		}
 	})

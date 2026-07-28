@@ -25,9 +25,13 @@
  * ```
  */
 import type { MatchPrivateDelta, MatchPublicSnapshot } from '../protocol/snapshots'
-import { DEFAULT_PLAYER_SKINS, type MatchState, type PlayerState } from './state'
+import { type MatchState, type PlayerState } from './state'
 import { deriveAvailableActions } from './capabilities'
 import { suggestedBid } from './rulesBidding'
+import {
+	isCharacterKey,
+	legacySeatCharacterKey,
+} from '../../shared/game/characters'
 
 const HUD_BY_PHASE: Record<string, string> = {
 	revolver_reload: 'revolver_reload',
@@ -39,18 +43,35 @@ const HUD_BY_PHASE: Record<string, string> = {
 	complete: 'complete',
 }
 
-function displaySkin(state: MatchState, player: Pick<PlayerState, 'id' | 'skin'>): string {
-	if (player.skin && player.skin !== 'default') {
+function displayCharacterKey(
+	state: MatchState,
+	player: Pick<PlayerState, 'id' | 'characterKey' | 'skin'>,
+): string {
+	if (player.characterKey) {
+		return player.characterKey
+	}
+	if (isCharacterKey(player.skin)) {
 		return player.skin
 	}
 	const playerIndex = Math.max(0, state.players.order.indexOf(player.id))
-	return DEFAULT_PLAYER_SKINS[playerIndex % DEFAULT_PLAYER_SKINS.length]
+	return legacySeatCharacterKey(playerIndex)
+}
+
+function displaySkin(
+	state: MatchState,
+	player: Pick<PlayerState, 'id' | 'characterKey' | 'skin'>,
+): string {
+	if (player.skin && player.skin !== 'default') {
+		return player.skin
+	}
+	return displayCharacterKey(state, player)
 }
 
 function publicDuelPlayers(state: MatchState) {
 	if (state.duel?.players && state.duel.players.length > 0) {
 		return state.duel.players.map((player) => ({
 			...player,
+			characterKey: displayCharacterKey(state, player),
 			skin: displaySkin(state, player),
 		}))
 	}
@@ -118,6 +139,7 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 				hp: player.hp,
 				bullets: player.bullets,
 				eliminated: player.eliminated,
+				characterKey: displayCharacterKey(state, player),
 				skin: displaySkin(state, player),
 				portraitState: player.portraitState,
 				isActive: state.turn.activePlayerId === id,

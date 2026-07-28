@@ -380,6 +380,7 @@ try {
 					&& s.visual?.duel?.mode === "reveal"
 					&& s.visual?.duel?.all_revealed === true
 					&& Number(s.visual?.duel?.grid_count ?? 0) > 0
+					&& s.visual?.duel?.marker_visible !== true
 					&& s.visual?.background?.position_y === 720,
 				5000,
 			),
@@ -392,12 +393,16 @@ try {
 				(s) => s.phase === "duel"
 					&& s.duel?.phase === "executing"
 					&& s.duel?.resolution
-					&& s.visual?.duel?.mode === "combat",
+					&& s.visual?.duel?.mode === "combat"
+					&& s.visual?.duel?.cylinder_visible === true
+					&& s.visual?.duel?.marker_visible === true
+					&& Number(s.visual?.duel?.cylinder_slot_index ?? 0) >= 1
+					&& Number(s.visual?.duel?.cylinder_loaded_count ?? 0) >= 2
+					&& s.visual?.duel?.cylinder_loaded === true,
 				9000,
 			),
 		),
 	);
-	await page.waitForTimeout(700);
 	phases.duel_combat.screenshot = await screenshotMetrics(page, "duel_combat");
 	phases.next_round = await page.evaluate(async () =>
 		window.__cdHarness.summarize(
@@ -472,6 +477,11 @@ try {
 		&& Number(phases.duel_reveal?.duel?.visual?.grid_count ?? 0) > 0;
 	checks.duel_combat.ok = checks.duel_combat.ok
 		&& phases.duel_combat?.duel?.visual?.mode === "combat"
+		&& phases.duel_combat?.duel?.visual?.cylinder_visible === true
+		&& phases.duel_combat?.duel?.visual?.marker_visible === true
+		&& Number(phases.duel_combat?.duel?.visual?.cylinder_slot_index ?? 0) >= 1
+		&& Number(phases.duel_combat?.duel?.visual?.cylinder_loaded_count ?? 0) >= 2
+		&& phases.duel_combat?.duel?.visual?.cylinder_loaded === true
 		&& Boolean(phases.duel_combat?.duel?.data?.resolution);
 	checks.shake.ok = checks.shake.ok
 		&& Number(phases.shake?.shake_state?.counts?.["local-player"] ?? 0) >= 6
@@ -516,10 +526,16 @@ try {
 			&& Number(phases.opponent_bid_visible?.bidding?.current_bid?.face) === 2
 			&& phases.opponent_bid_visible?.bid_controls?.visible === true
 			&& phases.opponent_bid_visible?.bid_controls?.can_drive === false
-			&& Number(phases.opponent_bid_visible?.bid_controls?.display_face) === 2,
+			&& Number(phases.opponent_bid_visible?.bid_controls?.display_face) === 2
+			&& phases.opponent_bid_visible?.carousel?.bid_player_id === "opponent-1"
+			&& Number(phases.opponent_bid_visible?.carousel?.bid_face) === 2
+			&& phases.opponent_bid_visible?.carousel?.bid_face_visible === true
+			&& phases.opponent_bid_visible?.cylinder?.visual_player_id === "local-player",
 		expected_face: 2,
 		current_bid: phases.opponent_bid_visible?.bidding?.current_bid ?? null,
 		bid_controls: phases.opponent_bid_visible?.bid_controls ?? null,
+		carousel: phases.opponent_bid_visible?.carousel ?? null,
+		cylinder: phases.opponent_bid_visible?.cylinder ?? null,
 	};
 	checks.next_round = {
 		ok: Number(phases.next_round?.round_index ?? 0) >= 1

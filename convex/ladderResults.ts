@@ -2,8 +2,9 @@ import { normalizePlacement } from '../shared/ladder/placement'
 import { calculateMultiplayerElo } from '../shared/ladder/rating'
 import type { MatchState } from './match/state'
 import type { GenericCtx } from './users'
+import { GAME_RULESET } from '../shared/game/ruleset'
 
-const DEFAULT_MMR = 1000
+const DEFAULT_MMR = GAME_RULESET.rating.defaultMmr
 const RECENT_PLACEMENT_LIMIT = 20
 
 export async function finalizeLadderResult(

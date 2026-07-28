@@ -8,6 +8,26 @@ textures {
   texture: "/assets/atlases/charcters/rosemund.atlas"
 }
 textures {
+  name: "hush_feather"
+  texture: "/assets/atlases/charcters/hush-feather.atlas"
+}
+textures {
+  name: "samuel_saber"
+  texture: "/assets/atlases/charcters/samuel-saber.atlas"
+}
+textures {
+  name: "zippo_jay"
+  texture: "/assets/atlases/charcters/zippo-jay.atlas"
+}
+textures {
+  name: "calamity_kate"
+  texture: "/assets/atlases/charcters/calamity-kate.atlas"
+}
+textures {
+  name: "the_kid"
+  texture: "/assets/atlases/charcters/the-kid.atlas"
+}
+textures {
   name: "dice_default"
   texture: "/assets/atlases/dices/dice_default.atlas"
 }

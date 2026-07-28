@@ -1,18 +1,19 @@
 import type { AutomaticMatchCommandType } from '../protocol/commands'
 import type { MatchState } from './state'
+import { GAME_RULESET } from '../../shared/game/ruleset'
 
-export const BIDDING_OPEN_DELAY_MS = 3_000
-export const SHAKE_TIMEOUT_MS = 6_000
-export const DICE_CHECK_TIMEOUT_MS = 6_000
-export const BIDDING_TIMEOUT_MS = 40_000
-export const BID_RELOAD_TIMEOUT_MS = 3_000
-export const DUEL_REVEAL_INTERVAL_MS = 160
-export const DUEL_REVEAL_DURATION_MS = 340
-export const DUEL_REVEAL_HOLD_MS = 3_000
-export const DUEL_EXECUTE_INTRO_MS = 450
-export const DUEL_ROULETTE_STEP_MS = 660
-export const DUEL_PERFECT_STEP_MS = 1_180
-export const DUEL_COMPLETE_HOLD_MS = 1_000
+export const BIDDING_OPEN_DELAY_MS = GAME_RULESET.timingsMs.biddingOpen
+export const SHAKE_TIMEOUT_MS = GAME_RULESET.timingsMs.shakeTimeout
+export const DICE_CHECK_TIMEOUT_MS = GAME_RULESET.timingsMs.diceCheckTimeout
+export const BIDDING_TIMEOUT_MS = GAME_RULESET.timingsMs.biddingTimeout
+export const BID_RELOAD_TIMEOUT_MS = GAME_RULESET.timingsMs.bidReloadTimeout
+export const DUEL_REVEAL_INTERVAL_MS = GAME_RULESET.timingsMs.duelRevealInterval
+export const DUEL_REVEAL_DURATION_MS = GAME_RULESET.timingsMs.duelRevealDuration
+export const DUEL_REVEAL_HOLD_MS = GAME_RULESET.timingsMs.duelRevealHold
+export const DUEL_EXECUTE_INTRO_MS = GAME_RULESET.timingsMs.duelExecuteIntro
+export const DUEL_ROULETTE_STEP_MS = GAME_RULESET.timingsMs.duelRouletteStep
+export const DUEL_PERFECT_STEP_MS = GAME_RULESET.timingsMs.duelPerfectStep
+export const DUEL_COMPLETE_HOLD_MS = GAME_RULESET.timingsMs.duelCompleteHold
 
 export interface AutomaticTransition {
 	type: AutomaticMatchCommandType

@@ -524,24 +524,13 @@ nodes {
     z: 0.3
   }
   size {
-    x: 196.0
-    y: 48.0
-  }
-  color {
-    x: 0.19
-    y: 0.11
-    z: 0.065
+    x: 212.0
+    y: 73.0
   }
   type: TYPE_BOX
+  texture: "rank_result/result_button"
   id: "lobby_button"
   parent: "root"
-  slice9 {
-    x: 12.0
-    y: 12.0
-    z: 12.0
-    w: 12.0
-  }
-  alpha: 0.96
 }
 nodes {
   position {
@@ -556,9 +545,9 @@ nodes {
     y: 38.0
   }
   color {
-    x: 0.93
-    y: 0.84
-    z: 0.66
+    x: 0.96
+    y: 0.89
+    z: 0.74
   }
   type: TYPE_TEXT
   text: "LOBBY"
@@ -573,24 +562,13 @@ nodes {
     z: 0.3
   }
   size {
-    x: 196.0
-    y: 48.0
-  }
-  color {
-    x: 0.12
-    y: 0.15
-    z: 0.13
+    x: 212.0
+    y: 73.0
   }
   type: TYPE_BOX
+  texture: "rank_result/result_button"
   id: "spectate_button"
   parent: "root"
-  slice9 {
-    x: 12.0
-    y: 12.0
-    z: 12.0
-    w: 12.0
-  }
-  alpha: 0.96
 }
 nodes {
   position {
@@ -605,15 +583,54 @@ nodes {
     y: 38.0
   }
   color {
-    x: 0.82
-    y: 0.86
-    z: 0.78
+    x: 0.96
+    y: 0.89
+    z: 0.74
   }
   type: TYPE_TEXT
   text: "SPECTATE"
   font: "system_font"
   id: "spectate_label"
   parent: "spectate_button"
+}
+nodes {
+  position {
+    y: -234.0
+    z: 0.3
+  }
+  size {
+    x: 212.0
+    y: 73.0
+  }
+  type: TYPE_BOX
+  texture: "rank_result/result_button"
+  id: "complete_lobby_button"
+  parent: "root"
+  enabled: false
+}
+nodes {
+  position {
+    z: 0.1
+  }
+  scale {
+    x: 1.15
+    y: 1.15
+  }
+  size {
+    x: 180.0
+    y: 38.0
+  }
+  color {
+    x: 0.96
+    y: 0.89
+    z: 0.74
+  }
+  type: TYPE_TEXT
+  text: "LOBBY"
+  font: "system_font"
+  id: "complete_lobby_label"
+  parent: "complete_lobby_button"
+  enabled: false
 }
 material: "/builtins/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

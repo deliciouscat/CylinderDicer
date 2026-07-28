@@ -78,7 +78,7 @@ try {
   )
   await page.screenshot({ path: join(outputDir, 'eliminated-choice-desktop.png') })
 
-  await clickLogical(752, 217)
+  await clickLogical(752, 126)
   const spectating = await statusWhere(
     `(status) => status.visual?.result?.visible === false`,
   )
@@ -101,7 +101,7 @@ try {
 	  await page.screenshot({ path: join(outputDir, 'victory-final-desktop.png') })
 
 	  await page.evaluate(() => { window.__fromDefold.length = 0 })
-	  await clickLogical(640, 201)
+	  await clickLogical(640, 126)
 	  await page.waitForFunction(
 	    () => window.__fromDefold.some((message) => message.type === 'EXIT_TO_LOBBY'),
 	    { timeout: 5000 },

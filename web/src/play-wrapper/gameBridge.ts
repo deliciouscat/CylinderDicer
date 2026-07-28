@@ -1,8 +1,55 @@
-import type { GameBridgeMessage } from '@shared/protocol/game-bridge'
+import type {
+  GameBridgeMessage,
+  GameBridgeMessageType,
+} from '@shared/protocol/game-bridge'
 
 const FROM_DEFOLD_EVENT = 'CylinderDicerFromDefold'
 const VUE_SOURCE = 'CylinderDicerVue'
 const DEFOLD_SOURCE = 'CylinderDicerDefold'
+
+const MESSAGE_TYPES = new Set<GameBridgeMessageType>([
+  'DEFOLD_READY',
+  'START_MATCH',
+  'MATCH_READY',
+  'PLAYER_COMMAND',
+  'SERVER_SNAPSHOT',
+  'SERVER_SNAPSHOT_RECEIVED',
+  'SERVER_EVENT',
+  'COMMAND_REJECTED',
+  'COMMAND_REJECTED_RECEIVED',
+  'SET_LOCALE',
+  'LOCALE_APPLIED',
+  'SET_COSMETICS',
+  'COSMETICS_APPLIED',
+  'SUBMIT_MATCH_RESULT',
+  'INPUT_POINTER',
+  'DOM_POINTER',
+  'INPUT_SHAKE',
+  'PING',
+  'PONG',
+  'QA_COMMAND',
+  'QA_STATUS',
+  'EXIT_TO_LOBBY',
+  'UNKNOWN_MESSAGE',
+])
+
+function frameOrigin(frame: HTMLIFrameElement): string {
+  return new URL(frame.src || frame.getAttribute('src') || '/', window.location.href).origin
+}
+
+function asBridgeMessage(value: unknown): GameBridgeMessage | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const record = value as Record<string, unknown>
+  if (typeof record.type !== 'string' || !MESSAGE_TYPES.has(record.type as GameBridgeMessageType)) {
+    return null
+  }
+  return {
+    type: record.type as GameBridgeMessageType,
+    ...(Object.hasOwn(record, 'payload') ? { payload: record.payload } : {}),
+  }
+}
 
 export function sendToDefold(frame: HTMLIFrameElement, message: GameBridgeMessage) {
   try {
@@ -22,31 +69,33 @@ export function sendToDefold(frame: HTMLIFrameElement, message: GameBridgeMessag
       source: VUE_SOURCE,
       ...message,
     },
-    '*',
+    frameOrigin(frame),
   )
 }
 
-export function listenFromDefold(handler: (message: GameBridgeMessage) => void) {
-  const handleCustomEvent = (event: Event) => {
-    const customEvent = event as CustomEvent<GameBridgeMessage>
-    handler(customEvent.detail)
-  }
+export function listenFromDefold(
+  frame: HTMLIFrameElement,
+  handler: (message: GameBridgeMessage) => void,
+) {
+  const expectedWindow = frame.contentWindow
+  const expectedOrigin = frameOrigin(frame)
   const handleMessageEvent = (event: MessageEvent) => {
-    const data = event.data as (GameBridgeMessage & { source?: string }) | undefined
-    if (!data || data.source !== DEFOLD_SOURCE || !data.type) {
+    if (event.source !== expectedWindow || event.origin !== expectedOrigin) {
       return
     }
-    handler({
-      type: data.type,
-      payload: data.payload,
-    })
+    const data = event.data as Record<string, unknown> | undefined
+    if (!data || data.source !== DEFOLD_SOURCE) {
+      return
+    }
+    const message = asBridgeMessage(data)
+    if (message) {
+      handler(message)
+    }
   }
 
-  window.addEventListener(FROM_DEFOLD_EVENT, handleCustomEvent)
   window.addEventListener('message', handleMessageEvent)
 
   return () => {
-    window.removeEventListener(FROM_DEFOLD_EVENT, handleCustomEvent)
     window.removeEventListener('message', handleMessageEvent)
   }
 }
@@ -56,8 +105,11 @@ export function listenFromDefoldFrame(
   handler: (message: GameBridgeMessage) => void,
 ) {
   const handleCustomEvent = (event: Event) => {
-    const customEvent = event as CustomEvent<GameBridgeMessage>
-    handler(customEvent.detail)
+    const customEvent = event as CustomEvent<unknown>
+    const message = asBridgeMessage(customEvent.detail)
+    if (message) {
+      handler(message)
+    }
   }
 
   target.addEventListener(FROM_DEFOLD_EVENT, handleCustomEvent)

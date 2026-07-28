@@ -23,6 +23,7 @@ const REQUIRED_PHASE4_FUNCTIONS = [
   'adminMatches.js:addLadderQaOpponent',
   'adminMatches.js:dismissReadyDevMatch',
   'customGames.js:addMyCustomGameOpponent',
+  'customGames.js:removeMyCustomGameOpponent',
   'ladder.js:heartbeatQueue',
   'ladder.js:acknowledgeMatchHandoff',
 ]
@@ -108,8 +109,9 @@ check(
 )
 check(
   'web registry exposes Custom Game bot composition',
-  functionReferences.includes('addMyCustomGameOpponent'),
-  'Register addMyCustomGameOpponent in web/src/services/convex/functionReferences.ts.',
+  functionReferences.includes('addMyCustomGameOpponent')
+    && functionReferences.includes('removeMyCustomGameOpponent'),
+  'Register Custom Game add/remove bot functions in web/src/services/convex/functionReferences.ts.',
 )
 check(
   'shared docs describe Clerk admin claim',

@@ -3,22 +3,19 @@ local selectors = require("game.model.selectors")
 local i18n = require("game.core.i18n")
 local gui_util = require("ui.common.gui_util")
 local visual_status = require("game.dev.visual_status")
+local dice_art = require("ui.common.dice_art")
+local character_art = require("ui.common.character_art")
+local player_carousel_view = require("ui.player_carousel.player_carousel_view")
 
-local MAX_SLOTS = 6
+local ruleset = require("game.ruleset")
+
+local MAX_SLOTS = ruleset.PLAYER_MAX
 local SKULL_HIT_SHAKE_SECONDS = 0.42
 local SKULL_HIT_SHAKE_DISTANCE = 12.0
 local SKULL_HIT_SHAKE_FREQUENCY = 72.0
 local CENTER_PREVIOUS_SLOT = 3
 local CENTER_ACTIVE_SLOT = 4
 local FILL_SLOTS = { 1, 2, 5, 6, 3, 4 }
-local TEXTURE_BY_SKIN = {
-	["rosemund"] = "rosemund",
-	["hush-feather"] = "hush_feather",
-	["samuel-saber"] = "samuel_saber",
-	["zippo-jay"] = "zippo_jay",
-	["calamity-kate"] = "calamity_kate",
-	["the-kid"] = "the_kid",
-}
 local VISIBLE_HUDS = {
 	revolver_reload = true,
 	bidding = true,
@@ -34,10 +31,6 @@ local function color(r, g, b, a)
 		z = b,
 		w = a,
 	}
-end
-
-local function texture_name(player)
-	return TEXTURE_BY_SKIN[player.skin] or TEXTURE_BY_SKIN[player.id] or "rosemund"
 end
 
 local function place_player(slots, assigned, slot_index, player_id)
@@ -95,14 +88,18 @@ local function set_status_alpha(prefix, alpha)
 	gui_util.set_alpha(prefix .. "_bullets", alpha)
 	gui_util.set_alpha(prefix .. "_hp_badge", alpha)
 	gui_util.set_alpha(prefix .. "_hp", alpha)
+	gui_util.set_alpha(prefix .. "_bid_face", alpha)
 end
 
-local function set_slot(index, player, focus, show_meta)
+local function set_slot(self, index, player, focus, show_meta, bid_face)
 	local prefix = "slot" .. tostring(index)
 	local visible = player ~= nil
+	local body_texture = visible and character_art.texture_name(player) or nil
+	local defaults = self.body_defaults[index]
 
-	gui_util.set_enabled(prefix .. "_body", visible)
+	gui_util.set_enabled(prefix .. "_body", body_texture ~= nil)
 	set_meta_enabled(prefix, visible and show_meta)
+	gui_util.set_enabled(prefix .. "_bid_face", visible and show_meta and bid_face ~= nil)
 
 	if not player then
 		return
@@ -111,6 +108,9 @@ local function set_slot(index, player, focus, show_meta)
 	gui_util.set_text(prefix .. "_bullets", selectors.player_bullets(player))
 	gui_util.set_text(prefix .. "_hp", player.hp or 0)
 	gui_util.set_text(prefix .. "_name", player.name or player.id)
+	if bid_face then
+		gui_util.play_flipbook(prefix .. "_bid_face", dice_art.front_animation(bid_face))
+	end
 	if focus.active then
 		gui_util.set_text(prefix .. "_marker", player.is_local
 			and i18n.t("player.marker.mine")
@@ -121,7 +121,14 @@ local function set_slot(index, player, focus, show_meta)
 		gui_util.set_text(prefix .. "_marker", "")
 	end
 
-	gui_util.set_texture(prefix .. "_body", texture_name(player))
+	if body_texture then
+		gui_util.set_texture(prefix .. "_body", body_texture)
+		gui_util.set_size(prefix .. "_body", vmath.vector3(
+			character_art.portrait_width(player, defaults.size.y),
+			defaults.size.y,
+			defaults.size.z
+		))
+	end
 	gui_util.set_color(prefix .. "_body", color(1.0, 1.0, 1.0, 1.0))
 	local status_alpha = player_status_alpha(player)
 	gui_util.set_alpha(prefix .. "_body", status_alpha)
@@ -148,10 +155,13 @@ local function render_standard(self, state)
 		restore_body(self, index)
 		local player_id = slots[index]
 		local player = player_id and state.players.by_id[player_id] or nil
-		set_slot(index, player, {
+		set_slot(self, index, player, {
 			active = player_id == state.turn.active_player_id,
 			previous = player_id == state.turn.previous_player_id,
-		}, true)
+		}, true, player_carousel_view.bid_face_for_player(
+			state.bidding and state.bidding.current_bid,
+			player_id
+		))
 	end
 end
 
@@ -204,6 +214,8 @@ local function render(self, state)
 
 	local active_slot = nil
 	local active_position_x = nil
+	local bid_slot = nil
+	local current_bid = state.bidding and state.bidding.current_bid
 	if visible then
 		for index, player_id in pairs(self.slot_player_ids or {}) do
 			if player_id == state.turn.active_player_id then
@@ -212,7 +224,9 @@ local function render(self, state)
 				if active_body then
 					active_position_x = gui.get_position(active_body).x
 				end
-				break
+			end
+			if current_bid and player_id == current_bid.player_id then
+				bid_slot = index
 			end
 		end
 	end
@@ -226,6 +240,10 @@ local function render(self, state)
 		active_player_id = state.turn.active_player_id,
 		active_slot = active_slot,
 		active_position_x = active_position_x,
+		bid_player_id = current_bid and current_bid.player_id or nil,
+		bid_face = current_bid and current_bid.face or nil,
+		bid_slot = bid_slot,
+		bid_face_visible = bid_slot ~= nil,
 	})
 end
 

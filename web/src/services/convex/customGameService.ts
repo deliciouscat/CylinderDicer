@@ -14,6 +14,7 @@ export interface CustomGameParticipant {
   participantKind: 'human' | 'virtual'
   playerId: string
   displayName: string
+  characterKey?: string
   archetype?: string
   ready: boolean
   seatIndex: number
@@ -59,6 +60,21 @@ export type CustomGameRoomUnsubscribe = (() => void) & {
   getCurrentValue(): unknown | undefined
 }
 
+export interface RemoveCustomGameOpponentInput {
+  roomId: string
+  playerId: string
+}
+
+export async function removeMyCustomGameOpponent(
+  client: ConvexClient,
+  input: RemoveCustomGameOpponentInput,
+): Promise<CustomGameRoomView | Record<string, any>> {
+  return await client.mutation(
+    convexFunctions.customGames.removeMyCustomGameOpponent,
+    input as any,
+  ) as CustomGameRoomView | Record<string, any>
+}
+
 export function createCustomGameService(client: ConvexClient) {
   return {
     async ensureMyCustomGameRoom(): Promise<CustomGameRoomView | Record<string, any> | null> {
@@ -81,6 +97,9 @@ export function createCustomGameService(client: ConvexClient) {
     },
     async addMyCustomGameOpponent(roomId: string): Promise<CustomGameRoomView | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.addMyCustomGameOpponent, { roomId } as any) as CustomGameRoomView | Record<string, any>
+    },
+    async removeMyCustomGameOpponent(input: RemoveCustomGameOpponentInput): Promise<CustomGameRoomView | Record<string, any>> {
+      return await removeMyCustomGameOpponent(client, input)
     },
     async startMyCustomGameRoom(roomId: string): Promise<CreatedMatch | Record<string, any>> {
       return await client.mutation(convexFunctions.customGames.startMyCustomGameRoom, { roomId } as any)

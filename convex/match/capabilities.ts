@@ -1,6 +1,7 @@
 import type { AvailableAction } from '../protocol/snapshots'
 import { suggestedBid } from './rulesBidding'
 import type { MatchState, PlayerState } from './state'
+import { GAME_RULESET } from '../../shared/game/ruleset'
 
 function emptySlots(player: PlayerState | undefined): number[] {
 	if (!player) {
@@ -66,10 +67,10 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 		}
 		const actions: AvailableAction[] = [{
 			type: 'bid',
-			min_count: 1,
-			max_count: 36,
-			min_face: 1,
-			max_face: 6,
+			min_count: GAME_RULESET.bidding.countMin,
+			max_count: GAME_RULESET.bidding.countMax,
+			min_face: GAME_RULESET.dice.faceMin,
+			max_face: GAME_RULESET.dice.faceMax,
 			suggested: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
 		}]
 		if (!state.pendingLoad && state.bidding.currentBid) {

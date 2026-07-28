@@ -19,6 +19,8 @@ local tests = {
 	require("game.model.tests.i18n_test"),
 	require("game.model.tests.audio_events_test"),
 	require("game.model.tests.result_view_test"),
+	require("game.model.tests.player_carousel_view_test"),
+	require("game.model.tests.character_art_test"),
 }
 
 local total = 0

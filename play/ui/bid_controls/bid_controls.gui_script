@@ -33,7 +33,7 @@ local function render(self, state)
 	local visible = selectors.is_hud(state, "bidding")
 	self.can_drive = local_permissions.can_bid(state)
 	self.can_pass = self.can_drive and selectors.is_my_bid_valid(state)
-	self.can_challenge = self.can_drive and selectors.has_previous_bid(state)
+	self.can_challenge = local_permissions.can_challenge(state)
 	local display_bid = self.can_drive and bid or current or bid
 
 	gui_util.set_enabled("root", visible)

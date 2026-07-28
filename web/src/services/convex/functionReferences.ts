@@ -27,6 +27,7 @@ export const convexFunctions = {
   users: {
     getCurrentUser: api.users.getCurrentUser,
     createOrUpdateCurrentUser: api.users.createOrUpdateCurrentUser,
+    setCurrentUserCharacter: api.users.setCurrentUserCharacter,
   },
   ladder: {
     observeOwnQueue: api.ladder.observeOwnQueue,
@@ -56,6 +57,7 @@ export const convexFunctions = {
     leaveMyCustomGameRoom: api.customGames.leaveMyCustomGameRoom,
     setMyCustomGameReady: api.customGames.setMyCustomGameReady,
     addMyCustomGameOpponent: api.customGames.addMyCustomGameOpponent,
+    removeMyCustomGameOpponent: api.customGames.removeMyCustomGameOpponent,
     startMyCustomGameRoom: api.customGames.startMyCustomGameRoom,
   },
   adminMatches: {

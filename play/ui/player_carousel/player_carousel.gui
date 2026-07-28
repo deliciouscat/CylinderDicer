@@ -31,6 +31,10 @@ textures {
   name: "status"
   texture: "/assets/atlases/status_indicators.atlas"
 }
+textures {
+  name: "dice_default"
+  texture: "/assets/atlases/dices/dice_default.atlas"
+}
 nodes {
   position {
     x: 640.0
@@ -116,6 +120,21 @@ nodes {
   text: "0"
   font: "system_font"
   id: "slot1_hp"
+  parent: "root"
+}
+nodes {
+  position {
+    x: -467.0
+    y: 80.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 40.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot1_bid_face"
   parent: "root"
 }
 nodes {
@@ -240,6 +259,21 @@ nodes {
 }
 nodes {
   position {
+    x: -255.0
+    y: 80.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 40.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot2_bid_face"
+  parent: "root"
+}
+nodes {
+  position {
     x: -323.0
     y: 42.0
     z: 0.4
@@ -360,6 +394,21 @@ nodes {
 }
 nodes {
   position {
+    x: -108.0
+    y: 236.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 42.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot3_bid_face"
+  parent: "root"
+}
+nodes {
+  position {
     x: -97.0
     y: 42.0
     z: 0.4
@@ -476,6 +525,21 @@ nodes {
   text: "0"
   font: "system_font"
   id: "slot4_hp"
+  parent: "root"
+}
+nodes {
+  position {
+    x: 298.0
+    y: 236.0
+    z: 0.4
+  }
+  size {
+    x: 42.0
+    y: 42.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot4_bid_face"
   parent: "root"
 }
 nodes {
@@ -604,6 +668,21 @@ nodes {
 }
 nodes {
   position {
+    x: 407.0
+    y: 80.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 40.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot5_bid_face"
+  parent: "root"
+}
+nodes {
+  position {
     x: 339.0
     y: 42.0
     z: 0.4
@@ -724,6 +803,21 @@ nodes {
   text: "0"
   font: "system_font"
   id: "slot6_hp"
+  parent: "root"
+}
+nodes {
+  position {
+    x: 469.0
+    y: 80.0
+    z: 0.4
+  }
+  size {
+    x: 40.0
+    y: 40.0
+  }
+  type: TYPE_BOX
+  texture: "dice_default/f2_a0"
+  id: "slot6_bid_face"
   parent: "root"
 }
 nodes {

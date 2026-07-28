@@ -541,14 +541,8 @@ nodes {
     x: 42.0
     y: 28.0
   }
-  color {
-    x: 0.86
-    y: 0.76
-    z: 0.48
-  }
-  type: TYPE_TEXT
-  text: "v"
-  font: "system_font"
+  type: TYPE_BOX
+  texture: "ui/down_indicator"
   id: "pointer_top"
   parent: "root"
 }
@@ -561,14 +555,8 @@ nodes {
     x: 42.0
     y: 28.0
   }
-  color {
-    x: 0.86
-    y: 0.76
-    z: 0.48
-  }
-  type: TYPE_TEXT
-  text: "^"
-  font: "system_font"
+  type: TYPE_BOX
+  texture: "ui/up_indicator"
   id: "pointer_bottom"
   parent: "root"
 }

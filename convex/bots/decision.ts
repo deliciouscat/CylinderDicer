@@ -238,8 +238,11 @@ export function decideBotIntent(
 export function botReactionDelayMs(
 	parameters: Partial<BotPersonalityParameters> | null | undefined,
 	seed: string,
-	pacing: 'routine' | 'bidding' = 'routine',
+	pacing: 'checkpoint' | 'routine' | 'bidding' = 'routine',
 ): number {
+	if (pacing === 'checkpoint') {
+		return 0
+	}
 	const normalized = normalizeBotParameters(parameters)
 	const lo = Math.min(normalized.reactionMinMs, normalized.reactionMaxMs)
 	const hi = Math.max(normalized.reactionMinMs, normalized.reactionMaxMs)

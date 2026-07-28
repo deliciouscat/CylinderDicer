@@ -40,6 +40,7 @@ import { reduceMatchState } from './match/reducer'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
 import type { MatchState } from './match/state'
 import type { MatchCommand, MatchCommandType } from './protocol/commands'
+import { parseCommandPayload } from './protocol/commandPayloads'
 import { completeLinkedCustomGameRoom } from './customGames'
 import { getLatestMatchState, getMatchParticipant, writeStateAndPublicView } from './matches'
 import { requireCurrentUser, type GenericCtx } from './users'
@@ -86,6 +87,30 @@ export const automaticMatchCommandTypeValidator = v.union(
 	v.literal('bid.reload_timeout'),
 	v.literal('duel.execute'),
 	v.literal('round.advance'),
+)
+
+const bidPayloadValidator = v.object({
+	bid: v.object({
+		playerId: v.optional(v.string()),
+		player_id: v.optional(v.string()),
+		count: v.number(),
+		face: v.number(),
+	}),
+})
+
+const directBidPayloadValidator = v.object({
+	playerId: v.optional(v.string()),
+	player_id: v.optional(v.string()),
+	count: v.number(),
+	face: v.number(),
+})
+
+export const matchCommandPayloadValidator = v.union(
+	v.object({}),
+	v.object({ slotIndex: v.number() }),
+	v.object({ slot_index: v.number() }),
+	bidPayloadValidator,
+	directBidPayloadValidator,
 )
 
 export interface ApplyMatchCommandInput {
@@ -141,6 +166,23 @@ export async function applyMatchCommand(
 	ctx: GenericCtx,
 	args: ApplyMatchCommandInput,
 ) {
+	if (!Number.isFinite(args.revision) || !Number.isSafeInteger(args.revision) || args.revision < 0) {
+		return {
+			ok: false,
+			matchId: args.matchId,
+			code: 'INVALID_PAYLOAD',
+			message: 'invalid_revision',
+		}
+	}
+	const parsedPayload = parseCommandPayload(args.type, args.payload)
+	if (!parsedPayload.ok) {
+		return {
+			ok: false,
+			matchId: args.matchId,
+			code: 'INVALID_PAYLOAD',
+			message: parsedPayload.reason,
+		}
+	}
 	if (args.commandId.length > MAX_COMMAND_ID_LENGTH) {
 		return {
 			ok: false,
@@ -152,7 +194,7 @@ export async function applyMatchCommand(
 			},
 		}
 	}
-	const payloadLength = jsonLength(args.payload)
+	const payloadLength = jsonLength(parsedPayload.payload)
 	if (payloadLength > MAX_PAYLOAD_JSON_LENGTH) {
 		return {
 			ok: false,
@@ -221,7 +263,7 @@ export async function applyMatchCommand(
 		commandId: args.commandId,
 		revision: args.revision,
 		type: args.type,
-		payload: args.payload,
+		payload: parsedPayload.payload,
 		actorUserId: args.actorUserId,
 		actorVirtualOpponentId: args.actorVirtualOpponentId,
 		actorPlayerId: args.actorPlayerId,
@@ -253,7 +295,7 @@ export async function applyMatchCommand(
 			submittedByUserId: args.submittedByUserId,
 			source: args.source ?? 'player',
 			type: args.type,
-			payload: args.payload ?? {},
+			payload: parsedPayload.payload ?? {},
 			resultRevision: result.state.revision,
 			createdAt: now,
 			expiresAt,
@@ -331,7 +373,7 @@ export const submitMatchCommand = mutationGeneric({
 		commandId: v.string(),
 		revision: v.number(),
 		type: matchCommandTypeValidator,
-		payload: v.optional(v.any()),
+		payload: v.optional(matchCommandPayloadValidator),
 	},
 	returns: v.any(),
 	handler: async (ctx: GenericCtx, args: any) => {

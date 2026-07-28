@@ -5,15 +5,21 @@ import { useConvexClient } from 'convex-vue'
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import {
   createAdminMatchService,
-  type AdminCustomGameParticipant,
   type AdminCustomGameRoomView,
   type AdminDevMatchRow,
   type AdminLadderQaSession,
   type AdminAccessProbe,
   type AdminAuditRow,
   type AdminMatchState,
-  type AdminParticipant,
 } from '../services/convex/adminMatchService'
+import {
+  buildQaSteps,
+  matchLabel,
+  playerLabel,
+  preferredBotPlayerId,
+  roomLabel,
+  roomPlayerLabel,
+} from './opponentControllerModel'
 
 const emit = defineEmits<{
   back: []
@@ -130,17 +136,13 @@ const humanRoomParticipants = computed(() => {
   return roomParticipants.value.filter((participant) => participant.participantKind === 'human')
 })
 const qaSteps = computed(() => {
-  const roomReady = roomDetail.value?.allReady === true
-  const matchSelected = Boolean(activeMatchId.value && detail.value?.ok === true)
   const phase = detail.value?.state?.flow?.phase ?? ''
-  return [
-    { id: 'room-ready', label: 'Room: all opponents ready', done: roomReady },
-    { id: 'match-linked', label: 'Match: linked in play tab', done: matchSelected },
-    { id: 'setup', label: 'Gameplay: past setup reload', done: phase !== '' && phase !== 'revolver_reload' },
-    { id: 'shake', label: 'Gameplay: shake phase reached', done: ['dice_check', 'bidding_gap', 'bidding', 'duel', 'complete'].includes(phase) },
-    { id: 'bidding', label: 'Gameplay: bidding reached', done: ['bidding', 'duel', 'complete'].includes(phase) },
-    { id: 'complete', label: 'Gameplay: match complete', done: phase === 'complete' || detail.value?.state?.match?.status === 'complete' },
-  ]
+  return buildQaSteps({
+    roomReady: roomDetail.value?.allReady === true,
+    matchSelected: Boolean(activeMatchId.value && detail.value?.ok === true),
+    phase,
+    matchComplete: detail.value?.state?.match?.status === 'complete',
+  })
 })
 const ladderQaCanAdd = computed(() => {
   const session = ladderQaSession.value
@@ -155,29 +157,6 @@ const playMatchUrl = computed(() => {
   }
   return `/play/dev?matchId=${encodeURIComponent(activeMatchId.value)}`
 })
-
-function roomLabel(row: AdminCustomGameRoomView) {
-  const id = row.room?._id?.slice(-6) ?? 'room'
-  const ready = row.allReady ? 'ready' : 'waiting'
-  const status = row.room?.status ?? 'composing'
-  return `${id} · ${status} · ${ready}`
-}
-
-function preferredBotPlayerId(state: AdminMatchState | null) {
-  if (!state?.state) {
-    return ''
-  }
-  const bots = (state.participants ?? []).filter((participant) => participant.isBot)
-  const pendingPlayerId = state.state.pendingLoad?.playerId
-  const activeId = state.state.turn?.activePlayerId
-  const pendingBot = bots.find((participant) => participant.playerId === pendingPlayerId)
-  const hasActions = (playerId: string) => {
-    return (state.playerDeltas?.[playerId]?.availableActions?.length ?? 0) > 0
-  }
-  const activeBot = bots.find((participant) => participant.playerId === activeId && hasActions(participant.playerId))
-  const actionableBot = bots.find((participant) => hasActions(participant.playerId))
-  return pendingBot?.playerId ?? activeBot?.playerId ?? actionableBot?.playerId ?? bots[0]?.playerId ?? ''
-}
 
 function applyMatchDetail(next: AdminMatchState | null) {
   if (!next) {
@@ -284,19 +263,6 @@ function subscribeRoomDetail(roomId: string) {
 function generateCommandId(type: string) {
   commandCounter += 1
   return `admin-${Date.now()}-${commandCounter}-${type}`
-}
-
-function matchLabel(row: AdminDevMatchRow) {
-  const id = row.match._id.slice(-6)
-  return `${id} · r${row.match.revision}`
-}
-
-function playerLabel(participant: AdminParticipant) {
-  return participant.displayName ?? participant.playerId
-}
-
-function roomPlayerLabel(participant: AdminCustomGameParticipant) {
-  return participant.displayName ?? participant.playerId
 }
 
 function openStartedRoomMatch(row: AdminCustomGameRoomView) {

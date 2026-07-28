@@ -112,6 +112,15 @@ function installFrameListener() {
   stopFrameListening = listenFromDefoldFrame(target, handleMessage)
 }
 
+function installParentListener() {
+  const targetFrame = frame.value
+  if (!targetFrame) {
+    return
+  }
+  stopListening?.()
+  stopListening = listenFromDefold(targetFrame, handleMessage)
+}
+
 function startReadyRetry() {
   stopReadyRetry()
   readyRetryCount = 0
@@ -131,6 +140,7 @@ function startReadyRetry() {
 
 function handleFrameLoad() {
   isDefoldReady.value = false
+  installParentListener()
   installFrameListener()
   startReadyRetry()
 }
@@ -152,7 +162,7 @@ function handleMessage(message: GameBridgeMessage) {
 }
 
 onMounted(() => {
-  stopListening = listenFromDefold(handleMessage)
+  installParentListener()
   installFrameListener()
   startReadyRetry()
 })
