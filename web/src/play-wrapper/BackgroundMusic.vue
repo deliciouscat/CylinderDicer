@@ -30,6 +30,7 @@ const playlistCursor: Record<BackgroundMusicMode, number> = {
 
 let activeAudio: HTMLAudioElement | null = null
 let generation = 0
+let playbackAttempt = 0
 let disposed = false
 
 const isMusicPlaying = computed(() => enabled.value && !playbackBlocked.value)
@@ -77,14 +78,22 @@ function fade(
 }
 
 async function playWithFade(audio: HTMLAudioElement, intendedGeneration: number) {
+  const intendedAttempt = ++playbackAttempt
+  // A user gesture can unblock playback, but HTMLMediaElement.play() settles
+  // asynchronously. Reflect the requested state immediately, then restore the
+  // blocked state only if this remains the latest playback attempt.
+  playbackBlocked.value = false
+
   try {
     await audio.play()
   } catch {
-    if (isCurrent(audio, intendedGeneration)) playbackBlocked.value = true
+    if (isCurrent(audio, intendedGeneration) && playbackAttempt === intendedAttempt) {
+      playbackBlocked.value = true
+    }
     return
   }
 
-  if (!isCurrent(audio, intendedGeneration)) {
+  if (!isCurrent(audio, intendedGeneration) || playbackAttempt !== intendedAttempt) {
     audio.pause()
     return
   }
@@ -136,8 +145,9 @@ function transitionTo(mode: BackgroundMusicMode, startImmediately = false) {
   })
 }
 
-function retryBlockedPlayback() {
+function retryBlockedPlayback(event?: Event) {
   if (!enabled.value || !playbackBlocked.value || !activeAudio) return
+  if (event?.target instanceof Element && event.target.closest('.background-music-toggle')) return
   void playWithFade(activeAudio, generation)
 }
 
@@ -166,6 +176,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   disposed = true
   generation += 1
+  playbackAttempt += 1
   window.removeEventListener('pointerdown', retryBlockedPlayback, { capture: true })
   window.removeEventListener('keydown', retryBlockedPlayback, { capture: true })
   activeAudio?.pause()
