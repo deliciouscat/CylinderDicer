@@ -375,8 +375,8 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 		},
 	}
 
-	if (input.requiresSetupLoad !== false && localPlayerId) {
-		const pending = pendingForPlayer(state, localPlayerId, 'setup', 3)
+	if (input.requiresSetupLoad !== false) {
+		const pending = nextSetupPending(state)
 		if (pending) {
 			state.pendingLoad = pending
 			state.flow.phase = 'revolver_reload'
@@ -439,6 +439,31 @@ export function pendingForPlayer(
 		source,
 		count: loadCount,
 	}
+}
+
+export function nextSetupPending(
+	state: MatchState,
+	afterPlayerId?: string,
+): PendingLoadState | undefined {
+	const order = state.players.order
+	const startIndex = afterPlayerId ? order.indexOf(afterPlayerId) + 1 : 0
+	const targetCount = GAME_RULESET.cylinder.initialLoadedSlots.length
+
+	for (let offset = 0; offset < order.length; offset += 1) {
+		const playerId = order[(startIndex + offset) % order.length]
+		const player = state.players.byId[playerId]
+		if (!player || player.participantKind === 'virtual' || player.virtualOpponentId) {
+			continue
+		}
+
+		const remainingCount = Math.max(0, targetCount - loadedCount(player.cylinder))
+		const pending = pendingForPlayer(state, playerId, 'setup', remainingCount)
+		if (pending) {
+			return pending
+		}
+	}
+
+	return undefined
 }
 
 export function resetShake(

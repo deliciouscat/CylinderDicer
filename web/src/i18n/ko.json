@@ -109,13 +109,15 @@
     "locales": {
       "en": "English",
       "ko": "한국어",
-      "ja": "日本語"
+      "ja": "日本語",
+      "zh": "中文"
     },
     "menu": {
       "ladder": "래더",
       "customGame": "커스텀 게임",
       "itemShop": "아이템 상점",
-      "settings": "설정"
+      "settings": "설정",
+      "howToPlay": "게임 방법"
     }
   },
   "settings": {
@@ -140,6 +142,48 @@
       "zippo-jay": "Zippo Jay",
       "calamity-kate": "Calamity Kate",
       "the-kid": "The Kid"
+    }
+  },
+  "howToPlay": {
+    "screenLabel": "게임 방법",
+    "back": "뒤로",
+    "steps": {
+      "load": {
+        "title": "탄환 장전",
+        "description": "게임 시작 시 탄환 3발을 원하는 약실에 장전합니다.",
+        "hint": "빈 약실을 선택",
+        "iconAlt": "리볼버 실린더"
+      },
+      "shake": {
+        "title": "컵 흔들기",
+        "description": "컵을 흔든 뒤 내 주사위만 확인합니다. 다른 플레이어의 눈은 비공개입니다.",
+        "hint": "[Space] 연타 또는 마우스",
+        "iconAlt": "주사위 컵"
+      },
+      "bid": {
+        "title": "더 높은 콜",
+        "description": "직전 콜보다 높은 수량 또는 눈을 선언하세요. 넘기면 본인만 탄환 1발을 장전합니다.",
+        "hint": "▲▼ 또는 화살표 키 · [Space] 확정",
+        "iconAlt": "입찰 레일"
+      },
+      "duel": {
+        "title": "결투 신청",
+        "description": "결투를 신청하면 모든 주사위가 공개되고, 마지막 콜을 판정합니다.",
+        "hint": "[C] 또는 결투 버튼",
+        "iconAlt": "결투 신청 버튼"
+      },
+      "resolve": {
+        "title": "판정과 다음 라운드",
+        "description": "부족이면 도전자가, 초과면 콜러가 발사합니다. 정확하면 특별 결투 뒤 다음 라운드가 시작됩니다.",
+        "iconAlt": "추후 추가될 결과 안내 이미지"
+      }
+    },
+    "skull": {
+      "title": "Skull (Wildcard)",
+      "wildcard": "일반 눈을 콜할 때 Skull은 모든 눈으로 계산됩니다.",
+      "call": "Skull을 콜하면 표시 수량의 절반(홀수는 내림)으로 판정합니다.",
+      "pass": "Skull 넘기기는 확정 전에 자신의 총을 1회 격발하며, 사망하면 콜은 무효입니다.",
+      "iconAlt": "Skull 주사위"
     }
   },
   "music": {

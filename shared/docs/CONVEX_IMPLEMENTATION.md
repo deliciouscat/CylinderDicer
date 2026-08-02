@@ -794,7 +794,7 @@ export type GameBridgeMessageType =
   | "UNKNOWN_MESSAGE";
 ```
 
-`SET_LOCALE { locale: "en" | "ko" | "ja" }`는 Vue의 저장된 locale을 iframe 내부 Defold로 전달한다. `DefoldCanvas`는 ready retry의 initial state에 locale을 포함하고 실행 중 변경도 다시 전송한다. Defold는 허용 locale만 적용하고 현재 HUD를 다시 렌더한 뒤 `LOCALE_APPLIED`로 확인한다. 이 신호는 match authority나 snapshot revision을 변경하지 않는다.
+`SET_LOCALE { locale: "en" | "ko" | "ja" | "zh" }`는 Vue의 저장된 locale을 iframe 내부 Defold로 전달한다. `DefoldCanvas`는 ready retry의 initial state에 locale을 포함하고 실행 중 변경도 다시 전송한다. Defold는 허용 locale만 적용하고 현재 HUD를 다시 렌더한 뒤 `LOCALE_APPLIED`로 확인한다. 이 신호는 match authority나 snapshot revision을 변경하지 않는다.
 
 Defold migration rule:
 
@@ -838,6 +838,8 @@ opponent-controller / bot
 Current Phase 4/5 admin UI uses explicit list refresh for sidebars, plus live subscriptions for the selected match or custom room. `/admin/opponents` subscribes to `getAdminMatchState` or `getAdminCustomGameRoom`, submits opponent commands through `submitOpponentCommand`, and reloads audit/list context after mutations.
 
 For Phase 5 QA, `cup_shake` and `dice_check` are shared checkpoints, not active-player turns. Each alive player may complete their own `shake.complete` and must complete `dice.check`; virtual opponent shake actions are immediate checkpoint submissions through the opponent controller and human shake motion is locally aggregated in each player's play client. `turn.activePlayerId` remains the next bidding starter and must not gate these checkpoint capabilities.
+
+최초 setup에서는 모든 human participant가 좌석 순서대로 자신의 빈 약실 세 곳을 직접 선택한다. 서버는 현재 대상에게만 `load` capability와 private cylinder를 제공하고, 마지막 human의 장전이 끝난 뒤에만 `cup_shake`로 전이한다. `virtual` participant만 규칙셋의 초기 약실 패턴으로 사전 장전되며 이 setup 대기열에서 제외된다.
 
 Each accepted `shake.complete` rolls only the actor's private dice. The phase remains `cup_shake` until every alive player has completed it, then enters reload/dice check once. Tests must assert the intermediate one-player-complete state so a regression where one actor rolls the whole table cannot pass a final-phase-only test.
 

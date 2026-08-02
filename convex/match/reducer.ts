@@ -38,6 +38,7 @@ import {
 	cloneState,
 	DICE_CHECK_DELAY_SECONDS,
 	isAlive,
+	nextSetupPending,
 	pendingForPlayer,
 	resetMyBid,
 	resetShake,
@@ -287,9 +288,17 @@ function finishShakePhase(state: MatchState, fallbackPlayerId: string): string |
 	return enterDiceCheck(state, 'shake_complete_no_reload')
 }
 
-function completeSetupIfReady(state: MatchState): string | undefined {
+function completeSetupIfReady(
+	state: MatchState,
+	completedPlayerId: string,
+): string | undefined {
 	if (state.pendingLoad) {
 		return undefined
+	}
+
+	const pending = nextSetupPending(state, completedPlayerId)
+	if (pending) {
+		return enterRevolverReload(state, pending)
 	}
 	return enterCupShake(state, 'reload_complete_setup')
 }
@@ -383,7 +392,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			player.cylinder = result.cylinder
 			updateBullets(player)
 			next.pendingLoad = consumePending(next.pendingLoad)
-			const transitionErr = completeSetupIfReady(next)
+			const transitionErr = completeSetupIfReady(next, action.actorPlayerId)
 			if (transitionErr) {
 				return domainError(transitionErr)
 			}
@@ -570,7 +579,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			} else if (next.pendingLoad) {
 				transitionErr = enterRevolverReload(next, next.pendingLoad)
 			} else if (pending.source === 'setup') {
-				transitionErr = completeSetupIfReady(next)
+				transitionErr = completeSetupIfReady(next, pending.playerId)
 			} else if (pending.source === 'shake') {
 				transitionErr = completeShakeLoadIfReady(next)
 			} else if (pending.source === 'duel') {

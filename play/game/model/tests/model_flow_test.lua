@@ -169,6 +169,52 @@ function M.test_start_setup_and_first_shake()
 	assert_eq(selectors.hud_kind(state), "bidding", "bidding hud")
 end
 
+function M.test_every_human_chooses_initial_chambers_in_seat_order()
+	local store = new_store()
+	start_match(store, {
+		sessionId = "session-human-setup",
+		matchId = "match-human-setup",
+		playerId = "human-1",
+		mode = "casual",
+		players = {
+			{ id = "human-1", participant_kind = "human", hp = 6, dice_count = 5 },
+			{ id = "human-2", participant_kind = "human", hp = 6, dice_count = 5 },
+			{
+				id = "bot-1",
+				participant_kind = "virtual",
+				virtual_opponent_id = "virtual-1",
+				hp = 6,
+				dice_count = 5,
+				initial_loaded_slots = { 1, 3, 5 },
+			},
+		},
+	})
+
+	local state = store:get_state()
+	assert_eq(state.pending_load.player_id, "human-1", "first human loads first")
+	for _, slot_index in ipairs({ 1, 3, 6 }) do
+		dispatch_ok(store, actions.setup_load_initial("human-1", slot_index))
+	end
+
+	state = store:get_state()
+	assert_eq(state.flow.phase, "revolver_reload", "second human keeps setup open")
+	assert_eq(state.turn.kind, "setup", "second human remains in setup")
+	assert_eq(state.pending_load.player_id, "human-2", "second human receives load control")
+	for _, slot_index in ipairs({ 2, 4, 5 }) do
+		dispatch_ok(store, actions.setup_load_initial("human-2", slot_index))
+	end
+
+	state = store:get_state()
+	assert_eq(state.flow.phase, "cup_shake", "all human setup enters shake")
+	assert_eq(state.players.by_id["human-1"].cylinder.slots[1].loaded, true, "first human slot one")
+	assert_eq(state.players.by_id["human-1"].cylinder.slots[2].loaded, false, "first human slot two empty")
+	assert_eq(state.players.by_id["human-1"].cylinder.slots[6].loaded, true, "first human slot six")
+	assert_eq(state.players.by_id["human-2"].cylinder.slots[2].loaded, true, "second human slot two")
+	assert_eq(state.players.by_id["human-2"].cylinder.slots[4].loaded, true, "second human slot four")
+	assert_eq(state.players.by_id["bot-1"].cylinder.slots[1].loaded, true, "bot remains preloaded")
+	assert_eq(state.players.by_id["bot-1"].cylinder.slots[2].loaded, false, "bot preload pattern remains")
+end
+
 function M.test_shake_timeout_completes_only_unfinished_players()
 	local store = new_store()
 	start_match(store, {

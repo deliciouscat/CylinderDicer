@@ -14,7 +14,7 @@ function M.test_locale_switch_accepts_only_bridge_supported_locales()
 	assert_eq(i18n.t("player.marker.previous"), "Previous turn", "english marker")
 	assert_eq(
 		i18n.t("hud.hint.bidding_skull"),
-		"Skull: judged as half the count (round down) · [Space] Pass · [C] Challenge",
+		"Skull: Pass fires your gun once (roulette) · duel at half count (round down) · [Space] · [C]",
 		"english skull bid hint"
 	)
 
@@ -22,13 +22,21 @@ function M.test_locale_switch_accepts_only_bridge_supported_locales()
 	assert_eq(i18n.t("action.pass"), "パス", "japanese text")
 	assert_eq(i18n.get_locale(), "ja", "japanese active")
 
+	assert_eq(i18n.set_locale("zh"), true, "chinese accepted")
+	assert_eq(i18n.t("action.pass"), "过牌", "chinese text")
+	assert_eq(
+		i18n.t("hud.hint.bidding_skull"),
+		"骷髅: 过牌前用自己的枪轮盘1次 · 决斗按数量一半(向下取整)判定 · [Space] 过牌 · [C] 申请决斗",
+		"chinese skull bid hint"
+	)
+
 	assert_eq(i18n.set_locale("../../invalid"), false, "invalid locale rejected")
-	assert_eq(i18n.get_locale(), "ja", "invalid locale preserves active locale")
+	assert_eq(i18n.get_locale(), "zh", "invalid locale preserves active locale")
 
 	i18n.set_locale("ko")
 	assert_eq(
 		i18n.t("hud.hint.bidding_skull"),
-		"Skull: 현재 수량의 절반(내림)으로 판정 · [Space] 넘기기 · [C] 결투신청",
+		"해골: 넘기기 전 내 총으로 룰렛 1회 · 결투 시 수량 절반(내림) 판정 · [Space] 넘기기 · [C] 결투신청",
 		"korean skull bid hint"
 	)
 end

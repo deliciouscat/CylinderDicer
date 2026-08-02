@@ -482,9 +482,6 @@ export async function createCustomMatchFromRoomParticipants(
 				: undefined)
 				?? participant.characterKey
 				?? DEFAULT_CHARACTER_KEY,
-			initialLoadedSlots: participant.userId && participant.userId !== hostUser._id
-				? [...GAME_RULESET.cylinder.initialLoadedSlots]
-				: undefined,
 		}
 	})
 

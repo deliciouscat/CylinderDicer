@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import en from './en.json'
 import ja from './ja.json'
 import ko from './ko.json'
+import zh from './zh.json'
 
 export type LocaleCode = keyof typeof messages
 type Messages = typeof en
@@ -13,6 +14,7 @@ const messages = {
   en,
   ko,
   ja,
+  zh,
 } as const
 
 const DEFAULT_LOCALE: LocaleCode = 'en'

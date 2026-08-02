@@ -243,6 +243,48 @@ test('OVER gives the previous bidder attack chances against the challenger', () 
 	assert.equal(state.players.byId['local-player'].hp, 3)
 })
 
+test('every human chooses initial chambers in seat order while virtual players stay preloaded', () => {
+	let state = createInitialMatchState({
+		matchId: 'sequential-human-setup-match',
+		mode: 'casual',
+		localPlayerId: 'human-1',
+		players: [
+			{ id: 'human-1', userId: 'user-1', participantKind: 'human', name: 'Human One' },
+			{ id: 'human-2', userId: 'user-2', participantKind: 'human', name: 'Human Two' },
+			{
+				id: 'bot-1',
+				virtualOpponentId: 'virtual-1',
+				participantKind: 'virtual',
+				name: 'Bot One',
+				initialLoadedSlots: [1, 3, 5],
+			},
+		],
+	})
+
+	assert.equal(state.pendingLoad.playerId, 'human-1')
+	assert.equal(deriveAvailableActions(state, 'human-1').some((item) => item.type === 'load'), true)
+	assert.equal(deriveAvailableActions(state, 'human-2').some((item) => item.type === 'load'), false)
+
+	for (const slotIndex of [1, 3, 6]) {
+		state = dispatch(state, 'setup.load_initial', 'human-1', { slotIndex })
+	}
+
+	assert.equal(state.flow.phase, 'revolver_reload')
+	assert.equal(state.turn.kind, 'setup')
+	assert.equal(state.pendingLoad.playerId, 'human-2')
+	assert.equal(deriveAvailableActions(state, 'human-1').some((item) => item.type === 'load'), false)
+	assert.equal(deriveAvailableActions(state, 'human-2').some((item) => item.type === 'load'), true)
+
+	for (const slotIndex of [2, 4, 5]) {
+		state = dispatch(state, 'setup.load_initial', 'human-2', { slotIndex })
+	}
+
+	assert.equal(state.flow.phase, 'cup_shake')
+	assert.deepEqual(state.players.byId['human-1'].cylinder.slots, [true, false, true, false, false, true])
+	assert.deepEqual(state.players.byId['human-2'].cylinder.slots, [false, true, false, true, true, false])
+	assert.deepEqual(state.players.byId['bot-1'].cylinder.slots, [true, false, true, false, true, false])
+})
+
 test('minimum playable Convex round reaches next round after duel', () => {
 	let state = createDevState()
 

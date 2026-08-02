@@ -193,6 +193,37 @@ local function pending_for_player(state, player_id, source, count)
 	}
 end
 
+local function next_setup_pending(state, after_player_id)
+	local order = state.players.order or {}
+	local start_index = 1
+	if after_player_id then
+		for index, player_id in ipairs(order) do
+			if player_id == after_player_id then
+				start_index = index + 1
+				break
+			end
+		end
+	end
+
+	local target_count = #(ruleset.INITIAL_LOADED_SLOTS or {})
+	for offset = 0, #order - 1 do
+		local index = ((start_index - 1 + offset) % #order) + 1
+		local player_id = order[index]
+		local player = state.players.by_id[player_id]
+		local is_virtual = player
+			and (player.participant_kind == "virtual" or player.virtual_opponent_id ~= nil)
+		if player and not is_virtual then
+			local remaining_count = math.max(0, target_count - cylinder.loaded_count(player.cylinder))
+			local pending = pending_for_player(state, player_id, "setup", remaining_count)
+			if pending then
+				return pending
+			end
+		end
+	end
+
+	return nil
+end
+
 local function enter_phase(next, phase, turn_kind)
 	turn_machine.enter_phase(next, phase, {
 		dice_check_delay_seconds = DICE_CHECK_DELAY_SECONDS,
@@ -395,8 +426,17 @@ function set_hint(next)
 	end
 end
 
-local function complete_setup_if_ready(next)
+local function complete_setup_if_ready(next, completed_player_id)
 	if next.pending_load then
+		return nil
+	end
+
+	local pending = next_setup_pending(next, completed_player_id)
+	if pending then
+		local ok, err = enter_revolver_reload(next, pending)
+		if not ok then
+			return err
+		end
 		return nil
 	end
 
@@ -475,6 +515,9 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 
 	for _, player in ipairs(payload.players or {}) do
 		local normalized = server_snapshot.normalize_player(player, local_player_id)
+		if normalized.participant_kind == nil then
+			normalized.participant_kind = normalized.id == local_player_id and "human" or "virtual"
+		end
 		next.players.order[#next.players.order + 1] = normalized.id
 		next.players.by_id[normalized.id] = normalized
 	end
@@ -483,6 +526,7 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 		local local_player = server_snapshot.normalize_player({
 			id = local_player_id,
 			name = "Player",
+			participant_kind = "human",
 		}, local_player_id)
 		next.players.order[1] = local_player.id
 		next.players.by_id[local_player.id] = local_player
@@ -491,7 +535,7 @@ handlers[actions.types.MATCH_INIT] = function(state, action)
 	next.turn.active_player_id = payload.first_player_id or payload.firstPlayerId or local_player_id or next.players.order[1]
 	next.pending_load = payload.pending_load
 	if next.pending_load == nil and payload.requires_setup_load ~= false then
-		next.pending_load = pending_for_player(next, local_player_id, "setup", 3)
+		next.pending_load = next_setup_pending(next)
 	end
 
 	if next.pending_load then
@@ -560,7 +604,7 @@ handlers[actions.types.SETUP_LOAD_INITIAL] = function(state, action)
 	update_bullets(player)
 	next.pending_load = cylinder.consume_pending(pending)
 
-	local transition_err = complete_setup_if_ready(next)
+	local transition_err = complete_setup_if_ready(next, player_id)
 	if transition_err then
 		return state, nil, transition_err
 	end
@@ -767,7 +811,7 @@ handlers[actions.types.BULLET_LOAD] = function(state, action)
 			enter_revolver_reload(next, next.pending_load)
 		end
 	elseif pending.source == "setup" then
-		local transition_err = complete_setup_if_ready(next)
+		local transition_err = complete_setup_if_ready(next, pending.player_id)
 		if transition_err then
 			return state, nil, transition_err
 		end

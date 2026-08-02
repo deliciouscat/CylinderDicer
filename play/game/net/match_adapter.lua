@@ -61,11 +61,19 @@ local function normalize_players(payload, local_player_id)
 
 		normalized[i].id = normalized[i].id or normalized[i].playerId or normalized[i].player_id
 		normalized[i].character_key = normalized[i].character_key or normalized[i].characterKey
+		normalized[i].participant_kind = normalized[i].participant_kind or normalized[i].participantKind
+		normalized[i].virtual_opponent_id = normalized[i].virtual_opponent_id or normalized[i].virtualOpponentId
+		if normalized[i].participant_kind == nil then
+			normalized[i].participant_kind = normalized[i].id == local_player_id and "human" or "virtual"
+		end
 		if not normalized[i].character_key then
 			normalized[i].character_key = normalized[i].skin or characters.legacy_seat_key(i - 1)
 		end
 		normalized[i].skin = normalized[i].skin or normalized[i].character_key
-		if normalized[i].id ~= local_player_id and not normalized[i].initial_loaded_slots and not normalized[i].cylinder then
+		if normalized[i].participant_kind == "virtual"
+			and not normalized[i].initial_loaded_slots
+			and not normalized[i].cylinder
+		then
 			normalized[i].initial_loaded_slots = { 1, 3, 5 }
 		end
 	end

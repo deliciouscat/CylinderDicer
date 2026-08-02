@@ -109,13 +109,15 @@
     "locales": {
       "en": "English",
       "ko": "한국어",
-      "ja": "日本語"
+      "ja": "日本語",
+      "zh": "中文"
     },
     "menu": {
       "ladder": "Ladder",
       "customGame": "Custom Game",
       "itemShop": "Item Shop",
-      "settings": "Settings"
+      "settings": "Settings",
+      "howToPlay": "How to Play"
     }
   },
   "settings": {
@@ -140,6 +142,48 @@
       "zippo-jay": "Zippo Jay",
       "calamity-kate": "Calamity Kate",
       "the-kid": "The Kid"
+    }
+  },
+  "howToPlay": {
+    "screenLabel": "How to Play",
+    "back": "Back",
+    "steps": {
+      "load": {
+        "title": "Load the cylinder",
+        "description": "At the beginning of a game, load three bullets into the chambers you choose.",
+        "hint": "Select an empty chamber",
+        "iconAlt": "Revolver cylinder"
+      },
+      "shake": {
+        "title": "Shake the cup",
+        "description": "Shake the cup, then check only your own dice. Everyone else's dice stay hidden.",
+        "hint": "Tap [Space] or use the mouse",
+        "iconAlt": "Dice cup"
+      },
+      "bid": {
+        "title": "Make a higher call",
+        "description": "Call a quantity or face higher than the last call. Passing reloads one bullet for you.",
+        "hint": "▲▼ or arrow keys · [Space] to confirm",
+        "iconAlt": "Bidding rail"
+      },
+      "duel": {
+        "title": "Challenge",
+        "description": "Challenge to reveal all dice and judge the last call.",
+        "hint": "[C] or the Challenge button",
+        "iconAlt": "Challenge button"
+      },
+      "resolve": {
+        "title": "Resolve and continue",
+        "description": "On SHORT, the challenger shoots; on OVER, the caller shoots. EXACT begins a special duel before the next round.",
+        "iconAlt": "Future result illustration"
+      }
+    },
+    "skull": {
+      "title": "Skull (Wildcard)",
+      "wildcard": "For a regular face call, Skulls count as every face.",
+      "call": "For a Skull call, judge against half the shown quantity, rounded down.",
+      "pass": "A Skull pass fires your own gun once before it is confirmed; dying cancels the call.",
+      "iconAlt": "Skull die"
     }
   },
   "music": {

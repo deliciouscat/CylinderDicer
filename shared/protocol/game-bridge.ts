@@ -37,7 +37,7 @@ export interface StartMatchPayload {
   localSimulator?: boolean
 }
 
-export type GameLocale = 'en' | 'ko' | 'ja'
+export type GameLocale = 'en' | 'ko' | 'ja' | 'zh'
 
 export interface SetLocalePayload {
   locale: GameLocale

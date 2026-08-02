@@ -15,6 +15,10 @@
     "settings": {
       "url": "/settings",
       "labelKey": "lobby.menu.settings"
+    },
+    "how-to-play": {
+      "url": "/how-to-play",
+      "labelKey": "lobby.menu.howToPlay"
     }
   }
 }

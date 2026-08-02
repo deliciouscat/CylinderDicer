@@ -1,0 +1,196 @@
+{
+  "customGame": {
+    "back": "返回",
+    "create": "创建",
+    "join": "加入",
+    "invite": "邀请",
+    "kick": "踢出",
+    "start": "开始",
+    "ready": "准备",
+    "unready": "取消准备",
+    "host": "房主",
+    "players": "人数",
+    "inviteCode": "邀请码：",
+    "roomCodePlaceholder": "输入房间码...",
+    "namePlaceholder": "输入名称...",
+    "screenLabel": "自定义对局",
+    "titleAlt": "CylinderDicer",
+    "roomCodeAria": "房间码",
+    "inviteNameAria": "邀请名称",
+    "inviteQueued": "邀请排队中：{name}",
+    "inviteCodeStatus": "邀请码：{code}",
+    "createQueued": "正在创建自定义对局房间...",
+    "createError": "无法创建自定义对局房间",
+    "startQueued": "开始已排队",
+    "loadingRoom": "正在加载自定义对局房间...",
+    "roomLoadError": "无法加载自定义对局房间",
+    "authTokenError": "无法获取 Convex 认证令牌",
+    "signInRequired": "请登录后加载自定义对局房间",
+    "customMatchCreated": "已创建自定义对局",
+    "startError": "无法开始自定义对局",
+    "selectOpponent": "此房间没有虚拟对手",
+    "virtualOpponents": "虚拟对手",
+    "refreshRoom": "刷新",
+    "bot": "机器人",
+    "addBot": "添加机器人",
+    "addBotPrompt": "添加机器人或邀请玩家",
+    "addBotQueued": "正在添加机器人...",
+    "botAdded": "已添加机器人",
+    "addBotError": "无法添加机器人",
+    "removeBot": "移除机器人",
+    "removeBotQueued": "正在移除机器人...",
+    "botRemoved": "已移除机器人",
+    "removeBotError": "无法移除机器人",
+    "notReady": "等待中",
+    "waitingForReady": "等待对手准备",
+    "allReady": "所有对手已准备",
+    "archetype": "倾向",
+    "localPlayer": "你",
+    "inviteCodeRequired": "请输入邀请码",
+    "joinQueued": "正在加入房间...",
+    "joinedRoom": "已加入自定义对局房间",
+    "joinError": "无法加入房间",
+    "leaveRoom": "离开",
+    "leftRoom": "已离开自定义对局房间",
+    "matchStarted": "对局已开始",
+    "waitingForGuests": "等待嘉宾准备"
+  },
+  "ladder": {
+    "screenLabel": "天梯匹配",
+    "back": "返回",
+    "selfStats": "你的天梯战绩",
+    "mmr": "MMR",
+    "mmrValue": "MMR {mmr}",
+    "recent20Empty": "近 0/20 场 · —",
+    "recent20AvgPlace": "近 20 场平均第 {place}",
+    "recentNAvgPlace": "近 {n}/20 场平均第 {place}",
+    "allTimeAvgPlace": "总平均第 {place}",
+    "rosterPlaces": "近况 {recent20} · 总榜 {allTime}",
+    "recentShort": "近况",
+    "allTimeShort": "总榜",
+    "searching": "匹配中…",
+    "matchFound": "匹配成功",
+    "rosterLabel": "按座位顺序的对局玩家",
+    "rollDice": "投掷等待骰子",
+    "rollHint": "点击或滑动投掷",
+    "dieFace": "骰子 {face} 面",
+    "chipCount": "等待筹码 {count} 枚",
+    "chipGained": "获得筹码。当前 {count} 枚。",
+    "skullOutcome": "骷髅。筹码减半为 {count} 枚。",
+    "cancel": "取消",
+    "cancelling": "取消中…",
+    "retry": "重试",
+    "ready": "Ready",
+    "countdown": "{seconds} 秒后进入",
+    "you": "你",
+    "characterAlt": "{name} 角色立绘",
+    "authNotReady": "正在准备认证…",
+    "signInRequired": "请登录后进入天梯队列。",
+    "queueEnterError": "无法进入天梯队列。请重试。",
+    "queueSubscriptionError": "队列状态连接中断。请重试。",
+    "leaveError": "无法离开队列。请再次取消。",
+    "staleMatch": "匹配的对局已不可用。请重试。",
+    "handoffError": "无法打开对局。请再次按 Ready。",
+    "fixtureDisabled": "此部署已禁用天梯开发 fixture。",
+    "phase": {
+      "searching": "搜索中",
+      "roster": "玩家",
+      "handing_off": "进入对局"
+    }
+  },
+  "lobby": {
+    "screenLabel": "CylinderDicer 大厅",
+    "titleAlt": "CylinderDicer",
+    "mainMenuLabel": "主菜单",
+    "signIn": "登录",
+    "signUp": "注册",
+    "localeLabel": "选择语言",
+    "shopComingSoon": "即将推出。",
+    "locales": {
+      "en": "English",
+      "ko": "한국어",
+      "ja": "日本語",
+      "zh": "中文"
+    },
+    "menu": {
+      "ladder": "天梯",
+      "customGame": "自定义对局",
+      "itemShop": "道具商店",
+      "settings": "设置",
+      "howToPlay": "玩法说明"
+    }
+  },
+  "settings": {
+    "screenLabel": "角色设置",
+    "back": "返回",
+    "title": "选择角色",
+    "previous": "上一个角色",
+    "next": "下一个角色",
+    "characterAlt": "{name} 角色立绘",
+    "loading": "正在加载角色设置…",
+    "ready": "所选角色将在新对局中生效。",
+    "saving": "正在保存角色…",
+    "saved": "角色已保存。",
+    "saveError": "无法保存该角色。",
+    "loadError": "无法加载角色设置。",
+    "signInRequired": "请登录后保存角色选择。",
+    "retry": "重试",
+    "characters": {
+      "rosemund": "Rosmund",
+      "hush-feather": "Hush Feather",
+      "samuel-saber": "Samuel Saber",
+      "zippo-jay": "Zippo Jay",
+      "calamity-kate": "Calamity Kate",
+      "the-kid": "The Kid"
+    }
+  },
+  "howToPlay": {
+    "screenLabel": "玩法说明",
+    "back": "返回",
+    "steps": {
+      "load": {
+        "title": "装填子弹",
+        "description": "游戏开始时，将三发子弹装入你选择的弹膛。",
+        "hint": "选择空弹膛",
+        "iconAlt": "左轮手枪转轮"
+      },
+      "shake": {
+        "title": "摇晃骰盅",
+        "description": "摇晃骰盅后，只能查看自己的骰子。其他玩家的点数保持隐藏。",
+        "hint": "连按 [Space] 或使用鼠标",
+        "iconAlt": "骰盅"
+      },
+      "bid": {
+        "title": "喊出更高的点数",
+        "description": "喊出比上一次更高的数量或点数。过牌后只有你会装填一发子弹。",
+        "hint": "▲▼ 或方向键 · [Space] 确认",
+        "iconAlt": "叫注轨道"
+      },
+      "duel": {
+        "title": "发起决斗",
+        "description": "发起决斗会公开所有骰子，并判定最后一次叫注。",
+        "hint": "[C] 或决斗按钮",
+        "iconAlt": "决斗申请按钮"
+      },
+      "resolve": {
+        "title": "判定与下一轮",
+        "description": "不足时挑战者开枪，超出时叫注者开枪。准确则进行特殊决斗后进入下一轮。",
+        "iconAlt": "待补充的结果说明图片"
+      }
+    },
+    "skull": {
+      "title": "Skull (Wildcard)",
+      "wildcard": "喊普通点数时，Skull会被计为所有点数。",
+      "call": "喊Skull时，按显示数量的一半（奇数向下取整）进行判定。",
+      "pass": "Skull 过牌会在确认前对自己开一枪，死亡则叫注无效。",
+      "iconAlt": "Skull 骰子"
+    }
+  },
+  "music": {
+    "turnOn": "打开音乐",
+    "turnOff": "关闭音乐"
+  },
+  "playWrapper": {
+    "canvasTitle": "CylinderDicer 游戏画布"
+  }
+}

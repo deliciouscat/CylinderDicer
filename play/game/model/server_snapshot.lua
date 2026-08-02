@@ -22,6 +22,7 @@ local KEY_MAP = {
 	matchId = "match_id",
 	needsChoice = "needs_choice",
 	pendingLoad = "pending_load",
+	participantKind = "participant_kind",
 	playerId = "player_id",
 	portraitState = "portrait_state",
 	previousBidderId = "previous_bidder_id",
@@ -41,6 +42,7 @@ local KEY_MAP = {
 	targetChoice = "target_choice",
 	targetId = "target_id",
 	turnCount = "turn_count",
+	virtualOpponentId = "virtual_opponent_id",
 	viewerPlayerId = "viewer_player_id",
 	winnerId = "winner_id",
 	playerCount = "player_count",
@@ -133,6 +135,8 @@ end
 function M.normalize_player(player, local_player_id)
 	local next = clone(player)
 	next.id = next.id or next.player_id
+	next.participant_kind = next.participant_kind or next.participantKind
+	next.virtual_opponent_id = next.virtual_opponent_id or next.virtualOpponentId
 	next.name = next.name or next.id
 	next.hp = next.hp or ruleset.INITIAL_HP
 	next.dice_count = next.dice_count or ruleset.DICE_PER_PLAYER

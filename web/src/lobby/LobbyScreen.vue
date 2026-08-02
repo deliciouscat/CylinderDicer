@@ -26,6 +26,7 @@ const localeOptions = computed<DropdownOption[]>(() => [
   { label: t('lobby.locales.en'), value: 'en' },
   { label: t('lobby.locales.ko'), value: 'ko' },
   { label: t('lobby.locales.ja'), value: 'ja' },
+  { label: t('lobby.locales.zh'), value: 'zh' },
 ])
 
 const selectedLocale = computed({

@@ -62,7 +62,7 @@ play/
    │  ├─ bgm/                   # 배경음악 (맵 테마 연동 가능)
    │  └─ voice/<charId>/      # 캐릭터 음성(도발/피격/승리 등). 비언어 위주 + 약간의 영어.
    │                          #   (로케일별 더빙 분리는 추후 voice/<charId>/<locale>/ 로 확장)
-   └─ locale/                   # ko.json / en.json / ja.json
+   └─ locale/                   # ko.json / en.json / ja.json / zh.json
 ```
 
 ## 네이밍 규칙

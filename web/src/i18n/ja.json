@@ -109,13 +109,15 @@
     "locales": {
       "en": "English",
       "ko": "한국어",
-      "ja": "日本語"
+      "ja": "日本語",
+      "zh": "中文"
     },
     "menu": {
       "ladder": "ラダー",
       "customGame": "カスタムゲーム",
       "itemShop": "アイテムショップ",
-      "settings": "設定"
+      "settings": "設定",
+      "howToPlay": "遊び方"
     }
   },
   "settings": {
@@ -140,6 +142,48 @@
       "zippo-jay": "Zippo Jay",
       "calamity-kate": "Calamity Kate",
       "the-kid": "The Kid"
+    }
+  },
+  "howToPlay": {
+    "screenLabel": "遊び方",
+    "back": "戻る",
+    "steps": {
+      "load": {
+        "title": "弾を装填",
+        "description": "ゲーム開始時、好きな薬室に弾を3発装填します。",
+        "hint": "空の薬室を選択",
+        "iconAlt": "リボルバーのシリンダー"
+      },
+      "shake": {
+        "title": "カップを振る",
+        "description": "カップを振った後、自分のダイスだけを確認します。他のプレイヤーの目は非公開です。",
+        "hint": "[Space]連打 または マウス",
+        "iconAlt": "ダイスカップ"
+      },
+      "bid": {
+        "title": "より高いコール",
+        "description": "直前のコールより高い数量または目を宣言します。パスすると自分だけ1発装填します。",
+        "hint": "▲▼ または矢印キー · [Space]で決定",
+        "iconAlt": "ビッドレール"
+      },
+      "duel": {
+        "title": "決闘を申し込む",
+        "description": "決闘を申し込むと全ダイスが公開され、最後のコールを判定します。",
+        "hint": "[C] または決闘ボタン",
+        "iconAlt": "決闘申請ボタン"
+      },
+      "resolve": {
+        "title": "判定と次のラウンド",
+        "description": "不足なら挑戦者、超過ならコールした人が発射します。正確なら特別決闘の後に次のラウンドへ進みます。",
+        "iconAlt": "今後追加される結果案内画像"
+      }
+    },
+    "skull": {
+      "title": "Skull (Wildcard)",
+      "wildcard": "通常の目をコールした場合、Skullはすべての目として数えます。",
+      "call": "Skullコールは表示数量の半分（奇数切り捨て）で判定します。",
+      "pass": "Skullでパスする場合は、確定前に自分の銃を1回撃ち、死亡するとコールは無効です。",
+      "iconAlt": "Skullダイス"
     }
   },
   "music": {

@@ -454,9 +454,6 @@ async function matchWaitingRoster(ctx: GenericCtx, now: number) {
 			name: user.displayName ?? `Player ${seatIndex + 1}`,
 			characterKey: user.characterKey ?? DEFAULT_CHARACTER_KEY,
 			startingMmr: candidate.mmr,
-			initialLoadedSlots: seatIndex === 0
-				? undefined
-				: [...GAME_RULESET.cylinder.initialLoadedSlots],
 		})
 	}
 
