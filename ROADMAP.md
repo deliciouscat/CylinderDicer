@@ -6,6 +6,15 @@ Opponent Controller 사용 절차는 [shared/docs/OPPONENT_CONTROLLER.md](shared
 
 ---
 
+진행 상태 (2026-08-06, authoritative turn/reload state-machine refactor):
+
+- authoritative match state를 `stateVersion: 2`로 올리고 경기 lifecycle인 `flow.phase`와 입찰 중 병렬 장전 축인 `reload.pending/deferred/gate`를 분리했다. 다음 행동자 `turn.activePlayerId`와 장전 의무자는 서로 독립적이므로, 이전 입찰자가 장전 중이어도 다음 입찰자는 기존 규칙대로 행동할 수 있다.
+- `turn.kind`는 저장 상태에서 제거하고 `phase + reload`로 파생한다. Convex capability/HUD projection과 Defold compatibility state가 같은 파생 규칙을 사용해 독립적으로 수정되던 이중 진실을 없앴다.
+- 기존 `pendingLoad`, `bidding.deferredLoad`, `bidding.reloadGate`, stored `turn.kind`를 읽는 v1 매치는 조회 시 v2로 정규화되고 다음 승인 command write에서 v2로 저장된다. `matchStates.state`의 기존 widen-only 저장 계약을 유지해 schema backfill이나 전면 scan은 하지 않는다.
+- Vue/Defold 공개 snapshot의 `pendingLoad`와 `bidding.reloadGate` 형식은 호환을 위해 유지한다. scheduler의 `phase + epoch + revision` guard와 viewer별 reload/bidding/loading HUD projection도 그대로 유지한다.
+- Convex와 Defold에 각각 reload machine을 두고 동일한 bid reload pipeline, deferred promotion, gate reset, derived turn-kind 계약을 테스트했다.
+- 검증: Convex domain 43, Defold Lua 67, `npm run phase0:test`, fresh release HTML5 bundle/sync, fresh-bundle Vue production build, `phase4:deploy`, `phase4:check` 통과. 개발 Convex 배포는 `https://rugged-elephant-149.convex.cloud`이며 운영 배포는 수행하지 않았다.
+
 진행 상태 (2026-07-28, local player character settings):
 
 - Lobby의 Settings 메뉴가 실제 `/settings` 화면으로 연결된다. Rosmund, Hush Feather, Samuel Saber, Zippo Jay, Calamity Kate, The Kid의 기존 web asset bundle을 사용하는 가로 carousel을 추가했다. 원본 종횡비와 무관하게 portrait 높이를 같은 기준으로 정규화하고, 선택 항목만 확대·완전 불투명하게 표시한다.

@@ -41,6 +41,8 @@ export type ParticipantControlMode = 'human' | 'qa_manual' | 'server_bot'
 export type TurnKind = 'setup' | 'shaking' | 'bidding' | 'dualing' | 'complete'
 export type PendingLoadSource = 'setup' | 'shake' | 'bid' | 'duel' | 'exact_duel'
 
+export const CURRENT_MATCH_STATE_VERSION = 2
+
 export interface CylinderState {
 	chamberIndex: number
 	slots: boolean[]
@@ -71,7 +73,6 @@ export interface BidState {
 }
 
 export interface TurnState {
-	kind: TurnKind
 	activePlayerId?: string
 	previousPlayerId?: string
 	roundIndex: number
@@ -82,11 +83,6 @@ export interface BiddingState {
 	currentBid?: BidState
 	recentBids: BidState[]
 	skullRoulette?: SkullRouletteState
-	deferredLoad?: PendingLoadState
-	reloadGate?: {
-		countdownSeconds: number
-		epoch: number
-	}
 	myBid: {
 		count: number
 		face: number
@@ -127,6 +123,22 @@ export interface PendingLoadState {
 	playerId: string
 	count: number
 	source: PendingLoadSource
+}
+
+export interface ReloadGateState {
+	countdownSeconds: number
+	epoch: number
+}
+
+/**
+ * Orthogonal reload lane. `pending` is intentionally independent from
+ * `turn.activePlayerId`: during bidding the previous bidder may reload while
+ * the next bidder still owns the decision turn.
+ */
+export interface ReloadState {
+	pending?: PendingLoadState
+	deferred?: PendingLoadState
+	gate?: ReloadGateState
 }
 
 export interface DuelJudgeState {
@@ -211,6 +223,7 @@ export interface MatchResultState {
 }
 
 export interface MatchState {
+	stateVersion: number
 	match: MatchMetaState
 	matchId: string
 	mode: MatchMode
@@ -226,7 +239,7 @@ export interface MatchState {
 	flow: FlowState
 	shake: ShakeState
 	duel?: DuelState
-	pendingLoad?: PendingLoadState
+	reload: ReloadState
 	ui: {
 		locale: string
 		hintKey: string
@@ -322,6 +335,7 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 
 	const activePlayerId = input.firstPlayerId ?? localPlayerId ?? order[0]
 	const state: MatchState = {
+		stateVersion: CURRENT_MATCH_STATE_VERSION,
 		match: {
 			sessionId: input.sessionId,
 			matchId: input.matchId,
@@ -341,7 +355,6 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 		},
 		eliminationOrder: [],
 		turn: {
-			kind: 'setup',
 			activePlayerId,
 			roundIndex: 0,
 			isFirstShake: true,
@@ -368,6 +381,7 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 			counts: {},
 			checked: {},
 		},
+		reload: {},
 		ui: {
 			locale: input.locale ?? 'ko',
 			hintKey: 'hud.hint.waiting',
@@ -378,17 +392,14 @@ export function createInitialMatchState(input: CreateInitialStateInput): MatchSt
 	if (input.requiresSetupLoad !== false) {
 		const pending = nextSetupPending(state)
 		if (pending) {
-			state.pendingLoad = pending
+			state.reload.pending = pending
 			state.flow.phase = 'revolver_reload'
-			state.turn.kind = 'setup'
 		} else {
 			state.flow.phase = 'cup_shake'
-			state.turn.kind = 'shaking'
 			resetShake(state)
 		}
 	} else {
 		state.flow.phase = 'cup_shake'
-		state.turn.kind = 'shaking'
 		resetShake(state)
 	}
 
@@ -494,17 +505,17 @@ export function resetMyBid(state: MatchState): void {
 export function setHint(state: MatchState): void {
 	if (state.match.status === 'complete') {
 		state.ui.hintKey = 'hud.hint.complete'
-	} else if (state.pendingLoad) {
+	} else if (state.reload.pending) {
 		state.ui.hintKey = 'hud.hint.load'
 	} else if (state.flow.phase === 'dice_check') {
 		state.ui.hintKey = 'hud.hint.dice_check'
 	} else if (state.flow.phase === 'bidding_gap') {
 		state.ui.hintKey = 'hud.hint.bidding_soon'
-	} else if (state.turn.kind === 'bidding') {
+	} else if (state.flow.phase === 'bidding') {
 		state.ui.hintKey = 'hud.hint.bidding'
-	} else if (state.turn.kind === 'shaking') {
+	} else if (state.flow.phase === 'cup_shake') {
 		state.ui.hintKey = 'hud.hint.shaking'
-	} else if (state.turn.kind === 'dualing') {
+	} else if (state.flow.phase === 'duel') {
 		state.ui.hintKey = 'hud.hint.duel'
 	} else {
 		state.ui.hintKey = 'hud.hint.waiting'

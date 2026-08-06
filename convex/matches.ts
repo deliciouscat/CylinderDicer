@@ -45,6 +45,7 @@ import {
 	type MatchMode,
 	type MatchState,
 } from './match/state'
+import { normalizeMatchState } from './match/stateCompatibility'
 import { buildPrivateDelta, buildPublicSnapshot } from './match/snapshots'
 import {
 	requireCurrentUser,
@@ -128,13 +129,14 @@ async function upsertPublicSnapshot(ctx: GenericCtx, state: MatchState, now: num
 }
 
 export async function writeStateAndPublicView(ctx: GenericCtx, state: MatchState) {
+	const currentState = normalizeMatchState(state)
 	const now = Date.now()
-	await upsertByMatch(ctx, 'matchStates', state.matchId, {
-		revision: state.revision,
-		state,
+	await upsertByMatch(ctx, 'matchStates', currentState.matchId, {
+		revision: currentState.revision,
+		state: currentState,
 		updatedAt: now,
 	})
-	await upsertPublicSnapshot(ctx, state, now)
+	await upsertPublicSnapshot(ctx, currentState, now)
 }
 
 export async function getLatestMatchState(
@@ -145,7 +147,7 @@ export async function getLatestMatchState(
 		.query('matchStates')
 		.withIndex('by_match', (q: any) => q.eq('matchId', matchId))
 		.first()
-	return (row?.state as MatchState | undefined) ?? null
+	return row?.state ? normalizeMatchState(row.state) : null
 }
 
 export async function getMatchParticipant(ctx: GenericCtx, matchId: string, userId: string) {

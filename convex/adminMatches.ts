@@ -176,10 +176,9 @@ async function completeLatestMatchState(ctx: GenericCtx, state: MatchState, now:
 		},
 		turn: {
 			...state.turn,
-			kind: 'complete',
 			activePlayerId: undefined,
 		},
-		pendingLoad: undefined,
+		reload: {},
 		ui: {
 			...state.ui,
 			hintKey: 'hud.hint.complete',
@@ -196,8 +195,7 @@ async function completeLatestMatchState(ctx: GenericCtx, state: MatchState, now:
 
 function isTerminalMatchState(state: MatchState) {
 	return state.match.status === 'complete' &&
-		state.flow.phase === 'complete' &&
-		state.turn.kind === 'complete'
+		state.flow.phase === 'complete'
 }
 
 async function completeAndDismissReadyDevMatch(ctx: GenericCtx, match: any, now: number) {

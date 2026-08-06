@@ -28,6 +28,7 @@ import type { MatchPrivateDelta, MatchPublicSnapshot } from '../protocol/snapsho
 import { type MatchState, type PlayerState } from './state'
 import { deriveAvailableActions } from './capabilities'
 import { suggestedBid } from './rulesBidding'
+import { activeLoad } from './reloadMachine'
 import {
 	isCharacterKey,
 	legacySeatCharacterKey,
@@ -86,27 +87,29 @@ function publicDuelPlayers(state: MatchState) {
 }
 
 export function hudKind(state: MatchState, viewerPlayerId?: string): string {
+	const pending = activeLoad(state)
 	if (
 		state.flow.phase === 'bidding' &&
-		state.pendingLoad?.source === 'bid'
+		pending?.source === 'bid'
 	) {
-		if (viewerPlayerId && state.pendingLoad.playerId === viewerPlayerId) {
+		if (viewerPlayerId && pending.playerId === viewerPlayerId) {
 			return 'revolver_reload'
 		}
-		return state.bidding.reloadGate ? 'loading' : 'bidding'
+		return state.reload.gate ? 'loading' : 'bidding'
 	}
 	if (
 		state.flow.phase === 'revolver_reload' &&
-		state.pendingLoad &&
+		pending &&
 		viewerPlayerId &&
-		state.pendingLoad.playerId !== viewerPlayerId
+		pending.playerId !== viewerPlayerId
 	) {
 		return 'loading'
 	}
-	return HUD_BY_PHASE[state.flow.phase] ?? state.turn.kind
+	return HUD_BY_PHASE[state.flow.phase] ?? 'waiting'
 }
 
 export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
+	const pending = activeLoad(state)
 	return {
 		kind: 'public',
 		matchId: state.matchId,
@@ -150,13 +153,13 @@ export function buildPublicSnapshot(state: MatchState): MatchPublicSnapshot {
 			currentBid: state.bidding.currentBid,
 			suggestedBid: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
 			skullRoulette: state.bidding.skullRoulette,
-			reloadGate: state.bidding.reloadGate,
+			reloadGate: state.reload.gate,
 		},
-		pendingLoad: state.pendingLoad
+		pendingLoad: pending
 			? {
-					playerId: state.pendingLoad.playerId,
-					source: state.pendingLoad.source,
-					count: state.pendingLoad.count,
+					playerId: pending.playerId,
+					source: pending.source,
+					count: pending.count,
 				}
 			: undefined,
 		shake: state.shake,

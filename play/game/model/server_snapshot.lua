@@ -1,5 +1,6 @@
 local cylinder = require("game.model.rules.cylinder")
 local ruleset = require("game.ruleset")
+local turn_machine = require("game.model.turn_machine")
 
 local M = {}
 
@@ -49,15 +50,6 @@ local KEY_MAP = {
 	mmrBefore = "mmr_before",
 	mmrAfter = "mmr_after",
 	mmrDelta = "mmr_delta",
-}
-
-local PHASE_TURN_KIND = {
-	bidding = "bidding",
-	complete = "complete",
-	cup_shake = "shaking",
-	dice_check = "shaking",
-	bidding_gap = "shaking",
-	duel = "dualing",
 }
 
 local function clone(value)
@@ -117,19 +109,6 @@ local function normalize_server_cylinder(raw)
 		chamber_index = raw.chamber_index or raw.chamberIndex or 1,
 		slots = slots,
 	}
-end
-
-local function turn_kind(phase, pending)
-	if phase == "revolver_reload" then
-		if pending and pending.source == "bid" then
-			return "bidding"
-		end
-		if pending and pending.source == "setup" then
-			return "setup"
-		end
-		return "shaking"
-	end
-	return PHASE_TURN_KIND[phase] or phase
 end
 
 function M.normalize_player(player, local_player_id)
@@ -209,7 +188,7 @@ function M.apply(state, payload)
 	if turn.is_first_shake ~= nil then
 		next.turn.is_first_shake = turn.is_first_shake == true
 	end
-	next.turn.kind = turn.kind or turn_kind(next.flow.phase, next.pending_load)
+	turn_machine.sync_kind(next)
 
 	if public.players then
 		next.players.order = {}

@@ -1,6 +1,7 @@
 import type { AutomaticMatchCommandType } from '../protocol/commands'
 import type { MatchState } from './state'
 import { GAME_RULESET } from '../../shared/game/ruleset'
+import { activeLoad } from './reloadMachine'
 
 export const BIDDING_OPEN_DELAY_MS = GAME_RULESET.timingsMs.biddingOpen
 export const SHAKE_TIMEOUT_MS = GAME_RULESET.timingsMs.shakeTimeout
@@ -70,8 +71,8 @@ export function automaticTransitionFor(state: MatchState): AutomaticTransition |
 		delayMs = BIDDING_OPEN_DELAY_MS
 	} else if (
 		state.flow.phase === 'bidding' &&
-		state.pendingLoad?.source === 'bid' &&
-		state.bidding.reloadGate
+		activeLoad(state)?.source === 'bid' &&
+		state.reload.gate
 	) {
 		type = 'bid.reload_timeout'
 		delayMs = BID_RELOAD_TIMEOUT_MS

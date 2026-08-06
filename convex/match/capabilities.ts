@@ -2,6 +2,7 @@ import type { AvailableAction } from '../protocol/snapshots'
 import { suggestedBid } from './rulesBidding'
 import type { MatchState, PlayerState } from './state'
 import { GAME_RULESET } from '../../shared/game/ruleset'
+import { activeLoad } from './reloadMachine'
 
 function emptySlots(player: PlayerState | undefined): number[] {
 	if (!player) {
@@ -27,7 +28,7 @@ function shakeStatus(state: MatchState, playerId: string) {
 }
 
 export function deriveAvailableActions(state: MatchState, playerId: string): AvailableAction[] {
-	const pending = state.pendingLoad
+	const pending = activeLoad(state)
 	if (pending?.playerId === playerId) {
 		return [
 			{
@@ -62,7 +63,7 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 	}
 
 	if (state.flow.phase === 'bidding' && playerId === state.turn.activePlayerId) {
-		if (state.bidding.reloadGate) {
+		if (state.reload.gate) {
 			return []
 		}
 		const actions: AvailableAction[] = [{
@@ -73,7 +74,7 @@ export function deriveAvailableActions(state: MatchState, playerId: string): Ava
 			max_face: GAME_RULESET.dice.faceMax,
 			suggested: suggestedBid(state.bidding.currentBid, state.bidding.myBid),
 		}]
-		if (!state.pendingLoad && state.bidding.currentBid) {
+		if (!activeLoad(state) && state.bidding.currentBid) {
 			actions.push({ type: 'challenge' })
 		}
 		return actions

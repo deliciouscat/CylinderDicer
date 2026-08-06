@@ -10,7 +10,6 @@ local PHASE_TRANSITIONS = {
 		reload_complete_setup = "cup_shake",
 		reload_complete_shake = "dice_check",
 		reload_complete_duel = "cup_shake",
-		reload_complete_bid = "bidding",
 		reload_complete_exact_duel = "cup_shake",
 	},
 	cup_shake = {
@@ -25,8 +24,6 @@ local PHASE_TRANSITIONS = {
 		open_bidding = "bidding",
 	},
 	bidding = {
-		bid_reload = "revolver_reload",
-		bid_no_reload = "bidding",
 		challenge = "duel",
 	},
 	duel = {
@@ -108,6 +105,26 @@ function M.kind_for_phase(next_phase)
 	return kind_for_phase(next_phase)
 end
 
+function M.derive_kind(state)
+	local current_phase = phase(state)
+	if current_phase == "revolver_reload" then
+		local source = state.pending_load and state.pending_load.source
+		if source == "bid" then
+			return "bidding"
+		end
+		if source == "shake" or source == "duel" or source == "exact_duel" then
+			return "shaking"
+		end
+	end
+	return kind_for_phase(current_phase)
+end
+
+function M.sync_kind(state)
+	state.turn = state.turn or {}
+	state.turn.kind = M.derive_kind(state) or state.turn.kind
+	return state.turn.kind
+end
+
 function M.enter_phase(state, next_phase, options)
 	options = options or {}
 	state.flow = state.flow or {}
@@ -115,7 +132,7 @@ function M.enter_phase(state, next_phase, options)
 	if options.dice_check_delay_seconds then
 		state.flow.dice_check_delay_seconds = options.dice_check_delay_seconds
 	end
-	state.turn.kind = options.turn_kind or kind_for_phase(next_phase) or state.turn.kind
+	M.sync_kind(state)
 	return state
 end
 

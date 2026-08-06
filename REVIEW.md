@@ -131,6 +131,23 @@
 
 - `adminMatches.ts`의 lifecycle/purge와 `OpponentControllerScreen.vue`의 room/match/Ladder panel 분리는 현재 correctness 변경과 섞지 않고 별도 change set으로 진행한다.
 
+### Wave I — hierarchical lifecycle and parallel reload state
+
+상태: 완료 (2026-08-06).
+
+- 저장된 `turn.kind`를 제거하고 `flow.phase + reload lane`에서 파생한다.
+- 큰 경기 흐름은 `flow.phase`, 입찰과 동시에 진행되는 장전은 `reload.pending/deferred/gate`, 행동 순서는 `turn.activePlayerId`로 분리한다.
+- legacy state는 lazy dual-read normalization 후 다음 승인 write에서 v2로 저장한다. 전체 `matchStates` scan/backfill은 하지 않는다.
+- public snapshot의 기존 reload DTO는 유지해 Vue/Defold bridge migration을 이번 구조 변경과 분리한다.
+- TypeScript/Lua reload-machine characterization test가 병렬 입찰, deferred promotion, gate, derived HUD turn을 고정한다.
+
+완료 gate:
+
+- v1 → v2 normalization 및 legacy field 제거 test
+- Convex domain/Lua parity test
+- `phase0:test`, release HTML5 bundle/sync, web production build
+- `phase4:deploy && phase4:check`
+
 ## 5. 실행 순서
 
 1. Wave A command validator
@@ -141,6 +158,7 @@
 6. Wave F ruleset/protocol contracts
 7. Wave G bot registry
 8. Wave H orchestration split
+9. Wave I hierarchical lifecycle / parallel reload state
 
 Wave A–E는 correctness/security 작업이다. Wave F–H는 중복과 모듈 크기를 줄이는 작업이므로 앞 단계 gate가 안정된 뒤 시작한다.
 
@@ -153,4 +171,5 @@ Wave A–E는 correctness/security 작업이다. Wave F–H는 중복과 모듈 
 - Vue/iframe bridge는 expected window/origin과 `{matchId, revision, generation}`을 검증하며 stale snapshot/ack와 중복 in-flight command를 버린다.
 - TS/Lua가 versioned ruleset golden fixture로 player/dice/cylinder/rail/timing 상수 parity를 검증한다.
 - gameplay/QA bot identity는 단일 catalog를 사용하고 stored strategy key/version을 registry lookup에 실제 사용한다.
+- authoritative match state v2는 lifecycle, decision order, reload work를 직교 축으로 분리하고 legacy match를 lazy normalization한다.
 - 검증: `phase0:test`, `phase4:deploy`, `phase4:check`, release HTML5 bundle/sync, `git diff --check` 통과.

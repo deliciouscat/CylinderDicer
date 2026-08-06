@@ -74,7 +74,7 @@ test('malformed slot cannot consume pending load or mutate a chamber', () => {
 		],
 	})
 	const beforeSlots = [...state.players.byId['local-player'].cylinder.slots]
-	const beforePending = state.pendingLoad.count
+	const beforePending = state.reload.pending.count
 	const result = reduceMatchState(
 		state,
 		action('setup.load_initial', { slotIndex: Number.NaN }),
@@ -83,7 +83,7 @@ test('malformed slot cannot consume pending load or mutate a chamber', () => {
 	assert.equal(result.ok, false)
 	assert.equal(result.error.code, 'INVALID_PAYLOAD')
 	assert.deepEqual(state.players.byId['local-player'].cylinder.slots, beforeSlots)
-	assert.equal(state.pendingLoad.count, beforePending)
+	assert.equal(state.reload.pending.count, beforePending)
 })
 
 test('cylinder rule independently rejects non-finite and fractional indexes', () => {

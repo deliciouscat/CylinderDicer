@@ -33,7 +33,6 @@
  */
 import type { MatchAction } from './actions'
 import {
-	BID_RELOAD_COUNTDOWN_SECONDS,
 	aliveCount,
 	cloneState,
 	DICE_CHECK_DELAY_SECONDS,
@@ -51,7 +50,7 @@ import {
 	type PendingLoadState,
 } from './state'
 import type { CommandError } from '../protocol/errors'
-import { consumePending, spinCylinder, triggerCylinder, tryLoadBullet } from './rulesCylinder'
+import { spinCylinder, triggerCylinder, tryLoadBullet } from './rulesCylinder'
 import { rollDiceWithSeed, nextSeedInt } from './rulesDice'
 import { DEFAULT_BID_LIMITS, validateBidRaise } from './rulesBidding'
 import {
@@ -60,7 +59,16 @@ import {
 	resolveDuel,
 	spinDuelRevolver,
 } from './rulesDuel'
-import { kindForPhase, nextAliveAfter, transitionPhase } from './turnMachine'
+import { nextAliveAfter, transitionPhase } from './turnMachine'
+import {
+	activeLoad,
+	beginLoad,
+	clearActiveLoad,
+	consumeActiveLoad,
+	promoteDeferredBidLoad,
+	queueBidLoad,
+	resetBidReload,
+} from './reloadMachine'
 import {
 	finalizeMatchResult,
 	recordElimination,
@@ -146,7 +154,6 @@ function enterPhase(state: MatchState, phase: MatchState['flow']['phase']): void
 	state.flow.phase = phase
 	state.flow.diceCheckDelaySeconds = DICE_CHECK_DELAY_SECONDS
 	state.flow.epoch = (state.flow.epoch ?? 0) + 1
-	state.turn.kind = kindForPhase(phase)
 }
 
 function applyTransition(state: MatchState, eventName: string): string | undefined {
@@ -163,7 +170,7 @@ function enterRevolverReload(
 	pending: PendingLoadState,
 	eventName?: string,
 ): string | undefined {
-	state.pendingLoad = pending
+	beginLoad(state, pending)
 	if (eventName) {
 		const err = applyTransition(state, eventName)
 		if (err) {
@@ -171,12 +178,6 @@ function enterRevolverReload(
 		}
 	} else {
 		enterPhase(state, 'revolver_reload')
-	}
-
-	if (pending.source === 'bid') {
-		state.turn.kind = 'bidding'
-	} else if (pending.source === 'shake' || pending.source === 'duel' || pending.source === 'exact_duel') {
-		state.turn.kind = 'shaking'
 	}
 
 	return undefined
@@ -187,7 +188,7 @@ function enterCupShake(
 	eventName?: string,
 	options: { reloadPlayerId?: string; reloadSource?: PendingLoadState['source'] } = {},
 ): string | undefined {
-	state.pendingLoad = undefined
+	clearActiveLoad(state)
 	if (eventName) {
 		const err = applyTransition(state, eventName)
 		if (err) {
@@ -201,7 +202,7 @@ function enterCupShake(
 }
 
 function enterDiceCheck(state: MatchState, eventName?: string): string | undefined {
-	state.pendingLoad = undefined
+	clearActiveLoad(state)
 	if (eventName) {
 		const err = applyTransition(state, eventName)
 		if (err) {
@@ -216,7 +217,7 @@ function enterDiceCheck(state: MatchState, eventName?: string): string | undefin
 }
 
 function enterBidding(state: MatchState, eventName?: string): string | undefined {
-	state.pendingLoad = undefined
+	clearActiveLoad(state)
 	if (eventName) {
 		return applyTransition(state, eventName)
 	}
@@ -292,7 +293,7 @@ function completeSetupIfReady(
 	state: MatchState,
 	completedPlayerId: string,
 ): string | undefined {
-	if (state.pendingLoad) {
+	if (activeLoad(state)) {
 		return undefined
 	}
 
@@ -304,14 +305,14 @@ function completeSetupIfReady(
 }
 
 function completeShakeLoadIfReady(state: MatchState): string | undefined {
-	if (state.pendingLoad) {
+	if (activeLoad(state)) {
 		return undefined
 	}
 	return enterDiceCheck(state, 'reload_complete_shake')
 }
 
 function completeDuelLoadIfReady(state: MatchState): string | undefined {
-	if (state.pendingLoad) {
+	if (activeLoad(state)) {
 		return undefined
 	}
 	return enterCupShake(state, 'reload_complete_duel', {
@@ -363,10 +364,10 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 
 	switch (action.type) {
 		case 'setup.load_initial': {
-			if (state.turn.kind !== 'setup') {
+			if (state.flow.phase !== 'revolver_reload') {
 				return error('INVALID_PHASE', 'not_setup_turn')
 			}
-			const pending = state.pendingLoad
+			const pending = activeLoad(state)
 			if (!pending || pending.source !== 'setup') {
 				return domainError('no_setup_load_pending')
 			}
@@ -391,7 +392,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 
 			player.cylinder = result.cylinder
 			updateBullets(player)
-			next.pendingLoad = consumePending(next.pendingLoad)
+			consumeActiveLoad(next)
 			const transitionErr = completeSetupIfReady(next, action.actorPlayerId)
 			if (transitionErr) {
 				return domainError(transitionErr)
@@ -400,7 +401,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'shake.complete': {
-			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'cup_shake') {
+			if (state.flow.phase !== 'cup_shake') {
 				return error('INVALID_PHASE', 'not_shaking_turn')
 			}
 			if (!isAlive(state.players.byId[action.actorPlayerId])) {
@@ -428,7 +429,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'shake.timeout': {
-			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'cup_shake') {
+			if (state.flow.phase !== 'cup_shake') {
 				return error('INVALID_PHASE', 'not_shaking_turn')
 			}
 
@@ -452,7 +453,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'dice.check.timeout': {
-			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'dice_check') {
+			if (state.flow.phase !== 'dice_check') {
 				return error('INVALID_PHASE', 'not_dice_check_turn')
 			}
 
@@ -474,7 +475,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'dice.check': {
-			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'dice_check') {
+			if (state.flow.phase !== 'dice_check') {
 				return error('INVALID_PHASE', 'not_dice_check_turn')
 			}
 			if (!isAlive(state.players.byId[action.actorPlayerId])) {
@@ -493,7 +494,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'bidding.timeout': {
-			if (state.turn.kind !== 'bidding' || state.flow.phase !== 'bidding') {
+			if (state.flow.phase !== 'bidding') {
 				return error('INVALID_PHASE', 'not_bidding_turn')
 			}
 			const bid = timeoutBid(state)
@@ -512,7 +513,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 					return fallback
 				}
 			}
-			if (state.bidding.currentBid && !state.pendingLoad) {
+			if (state.bidding.currentBid && !activeLoad(state)) {
 				const fallback = reduceMatchState(state, {
 					type: 'bid.challenge',
 					actorPlayerId: state.turn.activePlayerId ?? action.actorPlayerId,
@@ -527,7 +528,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'bidding.open': {
-			if (state.turn.kind !== 'shaking' || state.flow.phase !== 'bidding_gap') {
+			if (state.flow.phase !== 'bidding_gap') {
 				return error('INVALID_PHASE', 'not_bidding_gap')
 			}
 			const guard = activeActorGuard(state, action)
@@ -544,7 +545,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'bullet.load': {
-			const pending = state.pendingLoad
+			const pending = activeLoad(state)
 			if (!pending) {
 				return domainError('no_load_pending')
 			}
@@ -569,15 +570,14 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 
 			player.cylinder = result.cylinder
 			updateBullets(player)
-			next.pendingLoad = consumePending(next.pendingLoad)
+			const remaining = consumeActiveLoad(next)
 
 			let transitionErr: string | undefined
-			if (next.pendingLoad && pending.source === 'bid') {
+			if (remaining && pending.source === 'bid') {
 				// Bid reloads stay inside bidding so the next player can act in parallel.
 				next.flow.phase = 'bidding'
-				next.turn.kind = 'bidding'
-			} else if (next.pendingLoad) {
-				transitionErr = enterRevolverReload(next, next.pendingLoad)
+			} else if (remaining) {
+				transitionErr = enterRevolverReload(next, remaining)
 			} else if (pending.source === 'setup') {
 				transitionErr = completeSetupIfReady(next, pending.playerId)
 			} else if (pending.source === 'shake') {
@@ -585,11 +585,8 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			} else if (pending.source === 'duel') {
 				transitionErr = completeDuelLoadIfReady(next)
 			} else if (pending.source === 'bid') {
-				next.pendingLoad = next.bidding.deferredLoad
-				next.bidding.deferredLoad = undefined
-				next.bidding.reloadGate = undefined
+				promoteDeferredBidLoad(next)
 				next.flow.phase = 'bidding'
-				next.turn.kind = 'bidding'
 			} else if (pending.source === 'exact_duel') {
 				transitionErr = enterCupShake(next, 'reload_complete_exact_duel', {
 					reloadSource: 'duel',
@@ -603,11 +600,11 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'bid.reload_timeout': {
-			const pending = state.pendingLoad
+			const pending = activeLoad(state)
 			if (
 				state.flow.phase !== 'bidding' ||
 				pending?.source !== 'bid' ||
-				!state.bidding.reloadGate
+				!state.reload.gate
 			) {
 				return error('INVALID_PHASE', 'no_bid_reload_timeout')
 			}
@@ -624,22 +621,19 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			}
 			player.cylinder = result.cylinder
 			updateBullets(player)
-			next.pendingLoad = next.bidding.deferredLoad
-			next.bidding.deferredLoad = undefined
-			next.bidding.reloadGate = undefined
+			promoteDeferredBidLoad(next)
 			next.flow.phase = 'bidding'
-			next.turn.kind = 'bidding'
 			return accept(next, action)
 		}
 
 		case 'bid.raise': {
-			if (state.turn.kind !== 'bidding') {
+			if (state.flow.phase !== 'bidding') {
 				return error('INVALID_PHASE', 'not_bidding_turn')
 			}
-			if (state.bidding.reloadGate) {
+			if (state.reload.gate) {
 				return error('INVALID_PHASE', 'load_pending')
 			}
-			if (state.pendingLoad && state.pendingLoad.source !== 'bid') {
+			if (activeLoad(state) && activeLoad(state)?.source !== 'bid') {
 				return error('INVALID_PHASE', 'load_pending')
 			}
 			const guard = activeActorGuard(state, action)
@@ -704,8 +698,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 					if (alive.count <= 1) {
 						next.match.status = 'complete'
 						next.match.winnerId = alive.lastPlayerId
-						next.turn.kind = 'complete'
-						next.pendingLoad = undefined
+						clearActiveLoad(next)
 						enterPhase(next, 'complete')
 						finalizeMatchResult(next)
 					} else {
@@ -716,7 +709,6 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 						)
 						next.turn.previousPlayerId = next.bidding.currentBid?.playerId
 						next.flow.phase = 'bidding'
-						next.turn.kind = 'bidding'
 					}
 					return accept(next, action, [event(action, {
 						bid,
@@ -738,7 +730,6 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 
 			const previousActive = next.turn.activePlayerId ?? action.actorPlayerId
 			next.turn = {
-				kind: 'bidding',
 				activePlayerId: nextAliveAfter(next.players.order, next.players.byId, previousActive),
 				previousPlayerId: previousActive,
 				roundIndex: next.turn.roundIndex,
@@ -746,20 +737,8 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			}
 
 			const pending = pendingForPlayer(next, previousActive, 'bid', 1)
-			if (state.pendingLoad?.source === 'bid') {
-				next.pendingLoad = state.pendingLoad
-				next.bidding.deferredLoad = pending
-				next.bidding.reloadGate = {
-					countdownSeconds: BID_RELOAD_COUNTDOWN_SECONDS,
-					epoch: 1,
-				}
-			} else {
-				next.pendingLoad = pending
-				next.bidding.deferredLoad = undefined
-				next.bidding.reloadGate = undefined
-			}
+			queueBidLoad(next, pending)
 			next.flow.phase = 'bidding'
-			next.turn.kind = 'bidding'
 			return accept(next, action, [event(action, {
 				bid,
 				skullRoulette: bid.face === 1 ? next.bidding.skullRoulette : undefined,
@@ -768,10 +747,10 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'bid.challenge': {
-			if (state.turn.kind !== 'bidding') {
+			if (state.flow.phase !== 'bidding') {
 				return error('INVALID_PHASE', 'not_bidding_turn')
 			}
-			if (state.pendingLoad) {
+			if (activeLoad(state)) {
 				return error('INVALID_PHASE', 'load_pending')
 			}
 			if (!state.bidding.currentBid) {
@@ -790,10 +769,9 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			const previousId = currentBid.playerId
 			const challengerId = next.turn.activePlayerId ?? action.actorPlayerId
 
-			next.turn.kind = 'dualing'
 			next.turn.previousPlayerId = previousId
 			next.turn.activePlayerId = challengerId
-			next.pendingLoad = undefined
+			clearActiveLoad(next)
 			const transitionErr = applyTransition(next, 'challenge')
 			if (transitionErr) {
 				return domainError(transitionErr)
@@ -813,7 +791,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'duel.execute': {
-			if (state.turn.kind !== 'dualing' || !state.duel) {
+			if (state.flow.phase !== 'duel' || !state.duel) {
 				return error('INVALID_PHASE', 'not_dueling_turn')
 			}
 			if (state.duel.resolution) {
@@ -834,7 +812,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 		}
 
 		case 'round.advance': {
-			if (state.turn.kind !== 'dualing' || !state.duel) {
+			if (state.flow.phase !== 'duel' || !state.duel) {
 				return error('INVALID_PHASE', 'not_dueling_turn')
 			}
 
@@ -860,8 +838,7 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 			if (alive.count <= 1) {
 				next.match.status = 'complete'
 				next.match.winnerId = alive.lastPlayerId
-				next.turn.kind = 'complete'
-				next.pendingLoad = undefined
+				clearActiveLoad(next)
 				const transitionErr = applyTransition(next, 'match_complete')
 				if (transitionErr) {
 					return domainError(transitionErr)
@@ -878,15 +855,13 @@ export function reduceMatchState(state: MatchState, action: MatchAction): Reduce
 					next.players.order[0]
 			}
 
-			next.turn.kind = 'shaking'
 			next.turn.previousPlayerId = challengerId
 			next.turn.activePlayerId = nextRoundFirstPlayerId
 			next.turn.roundIndex += 1
 			next.turn.isFirstShake = false
 			next.bidding.currentBid = undefined
 			next.bidding.recentBids = []
-			next.bidding.deferredLoad = undefined
-			next.bidding.reloadGate = undefined
+			resetBidReload(next)
 			next.bidding.skullRoulette = undefined
 			next.duel = undefined
 			resetMyBid(next)

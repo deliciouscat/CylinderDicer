@@ -31,7 +31,7 @@
  * ```
  */
 import type { MatchPhase } from '../protocol/snapshots'
-import type { PlayerState } from './state'
+import type { MatchState, PlayerState, TurnKind } from './state'
 
 export const PHASE_TRANSITIONS: Record<string, Record<string, MatchPhase | 'waiting'>> = {
 	waiting: {
@@ -43,7 +43,6 @@ export const PHASE_TRANSITIONS: Record<string, Record<string, MatchPhase | 'wait
 		reload_complete_setup: 'cup_shake',
 		reload_complete_shake: 'dice_check',
 		reload_complete_duel: 'cup_shake',
-		reload_complete_bid: 'bidding',
 		reload_complete_exact_duel: 'cup_shake',
 	},
 	cup_shake: {
@@ -58,8 +57,6 @@ export const PHASE_TRANSITIONS: Record<string, Record<string, MatchPhase | 'wait
 		open_bidding: 'bidding',
 	},
 	bidding: {
-		bid_reload: 'revolver_reload',
-		bid_no_reload: 'bidding',
 		challenge: 'duel',
 	},
 	duel: {
@@ -119,6 +116,20 @@ export function nextAliveAfter(
 
 export function kindForPhase(phase: MatchPhase | 'waiting') {
 	return TURN_KIND_BY_PHASE[phase]
+}
+
+/** Compatibility/presentation lane derived from authoritative state. */
+export function deriveTurnKind(state: MatchState): TurnKind {
+	if (state.flow.phase === 'revolver_reload') {
+		const source = state.reload.pending?.source
+		if (source === 'bid') {
+			return 'bidding'
+		}
+		if (source === 'shake' || source === 'duel' || source === 'exact_duel') {
+			return 'shaking'
+		}
+	}
+	return kindForPhase(state.flow.phase)
 }
 
 export interface PhaseTransitionResult {

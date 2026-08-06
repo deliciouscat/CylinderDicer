@@ -1,3 +1,5 @@
+local turn_machine = require("game.model.turn_machine")
+
 local M = {}
 
 local ALL_COMPONENTS = {
@@ -60,7 +62,7 @@ local function hud(state)
 	if current_phase == "revolver_reload" and state.pending_load and not is_local_pending_load(state) then
 		return "loading"
 	end
-	return HUD_BY_PHASE[current_phase] or state.turn.kind
+	return HUD_BY_PHASE[current_phase] or turn_machine.derive_kind(state)
 end
 
 local function local_player_eliminated(state)

@@ -3,13 +3,16 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 
 const require = createRequire(import.meta.url)
-const { createInitialMatchState } = require('../../../.tmp/convex-domain/convex/match/state.js')
+const { CURRENT_MATCH_STATE_VERSION, createInitialMatchState } = require('../../../.tmp/convex-domain/convex/match/state.js')
 const { reduceMatchState } = require('../../../.tmp/convex-domain/convex/match/reducer.js')
 const { buildPrivateDelta, buildPublicSnapshot, hudKind } = require('../../../.tmp/convex-domain/convex/match/snapshots.js')
 const { automaticTransitionFor, automaticTransitionScheduleArgs, matchesAutomaticTransition } = require('../../../.tmp/convex-domain/convex/match/flow.js')
 const { deriveAvailableActions } = require('../../../.tmp/convex-domain/convex/match/capabilities.js')
 const { buildPlacementResult, finalizeMatchResult } = require('../../../.tmp/convex-domain/convex/match/results.js')
 const { duelRequiredCount, judgeDuel } = require('../../../.tmp/convex-domain/convex/match/rulesDuel.js')
+const { reloadLane } = require('../../../.tmp/convex-domain/convex/match/reloadMachine.js')
+const { normalizeMatchState } = require('../../../.tmp/convex-domain/convex/match/stateCompatibility.js')
+const { deriveTurnKind } = require('../../../.tmp/convex-domain/convex/match/turnMachine.js')
 
 function action(type, actorPlayerId, payload) {
 	return {
@@ -85,6 +88,46 @@ function createDevState(overrides = {}) {
 	})
 }
 
+test('authoritative v2 state stores lifecycle and reload as orthogonal axes', () => {
+	const state = createDevState({ requiresSetupLoad: false })
+
+	assert.equal(state.stateVersion, CURRENT_MATCH_STATE_VERSION)
+	assert.equal(state.flow.phase, 'cup_shake')
+	assert.equal(reloadLane(state), 'clear')
+	assert.equal('kind' in state.turn, false)
+	assert.equal('pendingLoad' in state, false)
+	assert.equal('deferredLoad' in state.bidding, false)
+	assert.equal('reloadGate' in state.bidding, false)
+	assert.equal(deriveTurnKind(state), 'shaking')
+})
+
+test('legacy match state normalizes lazily without losing reload work', () => {
+	const current = createDevState({ requiresSetupLoad: false })
+	const legacy = JSON.parse(JSON.stringify(current))
+	delete legacy.stateVersion
+	delete legacy.reload
+	legacy.turn.kind = 'bidding'
+	legacy.pendingLoad = { playerId: 'local-player', count: 1, source: 'bid' }
+	legacy.bidding.deferredLoad = { playerId: 'opponent-1', count: 1, source: 'bid' }
+	legacy.bidding.reloadGate = { countdownSeconds: 3, epoch: 7 }
+	legacy.flow.phase = 'bidding'
+
+	const normalized = normalizeMatchState(legacy)
+
+	assert.equal(normalized.stateVersion, CURRENT_MATCH_STATE_VERSION)
+	assert.deepEqual(normalized.reload, {
+		pending: { playerId: 'local-player', count: 1, source: 'bid' },
+		deferred: { playerId: 'opponent-1', count: 1, source: 'bid' },
+		gate: { countdownSeconds: 3, epoch: 7 },
+	})
+	assert.equal(reloadLane(normalized), 'gated')
+	assert.equal(deriveTurnKind(normalized), 'bidding')
+	assert.equal('kind' in normalized.turn, false)
+	assert.equal('pendingLoad' in normalized, false)
+	assert.equal('deferredLoad' in normalized.bidding, false)
+	assert.equal('reloadGate' in normalized.bidding, false)
+})
+
 test('player character identity survives initial state and public snapshot projection', () => {
 	const state = createDevState()
 	const snapshot = buildPublicSnapshot(state)
@@ -141,7 +184,6 @@ test('explicit character identity survives a noncanonical bot seat', () => {
 test('challenge pairs the active Samuel seat with previous bidder Hush', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'opponent-2'
 	state.turn.previousPlayerId = 'opponent-1'
 	state.bidding.currentBid = { playerId: 'opponent-1', count: 10, face: 1 }
@@ -196,7 +238,6 @@ test('Skull duel shot count uses the difference from the halved requirement', ()
 test('SHORT gives the challenger attack chances against the previous bidder', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.turn.previousPlayerId = 'opponent-1'
 	state.bidding.currentBid = { playerId: 'opponent-1', count: 10, face: 4 }
@@ -223,7 +264,6 @@ test('SHORT gives the challenger attack chances against the previous bidder', ()
 test('OVER gives the previous bidder attack chances against the challenger', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.turn.previousPlayerId = 'opponent-1'
 	state.bidding.currentBid = { playerId: 'opponent-1', count: 1, face: 6 }
@@ -261,7 +301,7 @@ test('every human chooses initial chambers in seat order while virtual players s
 		],
 	})
 
-	assert.equal(state.pendingLoad.playerId, 'human-1')
+	assert.equal(state.reload.pending.playerId, 'human-1')
 	assert.equal(deriveAvailableActions(state, 'human-1').some((item) => item.type === 'load'), true)
 	assert.equal(deriveAvailableActions(state, 'human-2').some((item) => item.type === 'load'), false)
 
@@ -270,8 +310,7 @@ test('every human chooses initial chambers in seat order while virtual players s
 	}
 
 	assert.equal(state.flow.phase, 'revolver_reload')
-	assert.equal(state.turn.kind, 'setup')
-	assert.equal(state.pendingLoad.playerId, 'human-2')
+	assert.equal(state.reload.pending.playerId, 'human-2')
 	assert.equal(deriveAvailableActions(state, 'human-1').some((item) => item.type === 'load'), false)
 	assert.equal(deriveAvailableActions(state, 'human-2').some((item) => item.type === 'load'), true)
 
@@ -323,7 +362,6 @@ test('minimum playable Convex round reaches next round after duel', () => {
 test('duel public snapshot reveals every player dice for challenge adjudication', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.turn.previousPlayerId = 'opponent-2'
 	state.bidding.currentBid = { playerId: 'opponent-2', count: 3, face: 4 }
@@ -356,7 +394,6 @@ test('challenger starts the next bidding round after a non-lethal duel', () => {
 	})
 
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.turn.previousPlayerId = 'opponent-1'
 	state.bidding.currentBid = { playerId: 'opponent-1', count: 10, face: 4 }
@@ -372,8 +409,8 @@ test('challenger starts the next bidding round after a non-lethal duel', () => {
 	assert.equal(state.turn.activePlayerId, 'local-player')
 
 	state = dispatchShakes(state)
-	if (state.pendingLoad) {
-		state = dispatch(state, 'bullet.load', state.pendingLoad.playerId, { slotIndex: 1 })
+	if (state.reload.pending) {
+		state = dispatch(state, 'bullet.load', state.reload.pending.playerId, { slotIndex: 1 })
 	}
 	state = dispatchDiceChecks(state)
 	state = dispatchAutomaticTransition(state, 'bidding.open')
@@ -495,7 +532,6 @@ test('phase-wide dice check timeout completes only unchecked players after six s
 test('face one is a skull bid and raises after face six at the next count', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.bidding.currentBid = { playerId: 'opponent-2', count: 2, face: 6 }
 
@@ -512,7 +548,6 @@ test('face one is a skull bid and raises after face six at the next count', () =
 test('skull bid spins and triggers the bidders own cylinder before accepting the bid', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.players.byId['local-player'].cylinder.slots = [true, true, true, true, true, true]
 	state.players.byId['local-player'].bullets = 6
@@ -527,13 +562,12 @@ test('skull bid spins and triggers the bidders own cylinder before accepting the
 	assert.equal(state.bidding.skullRoulette.hpAfter, 5)
 	assert.equal(state.players.byId['local-player'].hp, 5)
 	assert.equal(state.players.byId['local-player'].bullets, 5)
-	assert.equal(state.pendingLoad.playerId, 'local-player')
+	assert.equal(state.reload.pending.playerId, 'local-player')
 })
 
 test('lethal skull roulette rejects the attempted bid and skips the eliminated bidder', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 	state.bidding.currentBid = { playerId: 'opponent-2', count: 2, face: 6 }
 	state.players.byId['local-player'].hp = 1
@@ -550,7 +584,7 @@ test('lethal skull roulette rejects the attempted bid and skips the eliminated b
 	assert.equal(state.turn.activePlayerId, 'opponent-1')
 	assert.equal(state.turn.previousPlayerId, 'opponent-2')
 	assert.deepEqual(state.bidding.myBid, { count: 1, face: 2 })
-	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.reload.pending, undefined)
 	assert.deepEqual(state.eliminationOrder, ['local-player'])
 	assert.deepEqual(state.match.result.placements, [
 		{ playerId: 'local-player', place: 3, playerCount: 3, rated: false },
@@ -580,14 +614,16 @@ test('result placements reverse authoritative elimination order and put winner f
 test('bid reload pipelines one next bid then gates until the previous reload completes', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 
 	state = dispatch(state, 'bid.raise', 'local-player', {
 		bid: { count: 1, face: 2 },
 	})
 	assert.equal(state.flow.phase, 'bidding')
-	assert.equal(state.pendingLoad.playerId, 'local-player')
+	assert.equal(state.reload.pending.playerId, 'local-player')
+	assert.equal(state.turn.activePlayerId, 'opponent-1')
+	assert.equal(reloadLane(state), 'loading')
+	assert.equal(deriveTurnKind(state), 'bidding')
 	assert.equal(hudKind(state, 'local-player'), 'revolver_reload')
 	assert.equal(hudKind(state, 'opponent-1'), 'bidding')
 	assert.equal(deriveAvailableActions(state, 'local-player')[0].type, 'load')
@@ -600,9 +636,12 @@ test('bid reload pipelines one next bid then gates until the previous reload com
 	state = dispatch(state, 'bid.raise', 'opponent-1', {
 		bid: { count: 2, face: 2 },
 	})
-	assert.equal(state.pendingLoad.playerId, 'local-player')
-	assert.equal(state.bidding.deferredLoad.playerId, 'opponent-1')
-	assert.deepEqual(state.bidding.reloadGate, { countdownSeconds: 3, epoch: 1 })
+	assert.equal(state.reload.pending.playerId, 'local-player')
+	assert.equal(state.reload.deferred.playerId, 'opponent-1')
+	assert.deepEqual(state.reload.gate, { countdownSeconds: 3, epoch: 1 })
+	assert.equal(state.flow.phase, 'bidding')
+	assert.equal(state.turn.activePlayerId, 'opponent-2')
+	assert.equal(reloadLane(state), 'gated')
 	assert.equal(hudKind(state, 'local-player'), 'revolver_reload')
 	assert.equal(hudKind(state, 'opponent-1'), 'loading')
 	assert.equal(hudKind(state, 'opponent-2'), 'loading')
@@ -615,22 +654,49 @@ test('bid reload pipelines one next bid then gates until the previous reload com
 	assert.equal(automaticTransitionFor(state).delayMs, 3_000)
 
 	state = dispatchAutomaticTransition(state, 'bid.reload_timeout')
-	assert.equal(state.pendingLoad.playerId, 'opponent-1')
+	assert.equal(state.reload.pending.playerId, 'opponent-1')
 	assert.equal(state.players.byId['local-player'].cylinder.slots[0], true)
-	assert.equal(state.bidding.reloadGate, undefined)
+	assert.equal(state.reload.gate, undefined)
 	assert.equal(hudKind(state, 'opponent-1'), 'revolver_reload')
 	assert.equal(hudKind(state, 'opponent-2'), 'bidding')
 	assert.equal(deriveAvailableActions(state, 'opponent-2')[0].type, 'bid')
 
 	state = dispatch(state, 'bullet.load', 'opponent-1', { slotIndex: 2 })
-	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.reload.pending, undefined)
 	assert.equal(hudKind(state, 'opponent-1'), 'bidding')
+})
+
+test('second bid gates while the previous bidder loads even when its own cylinder is full', () => {
+	let state = createDevState({ requiresSetupLoad: false })
+	state.flow.phase = 'bidding'
+	state.turn.activePlayerId = 'local-player'
+	state.players.byId['opponent-1'].cylinder.slots = [true, true, true, true, true, true]
+	state.players.byId['opponent-1'].bullets = 6
+
+	state = dispatch(state, 'bid.raise', 'local-player', {
+		bid: { count: 1, face: 2 },
+	})
+	state = dispatch(state, 'bid.raise', 'opponent-1', {
+		bid: { count: 2, face: 2 },
+	})
+
+	assert.equal(state.reload.pending.playerId, 'local-player')
+	assert.equal(state.reload.deferred, undefined)
+	assert.deepEqual(state.reload.gate, { countdownSeconds: 3, epoch: 1 })
+	assert.equal(reloadLane(state), 'gated')
+	assert.deepEqual(deriveAvailableActions(state, 'opponent-2'), [])
+	assert.equal(automaticTransitionFor(state).type, 'bid.reload_timeout')
+
+	state = dispatchAutomaticTransition(state, 'bid.reload_timeout')
+	assert.equal(state.reload.pending, undefined)
+	assert.equal(state.reload.gate, undefined)
+	assert.equal(reloadLane(state), 'clear')
+	assert.equal(deriveAvailableActions(state, 'opponent-2')[0].type, 'bid')
 })
 
 test('bidding timeout raises the count by one with a skull or challenges at the cap', () => {
 	let state = createDevState({ requiresSetupLoad: false })
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'local-player'
 
 	let scheduled = automaticTransitionFor(state)
@@ -654,7 +720,7 @@ test('bidding timeout raises the count by one with a skull or challenges at the 
 
 	state.bidding.currentBid = { playerId: 'local-player', count: 7, face: 4 }
 	state.turn.activePlayerId = 'opponent-1'
-	state.pendingLoad = undefined
+	state.reload.pending = undefined
 	state = dispatchAutomaticTransition(state, 'bidding.timeout')
 	assert.deepEqual(state.bidding.currentBid, {
 		playerId: 'opponent-1',
@@ -664,7 +730,7 @@ test('bidding timeout raises the count by one with a skull or challenges at the 
 
 	state.bidding.currentBid = { playerId: 'local-player', count: 36, face: 6 }
 	state.turn.activePlayerId = 'opponent-1'
-	state.pendingLoad = undefined
+	state.reload.pending = undefined
 	state = dispatchAutomaticTransition(state, 'bidding.timeout')
 	assert.equal(state.flow.phase, 'duel')
 	assert.equal(state.duel.challengerId, 'opponent-1')
@@ -677,7 +743,6 @@ test('duel bullet spender reloads before the next shake', () => {
 	})
 
 	state.flow.phase = 'bidding'
-	state.turn.kind = 'bidding'
 	state.turn.activePlayerId = 'opponent-2'
 	state.turn.previousPlayerId = 'opponent-1'
 	state.bidding.currentBid = { playerId: 'opponent-1', count: 1, face: 6 }
@@ -691,7 +756,7 @@ test('duel bullet spender reloads before the next shake', () => {
 	state = dispatchAutomaticTransition(state, 'duel.execute')
 	state = dispatchAutomaticTransition(state, 'round.advance')
 	assert.equal(state.turn.activePlayerId, 'opponent-2')
-	assert.deepEqual(state.pendingLoad, {
+	assert.deepEqual(state.reload.pending, {
 		playerId: 'opponent-1',
 		source: 'duel',
 		count: 1,
@@ -699,11 +764,11 @@ test('duel bullet spender reloads before the next shake', () => {
 	assert.equal(state.flow.phase, 'revolver_reload')
 
 	state = dispatch(state, 'bullet.load', 'opponent-1', { slotIndex: 1 })
-	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.reload.pending, undefined)
 	assert.equal(state.flow.phase, 'cup_shake')
 
 	state = dispatchShakes(state)
-	assert.equal(state.pendingLoad, undefined)
+	assert.equal(state.reload.pending, undefined)
 	assert.equal(state.flow.phase, 'dice_check')
 })
 

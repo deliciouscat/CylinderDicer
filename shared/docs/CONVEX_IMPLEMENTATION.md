@@ -598,9 +598,24 @@ type MatchCommand = {
 
 Defold local simulator and Convex production both use `shake.complete`; `shake.roll` is no longer part of the active domain protocol.
 
+## Authoritative match state v2
+
+The stored match state uses orthogonal state axes instead of treating every visible HUD as a lifecycle phase:
+
+- `flow.phase` owns only the match lifecycle: setup, shake, dice check, bidding, duel, and complete.
+- `turn.activePlayerId`, `previousPlayerId`, and `roundIndex` own decision order and round identity.
+- `reload.pending`, `reload.deferred`, and `reload.gate` own reload work that may overlap bidding.
+- `turn.kind` is not authoritative storage. It is derived from `flow.phase` and the reload lane for compatibility/presentation.
+
+This separation is required because the previous bidder may be loading while the next bidder already owns the active decision. Moving the lifecycle to a single `revolver_reload` state for that case would incorrectly block the next bid. Capabilities and viewer-specific HUD state are therefore projected from the lifecycle, reload lane, actor, and viewer rather than persisted as another source of truth.
+
+`CURRENT_MATCH_STATE_VERSION` is `2`. Existing stored states are dual-read through `normalizeMatchState`: legacy root `pendingLoad`, `bidding.deferredLoad`, `bidding.reloadGate`, and stored `turn.kind` are mapped into the v2 axes in memory. The next accepted command stores v2. This is an intentionally lazy migration because `matchStates.state` is already a broad persisted value; there is no table scan, backfill mutation, or schema narrowing in this change.
+
+The public snapshot remains backward compatible. It still projects `pendingLoad` and `bidding.reloadGate` for Vue/Defold consumers while the internal source of truth is `reload`. Changing that DTO requires a separately versioned GameBridge migration.
+
 `shake.timeout`, `dice.check.timeout`, `bidding.timeout`, `bidding.open`, `bid.reload_timeout`, `duel.execute`, and `round.advance` are reducer actions used only by the automatic progression layer. `convex/match/flow.ts` derives a delay and guard token from authoritative state; `matchFlow:advanceMatchFlow` applies the action only when phase, revision, and flow epoch still match. Public player and admin validators do not accept these actions. `bidding.timeout` is 40 seconds per active turn and remains revision-guarded so every accepted bid resets its deadline; it raises the current count by one with face `1` (Skull), invoking the bidder's authoritative self-roulette, or challenges at the maximum count when no reload is pending.
 
-Bid reloads are pipelined inside the authoritative `bidding` phase. `pendingLoad` is the player currently loading, while `bidding.deferredLoad` holds at most one reload created by the next accepted bid. Before that next bid, the active player may bid while the previous loader acts; challenge remains unavailable until the reload queue is empty. If the next bid arrives first, `bidding.reloadGate` freezes further bidding for three seconds and is projected publicly for the loader countdown/loading-wheel HUD. The guarded `bid.reload_timeout` loads the current player's first empty slot and promotes `deferredLoad`; a manual load changes revision and invalidates the scheduled timeout.
+Bid reloads are pipelined inside the authoritative `bidding` lifecycle phase. `reload.pending` is the player currently loading, while `reload.deferred` holds at most one reload created by the next accepted bid. Before that next bid, the active player may bid while the previous loader acts; challenge remains unavailable until the reload queue is empty. If the next bid arrives first, `reload.gate` freezes further bidding for three seconds and is projected publicly as `bidding.reloadGate` for the loader countdown/loading-wheel HUD. The guarded `bid.reload_timeout` loads the current player's first empty slot and promotes `reload.deferred`; a manual load changes revision and invalidates the scheduled timeout.
 
 A face-1 Skull `bid.raise` is still a single player intent, but the authoritative reducer resolves a self Russian-roulette attempt before accepting it. Convex derives the spin from match RNG, triggers the bidder's own cylinder once, consumes any fired bullet, and applies one HP damage on a hit. A surviving bidder's Skull bid is accepted and enters the normal bid-reload pipeline. A lethal attempt is rejected without replacing the prior `currentBid`; the eliminated bidder is skipped, or the match completes when one player remains. The public snapshot projects `bidding.skullRoulette` with a monotonic sequence and the hit/HP outcome so Defold can animate the affected portrait without client-authored damage.
 
